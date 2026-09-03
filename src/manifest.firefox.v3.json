@@ -3,7 +3,7 @@
     "name": "Verifieddit: C2PA Content Credential Verifier",
     "short_name": "Verifieddit",
     "description": "Verify content authenticity with C2PA Content Credentials. See who signed a file, whether it was altered, and declared AI origin.",
-    "version": "1.2.3",
+    "version": "1.2.4",
     "browser_specific_settings": {
         "gecko": {
             "id": "verifieddit@verifieddit.com",

@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## v1.2.4
+
+- Auto-scan no longer badges unsigned media (#169). With auto-scan on, every
+  image larger than 5x5 px got a badge: a neutral camera while the check ran,
+  upgraded to the grey camera with a red slash when the file carried no C2PA
+  manifest, which on an ordinary page is nearly every image. That badge was
+  added in #86 for the right-click path, where the user asked; auto-scan
+  routed through the same function, and #162 made the badge survive
+  scrolling. A no-manifest result from auto-scan or a popup scan now records
+  the verdict (the popup still lists the file) and removes the badge. A
+  right-click Verify keeps the badge and toast. Guarded by
+  test/e2e/no-credentials-no-badge.spec.ts.
+
 ## v1.2.3
 
 - No-credentials and verification-failed badges are restored when media

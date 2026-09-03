@@ -1,6 +1,6 @@
 {
   "name": "verifieddit-extension",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "Chrome extension to verify C2PA Content Credentials on any webpage",
   "main": "index.js",
   "type": "module",

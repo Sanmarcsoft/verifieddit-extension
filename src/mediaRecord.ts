@@ -33,6 +33,12 @@ export interface MediaVerdict {
   kind: MediaVerdictKind
   url: string
   detail: string | null
+  /**
+   * True when the user asked for this check (right-click Verify). Only a
+   * requested no-credentials verdict earns an on-page badge; auto-scan finding
+   * nothing is not news the page needs to wear (#169).
+   */
+  requested?: boolean
 }
 
 export interface MediaRecordState {

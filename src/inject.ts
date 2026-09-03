@@ -147,13 +147,24 @@ async function postWithResponse <T> (message: unknown): Promise<T> {
   })
 }
 
-async function handleValidationResult (mediaElement: MediaElement, c2paResult: C2paResult | C2paError): Promise<void> {
-  // rc11.7 / #86 — the user explicitly right-click → Verify'd this image.
-  // Always produce a visible interactive icon, even when the result has
-  // no embedded C2PA manifest. Previously this path early-returned and
-  // the user saw nothing happen. The 'no-credentials' badge now renders
-  // a distinct grey-camera-with-red-slash so users can see the verifier
-  // DID run and found nothing.
+/**
+ * Who asked for a validation. 'requested' is the right-click Verify path: the
+ * user pointed at one image and deserves an answer even when that answer is
+ * "nothing here". 'auto' is auto-scan and popup-triggered scans, where the
+ * extension went looking on its own.
+ */
+type ValidationOrigin = 'auto' | 'requested'
+
+async function handleValidationResult (mediaElement: MediaElement, c2paResult: C2paResult | C2paError, origin: ValidationOrigin = 'auto'): Promise<void> {
+  // rc11.7 / #86 — a right-click → Verify with no embedded manifest used to
+  // early-return and the user saw nothing happen. That path now renders the
+  // grey-camera-with-red-slash so they can see the verifier DID run.
+  //
+  // #169 — auto-scan is not a request. With auto-scan on, nearly every image
+  // on an ordinary page has no manifest, and giving each one the slashed
+  // camera made the extension look like it was flagging the whole web. For
+  // an auto-scan the verdict is still recorded (the popup lists it), but the
+  // placeholder badge comes off and no badge replaces it.
   const mediaRecord = MediaMonitor.lookup(mediaElement)
   if (mediaRecord == null) {
     return
@@ -171,11 +182,18 @@ async function handleValidationResult (mediaElement: MediaElement, c2paResult: C
     // a verifier can get wrong. Both branches previously fell through to the
     // same 'no-credentials' badge.
     if (name === 'No Manifest') {
-      // Create (or update) an icon in the 'no-credentials' state so the
-      // user gets clear feedback. Click handler opens a minimal panel —
-      // no API call, just explanatory text (respects #83 security baseline).
-      mediaRecord.state.verdict = { kind: 'no-credentials', url, detail: null }
-      ensureNoCredentialsIcon(mediaRecord, url)
+      const requested = origin === 'requested'
+      mediaRecord.state.verdict = { kind: 'no-credentials', url, detail: null, requested }
+      if (requested) {
+        // Create (or update) an icon in the 'no-credentials' state so the
+        // user gets clear feedback. Click handler opens a minimal panel —
+        // no API call, just explanatory text (respects #83 security baseline).
+        ensureNoCredentialsIcon(mediaRecord, url)
+      } else {
+        // Assigning null runs CrIcon.remove() via the setter; this also
+        // clears the neutral scanning badge auto-scan put there first.
+        mediaRecord.icon = null
+      }
     } else {
       const detail = failure.message ?? 'unknown error'
       mediaRecord.state.verdict = { kind: 'unavailable', url, detail }
@@ -759,7 +777,8 @@ async function handleContextMenuVerdict (data: { url?: string, frame?: number, c
     : data.c2paResult as C2paResult | C2paError
 
   MediaMonitor.add(target)
-  await handleValidationResult(target, result)
+  // Right-click Verify: the user asked, so "nothing found" earns a badge.
+  await handleValidationResult(target, result, 'requested')
 }
 
 function sendToContent (message: unknown): void {
@@ -923,7 +942,8 @@ function restoreIcon (mediaRecord: MediaRecord): void {
   const verdict = mediaRecord.state.verdict
   if (verdict == null) return
   if (verdict.kind === 'no-credentials') {
-    ensureNoCredentialsIcon(mediaRecord, verdict.url)
+    // #169: only a requested check wears the no-credentials badge.
+    if (verdict.requested === true) ensureNoCredentialsIcon(mediaRecord, verdict.url)
   } else if (verdict.kind === 'unavailable') {
     ensureVerificationFailedIcon(mediaRecord, verdict.url, verdict.detail ?? 'unknown error')
   }

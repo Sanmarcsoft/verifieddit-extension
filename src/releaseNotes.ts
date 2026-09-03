@@ -30,6 +30,19 @@ export const DEMO_URL = 'https://www.verifieddit.com/demo'
 
 export const RELEASE_NOTES: readonly ReleaseEntry[] = [
   {
+    tag: 'v1.2.4',
+    date: '2026-09-03',
+    summary: 'Auto-scan leaves unsigned images alone. A badge now means something was found.',
+    fixes: [
+      {
+        title: 'No more slashed cameras on every image',
+        howToVerify:
+          'Turn on auto-scan and open any ordinary news page. Images that carry no Content Credentials get no badge at all, instead of the grey camera with a red slash. Right-click an unsigned image and choose Verify with Verifieddit and you still get the "no credentials found" badge, because you asked.',
+        verifyFragment: '06-no-c2pa-plain-jpeg'
+      }
+    ]
+  },
+  {
     tag: 'v1.2.3',
     date: '2026-09-01',
     summary: 'Badges survive scrolling, and an expired signing certificate is never presented as plainly trusted.',
