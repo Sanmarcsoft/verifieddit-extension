@@ -2,7 +2,7 @@
   "name": "Verifieddit Dev Fixtures",
   "download_url": "",
   "description": "Test-fixture signing CA for the bundled demo corpus (test/fixtures/demo-corpus). NOT an official C2PA anchor. Split out of default-trust-list.json on 2026-08-01 so the production trust list contains only anchors from the C2PA Conformance Program; drop this list from loadDefaultTrustLists() to stop trusting fixture-signed assets.",
-  "website": "https://github.com/Sanmarcsoft/verifieddit-extension",
+  "website": "https://github.com/Sanmarcsoft/verifieddit-browser-extension",
   "last_updated": "2026-04-24T12:15:00Z",
   "entities": [
     {

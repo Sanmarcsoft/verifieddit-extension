@@ -32,7 +32,7 @@ const buildDate   = new Date().toISOString();
 // which also keeps a reviewer's rebuild from differing on this field.
 const buildHost   = (process.env.RUNNER_NAME || 'local').replace(/[\r\n]/g, '');
 
-const repoUrl = 'https://github.com/Sanmarcsoft/verifieddit-extension';
+const repoUrl = 'https://github.com/Sanmarcsoft/verifieddit-browser-extension';
 
 const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 

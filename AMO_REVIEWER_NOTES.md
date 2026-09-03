@@ -153,4 +153,4 @@ site that publishes Content Credentials and choose "Verify with Verifieddit."
 ## Contact
 
 support@verifieddit.com — happy to answer anything or supply additional builds.
-Source: https://github.com/Sanmarcsoft/verifieddit-extension (MIT).
+Source: https://github.com/Sanmarcsoft/verifieddit-browser-extension (MIT).

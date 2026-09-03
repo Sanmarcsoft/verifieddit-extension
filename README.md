@@ -4,7 +4,6 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/Sanmarcsoft/verifieddit-browser-extension/actions/workflows/ci.yml/badge.svg)](https://github.com/Sanmarcsoft/verifieddit-browser-extension/actions/workflows/ci.yml)
-[![E2E](https://github.com/Sanmarcsoft/verifieddit-browser-extension/actions/workflows/e2e.yml/badge.svg)](https://github.com/Sanmarcsoft/verifieddit-browser-extension/actions/workflows/e2e.yml)
 
 Here is the truth nobody in your feed will say out loud.
 
@@ -123,17 +122,15 @@ You should not have to trust a verification tool you cannot read. So read it.
 | Command | What it does |
 |---|---|
 | `bun install` | Install dependencies (applies the pinned `c2pa` patch) |
-| `bun run build` | Production build. Does **not** trust the demo fixture CA |
-| `bun run build:e2e` | Same, but trusts the demo fixtures so the corpus exercises the trusted path |
+| `bun run build` | Production build into `dist/chrome` and `dist/firefox` |
+| `bun run build:debug` | Development build with inline source maps |
 | `bunx tsc --noEmit` | Type-check |
-| `bun test test/*.test.ts` | Unit tests: trust path, durable credentials, AI declaration, probe consent |
-| `bun run test` | Playwright end-to-end suite in Chrome |
-| `bun run smoke:firefox` | Functional smoke test in real Firefox |
-| `bun run serve:fixtures` | Serve the demo corpus on port 3000 |
+| `bun run package:firefox` | Build, lint and package the Firefox submission |
+| `bun scripts/sync-c2pa-trust-lists.ts --check` | Fail if the bundled trust anchors have drifted from the published lists |
 
 Use **bun**. Not npm.
 
-**About the demo corpus:** fixtures 01 to 03 read *Untrusted* in a production build. That is correct. Their signing CA is public in this repository, and a key anyone can read is not a basis for trust. Fixture 08 is signed through Trusteddit and is the one that reads as trusted.
+The bundled trust anchors are data you can audit: every certificate in `src/trust-anchors/` is the DER the published list carries, and the sync script exits non-zero if ours drifts from theirs.
 
 ## If you create content, sign it
 
@@ -145,7 +142,7 @@ Verify with Verifieddit. Sign with Trusteddit. That is the whole loop.
 
 ## Contribute
 
-Found a trust-evaluation bug? That is the highest severity we have, because this tool's job is to tell people what to trust. Report vulnerabilities per [`SECURITY.md`](SECURITY.md) to `security@verifieddit.com`. Everything else: open an issue, or a pull request with a test.
+Found a trust-evaluation bug? That is the highest severity we have, because this tool's job is to tell people what to trust. Report vulnerabilities per [`SECURITY.md`](SECURITY.md) to `security@verifieddit.com`. Everything else: open an issue, or a pull request.
 
 If this saved you from sharing something fake, star the repo. It helps the next person find it.
 

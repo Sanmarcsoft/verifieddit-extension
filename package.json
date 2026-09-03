@@ -11,13 +11,8 @@
     "build:e2e": "cross-env TRUST_DEV_FIXTURES=true npm run build",
     "build:debug": "cross-env NODE_ENV=development rollup -c",
     "build:dev": "cross-env NODE_ENV=development rollup -c --watch",
-    "serve:fixtures": "bun x http-server test/fixtures -p 3000 -c-1",
-    "e2e:verify": "node scripts/e2e-verify.mjs",
-    "smoke:firefox": "node scripts/firefox-smoke.mjs",
     "package:firefox": "node scripts/package-firefox.mjs",
-    "submit:firefox": "node scripts/submit-firefox.mjs",
-    "test": "bun run build:e2e && bun x playwright test",
-    "test:debug": "bun x playwright test --debug"
+    "submit:firefox": "node scripts/submit-firefox.mjs"
   },
   "author": "",
   "license": "MIT",
