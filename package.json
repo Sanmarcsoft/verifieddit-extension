@@ -8,7 +8,6 @@
     "clean": "rimraf dist && rimraf node_modules/.cache/rollup-plugin-typescript2",
     "prebuild": "node scripts/patch-c2pa-worker-scheme.mjs && node scripts/extract-c2pa-worker.mjs && node update-version.js && node scripts/generate-build-info.js",
     "build": "cross-env NODE_ENV=production rollup -c",
-    "build:e2e": "cross-env TRUST_DEV_FIXTURES=true npm run build",
     "build:debug": "cross-env NODE_ENV=development rollup -c",
     "build:dev": "cross-env NODE_ENV=development rollup -c --watch",
     "package:firefox": "node scripts/package-firefox.mjs",
