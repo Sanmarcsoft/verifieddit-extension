@@ -1,0 +1,41 @@
+{
+  "name": "Trusteddit Trust List",
+  "description": "Trusteddit.com C2PA signing anchors. Trusting the Trusteddit-Journalist-Issuer-CA (and the Trusteddit.com Root CA) trusts every leaf certificate they issue — e.g. sign.trusteddit.com and sanmarcsoft.com.",
+  "download_url": "",
+  "website": "https://trusteddit.com",
+  "last_updated": "2026-06-08T00:00:00Z",
+  "entities": [
+    {
+      "name": "Trusteddit-Journalist-Issuer-CA",
+      "display_name": "Trusteddit Journalist Issuer CA",
+      "contact": "https://trusteddit.com",
+      "isCA": true,
+      "jwks": {
+        "keys": [
+          {
+            "kty": "EC",
+            "x5c": [
+              "MIIB2jCCAX+gAwIBAgIRAMPtFg+/UfZ4/RbPF1QkGgEwCgYIKoZIzj0EAwIwSjEfMB0GA1UEChMWVHJ1c3RlZGRpdC5jb20gUm9vdCBDQTEnMCUGA1UEAxMeVHJ1c3RlZGRpdC5jb20gUm9vdCBDQSBSb290IENBMB4XDTI1MDgyOTA5MjEyN1oXDTM1MDgyNzA5MjEyN1owKjEoMCYGA1UEAxMfVHJ1c3RlZGRpdC1Kb3VybmFsaXN0LUlzc3Vlci1DQTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABMZHQ2SBQwzDMzxSZlno5UtnYS1LXJ6yRiYJlRH4AYfp2fSaqwgecq48tbQF6ShLef66I6HZUFypJ5ETMIdqf5GjZjBkMA4GA1UdDwEB/wQEAwIBBjASBgNVHRMBAf8ECDAGAQH/AgEAMB0GA1UdDgQWBBQi169gndODeCF7HKnM87MrNc8elTAfBgNVHSMEGDAWgBT189Bqom2ijBcsx2NMmNfKbUjkZzAKBggqhkjOPQQDAgNJADBGAiEAzfjM4uyIvsvYc8JicL+DoeZaEiNp93oUh0wtc66m+cACIQCpMIDfzaH0lX4EDtRB2yCDkYFTVfSKx4hpJ0RNfKXWPA=="
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Trusteddit.com Root CA",
+      "display_name": "Trusteddit.com Root CA",
+      "contact": "https://trusteddit.com",
+      "isCA": true,
+      "jwks": {
+        "keys": [
+          {
+            "kty": "EC",
+            "x5c": [
+              "MIIB1zCCAX6gAwIBAgIRAPYvziGZdOCDegvDEaiwuoMwCgYIKoZIzj0EAwIwSjEfMB0GA1UEChMWVHJ1c3RlZGRpdC5jb20gUm9vdCBDQTEnMCUGA1UEAxMeVHJ1c3RlZGRpdC5jb20gUm9vdCBDQSBSb290IENBMB4XDTI1MDgyMTEzNDgxMFoXDTM1MDgxOTEzNDgxMFowSjEfMB0GA1UEChMWVHJ1c3RlZGRpdC5jb20gUm9vdCBDQTEnMCUGA1UEAxMeVHJ1c3RlZGRpdC5jb20gUm9vdCBDQSBSb290IENBMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE0igNYBBKViL/M5Eio7cNxbNs6NZIraHCPaLOY7VWfDUjAyDle1Q8F1GhxThu1ULm2NKwu4LSMJiJkko71TC/b6NFMEMwDgYDVR0PAQH/BAQDAgEGMBIGA1UdEwEB/wQIMAYBAf8CAQEwHQYDVR0OBBYEFPXz0GqibaKMFyzHY0yY18ptSORnMAoGCCqGSM49BAMCA0cAMEQCIH3CsKqoF/C2UYWl9vgoE6uNzVkePNSuUhdElvgcxl/2AiAvZN0DEOGIvB+17ALoyMcviPaeuXkuiDfNNPFJSHbPWA=="
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

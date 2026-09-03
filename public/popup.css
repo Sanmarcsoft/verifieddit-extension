@@ -1,0 +1,595 @@
+/* Tab button styles */
+* {
+    font-family: 'Roboto', Arial, Helvetica, sans-serif;
+}
+
+/* Tab bar — verifieddit.com's design language rather than default browser
+ * chrome. The site builds structure from a neutral-slate ramp, hairline rules
+ * and whitespace, with sky-600 (#0284c7) as the single accent. The old
+ * #f1f1f1-on-#ccc boxed tabs read as an unstyled prototype next to it.
+ *
+ * Tokens lifted from verifieddit-www/tailwind.config.js:
+ *   primary  #0284c7   secondary #1e293b
+ *   neutral  50 #f8fafc · 200 #e2e8f0 · 500 #64748b · 800 #1e293b
+ */
+.tab-bar {
+    display: flex;
+    gap: 2px;
+    padding: 0 10px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.tab {
+    display: inline-block;
+    padding: 9px 12px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: #64748b;
+    transition: color 120ms ease, border-color 120ms ease;
+}
+
+.tab:hover {
+    color: #1e293b;
+}
+
+.tab:focus-visible {
+    outline: 2px solid #0284c7;
+    outline-offset: -2px;
+    border-radius: 3px;
+}
+
+/* The active tab is marked by a sky underline and the darkest neutral, the
+ * way the site marks a current section — not by a raised box. */
+.tab.active {
+    color: #0f172a;
+    border-bottom-color: #0284c7;
+    background: transparent;
+}
+
+/* Tab content styles */
+.tab-content {
+    display: none;
+    padding: 12px;
+    border: none;
+    background: #ffffff;
+}
+
+.active-content {
+    display: block;
+}
+
+/* Style for the tooltip container */
+.info-tooltip {
+    position: relative;
+    display: inline-block;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    background-color: #888;
+    color: #FFF;
+    text-align: center;
+    line-height: 20px;
+    cursor: help;
+    /* changes the mouse cursor when hovered over the tooltip */
+    margin-left: 5px;
+    /* space between the tooltip and the adjacent content */
+}
+
+/* Hide the tooltip text by default */
+.info-tooltip .tooltip-text {
+    visibility: hidden;
+    width: 200px;
+    /* adjust as needed */
+    background-color: #555;
+    color: #FFF;
+    text-align: center;
+    padding: 5px;
+    border-radius: 6px;
+    position: absolute;
+    z-index: 9999;
+    /* Make sure tooltip is above everything */
+    top: -5px;
+    /* position above the tooltip */
+    left: 105%;
+    transform: translateX(-50%);
+    /* center the tooltip */
+    opacity: 0;
+    transition: opacity 0.3s;
+    /* smooth fade-in effect */
+    overflow: visible;
+    /* Ensure content is not clipped */
+}
+
+/* Show the tooltip text when hovering over the tooltip container */
+.info-tooltip:hover .tooltip-text {
+    visibility: visible;
+    opacity: 1;
+}
+/* Build info DL — renders the Version / Tag / Commit / Built grid in the
+ * About tab. Populated at runtime by popup.ts from the generated
+ * src/build-info.ts constants (#57). */
+.build-info {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 4px 12px;
+    margin-top: 8px;
+    font-size: 12px;
+    color: #333;
+}
+.build-info dt {
+    color: #777;
+    font-weight: 600;
+}
+.build-info dd {
+    margin: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    word-break: break-all;
+}
+.build-info dd a {
+    color: #0b5ed7;
+    text-decoration: none;
+}
+.build-info dd a:hover {
+    text-decoration: underline;
+}
+.build-info-dim {
+    color: #999;
+    font-size: 11px;
+}
+.version-name {
+    color: #555;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* ─── Validation tab accordion (#59) ────────────────────────────────
+ * Each entry renders as a clickable summary row that expands to show
+ * signer / trust-list / cert / timestamp / AI / ingredients details.
+ */
+
+.validation-empty {
+    color: #888;
+    font-size: 12px;
+    padding: 12px 0;
+    text-align: center;
+}
+
+.v-row {
+    border: 1px solid #e5e5e5;
+    border-radius: 6px;
+    margin-bottom: 6px;
+    background: #fff;
+    overflow: hidden;
+}
+
+.v-summary {
+    display: grid;
+    grid-template-columns: 28px 40px 1fr auto 16px;
+    column-gap: 10px;
+    align-items: center;
+    width: 100%;
+    padding: 8px 10px;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+}
+.v-summary:hover         { background: #f7f9fb; }
+.v-summary.is-open       { background: #f0f4f8; }
+
+.v-status-icon { width: 24px; height: 24px; object-fit: contain; }
+.v-thumb       { width: 40px; height: 40px; object-fit: cover; border-radius: 4px;
+                 background: #eee; }
+.v-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #222;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.v-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 10px;
+    line-height: 1.4;
+    color: #fff;
+}
+.status-success    { background: #2a8a3c; }
+.status-warning    { background: #f0a500; color: #1a1a1a; }
+.status-error      { background: #c83232; }
+.status-ai-success { background: #2a8a3c; }
+.status-ai-error   { background: #c83232; }
+.status-unknown    { background: #888; }
+.status-no-credentials { background: #8a8a8a; }
+.status-unavailable    { background: #6b6b6b; }
+
+/* Files with nothing to verify are listed so the user can see the scan
+ * covered them, but they are held back visually: the rows that carry a
+ * cryptographic finding are the ones worth the eye. Hovering or expanding a
+ * row brings it to full strength so the detail stays readable.
+ */
+.v-row-no-credentials,
+.v-row-unavailable {
+    opacity: 0.55;
+    transition: opacity 120ms ease-out;
+}
+.v-row-no-credentials:hover,
+.v-row-unavailable:hover,
+.v-row-no-credentials:focus-within,
+.v-row-unavailable:focus-within {
+    opacity: 1;
+}
+
+.v-note {
+    color: #444;
+    line-height: 1.45;
+    margin-bottom: 8px;
+}
+.v-note p { margin: 0 0 6px 0; }
+.v-source {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    color: #666;
+}
+
+.v-disclosure {
+    transition: transform 120ms ease-out;
+    color: #888;
+    font-size: 14px;
+}
+.v-summary.is-open .v-disclosure { transform: rotate(90deg); }
+
+.v-details {
+    padding: 10px 14px 12px;
+    border-top: 1px solid #eee;
+    background: #fafbfc;
+    font-size: 12px;
+}
+
+.v-details dl {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 4px 10px;
+    margin: 0 0 10px 0;
+}
+.v-details dt {
+    color: #777;
+    font-weight: 600;
+}
+.v-details dd {
+    margin: 0;
+    color: #222;
+    word-break: break-word;
+}
+.v-details dd b { color: #111; }
+
+.detail-dim      { color: #999; }
+.tsa-ok          { color: #2a8a3c; font-weight: 600; }
+.ai-flag         { color: #c83232; font-weight: 600; }
+.validation-errors { color: #c83232; }
+.validation-errors > div { padding: 2px 0; }
+
+.init-error-banner {
+    background: #fdecea;
+    border-left: 3px solid #c83232;
+    color: #6e1717;
+    padding: 8px 10px;
+    margin: 0 0 8px 0;
+    font-size: 12px;
+    line-height: 1.4;
+    border-radius: 3px;
+}
+.init-error-banner > .init-error-title {
+    font-weight: 600;
+    margin-bottom: 2px;
+}
+
+.ingredient-header {
+    font-weight: 600;
+    color: #555;
+    margin: 4px 0 6px;
+    font-size: 12px;
+}
+.ingredient-tree {
+    list-style: none;
+    padding-left: 8px;
+    margin: 0;
+    border-left: 2px solid #cfd8e3;
+}
+.ingredient {
+    display: grid;
+    grid-template-columns: 32px 1fr;
+    gap: 8px;
+    padding: 4px 0 4px 8px;
+    position: relative;
+    align-items: center;
+}
+.ingredient::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 8px;
+    height: 2px;
+    background: #cfd8e3;
+}
+.ingredient-thumb {
+    width: 32px;
+    height: 32px;
+    object-fit: cover;
+    border-radius: 3px;
+    background: #eee;
+}
+.ingredient-thumb.placeholder {
+    display: grid;
+    place-items: center;
+    color: #aaa;
+    font-weight: 700;
+    font-size: 14px;
+}
+.ingredient-meta {
+    min-width: 0;
+}
+.ingredient-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #222;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ingredient-dim {
+    color: #888;
+    font-size: 11px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.ingredient-empty {
+    padding: 6px 10px;
+    color: #888;
+    font-size: 12px;
+    font-style: italic;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * rc11.1 — About-tab release header, What's new, Trust Lists read-only tab
+ * (#68). Keeps the existing style language (flat, small type, muted meta).
+ * ─────────────────────────────────────────────────────────────────────── */
+
+.release-header {
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    background: #fafbfc;
+    border: 1px solid #e4e7eb;
+    border-radius: 6px;
+}
+.release-tag-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+}
+.release-tag-row a {
+    text-decoration: none;
+}
+.release-tag {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 18px;
+    font-weight: 700;
+    color: #1f4d7a;
+    letter-spacing: 0.2px;
+}
+.release-stage {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: #fff4cd;
+    color: #8a6500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.release-date {
+    font-size: 11px;
+    color: #888;
+    margin-top: 4px;
+}
+
+.whats-new-heading {
+    font-size: 14px;
+    margin: 8px 0 6px;
+    color: #222;
+}
+.whats-new {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.release-entry {
+    border: 1px solid #e4e7eb;
+    border-radius: 4px;
+    background: #fff;
+}
+.release-entry > summary {
+    padding: 6px 10px;
+    cursor: pointer;
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    gap: 8px;
+    align-items: baseline;
+    font-size: 12px;
+    color: #333;
+    list-style: none;
+}
+.release-entry > summary::-webkit-details-marker { display: none; }
+.release-entry-tag {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-weight: 700;
+    color: #1f4d7a;
+}
+.release-entry-date {
+    color: #888;
+    font-size: 11px;
+}
+.release-entry-summary {
+    color: #222;
+    font-style: italic;
+}
+.release-fix-list {
+    list-style: none;
+    padding: 0 10px 8px;
+    margin: 0;
+}
+.release-fix {
+    padding: 6px 0;
+    border-top: 1px solid #f2f4f6;
+}
+.release-fix:first-child { border-top: none; }
+.release-fix-title {
+    font-weight: 600;
+    color: #222;
+    font-size: 12px;
+    margin-bottom: 2px;
+}
+.release-fix-verify {
+    font-size: 11px;
+    color: #555;
+    line-height: 1.4;
+}
+.release-fix-verify-label {
+    font-weight: 600;
+    color: #1f4d7a;
+}
+.release-fix-verify-link {
+    display: inline-block;
+    margin-top: 3px;
+    font-size: 11px;
+    color: #1f4d7a;
+    text-decoration: none;
+}
+.release-fix-verify-link:hover { text-decoration: underline; }
+
+.build-info-details > summary {
+    font-size: 12px;
+    color: #666;
+    cursor: pointer;
+    padding: 4px 0;
+}
+
+.trustlists-summary {
+    font-size: 12px;
+    color: #444;
+    margin: 0 0 8px;
+}
+.trustlist-readonly {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.trustlist-row {
+    border: 1px solid #e4e7eb;
+    border-radius: 4px;
+    padding: 8px 10px;
+    background: #fff;
+}
+.trustlist-name {
+    font-weight: 700;
+    font-size: 13px;
+    color: #222;
+}
+.trustlist-meta {
+    font-size: 11px;
+    color: #555;
+    margin-top: 2px;
+}
+.trustlist-desc {
+    font-size: 11px;
+    color: #444;
+    margin-top: 4px;
+    line-height: 1.4;
+}
+.trustlist-source {
+    font-size: 11px;
+    color: #666;
+    margin-top: 4px;
+    word-break: break-all;
+}
+.trustlist-source a { color: #1f4d7a; text-decoration: none; }
+.trustlist-source a:hover { text-decoration: underline; }
+
+
+/* Provenance diagram inside a Validation row. The popup is 400px wide, so the
+ * diagram gets the full content width and a taller canvas than the overlay's
+ * — this is the surface where the chain is meant to be read, not glanced at. */
+.popup-provenance {
+    margin: 6px 0 12px;
+}
+
+.popup-provenance c2pa-provenance-graph {
+    display: block;
+    width: 100%;
+}
+
+
+/* Sign-your-own call to action (Options tab). Reads as an offer, not an advert:
+ * site tokens, hairline border, no colour fill competing with the verdict UI. */
+.sign-cta-card {
+    margin: 10px 0 14px;
+    padding: 12px;
+    border: 1px solid #e2e8f0;
+    border-left: 3px solid #0284c7;
+    border-radius: 6px;
+    background: #f8fafc;
+}
+
+.sign-cta-title {
+    margin: 0 0 4px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.sign-cta-body {
+    margin: 0 0 8px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #475569;
+}
+
+.sign-cta-action {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #0284c7;
+    text-decoration: none;
+}
+
+.sign-cta-action:hover { text-decoration: underline; }
+
+/* Explanatory copy under an Options toggle. Small and quiet, but present:
+   a privacy switch the user cannot understand is not a real choice. */
+.option-note {
+    margin: 6px 0 0 0;
+    font-size: 11px;
+    line-height: 1.5;
+    color: #71717a;
+}
+.option-note code {
+    font-size: 10.5px;
+    background: #f4f4f5;
+    padding: 1px 4px;
+    border-radius: 3px;
+}

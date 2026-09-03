@@ -1,0 +1,91 @@
+{
+    "manifest_version": 3,
+    "name": "Verifieddit: C2PA Content Credential Verifier",
+    "short_name": "Verifieddit",
+    "description": "Verify content authenticity with C2PA Content Credentials. See who signed a file, whether it was altered, and declared AI origin.",
+    "version": "1.2.3",
+    "browser_specific_settings": {
+        "gecko": {
+            "id": "verifieddit@verifieddit.com",
+            "strict_min_version": "115.0",
+            "data_collection_permissions": {
+                "required": [
+                    "none"
+                ],
+                "optional": [
+                    "websiteContent"
+                ]
+            }
+        }
+    },
+    "permissions": [
+        "storage",
+        "activeTab",
+        "contextMenus",
+        "alarms"
+    ],
+    "host_permissions": [
+        "<all_urls>"
+    ],
+    "background": {
+        "scripts": [
+            "background.js"
+        ],
+        "type": "module"
+    },
+    "action": {
+        "default_popup": "popup.html",
+        "default_icon": {
+            "16": "icons/vd16.png",
+            "32": "icons/vd32.png",
+            "48": "icons/vd48.png",
+            "128": "icons/vd128.png"
+        }
+    },
+    "options_ui": {
+        "page": "options.html"
+    },
+    "icons": {
+        "16": "icons/vd16.png",
+        "32": "icons/vd32.png",
+        "48": "icons/vd48.png",
+        "128": "icons/vd128.png"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "inject.js"
+            ],
+            "run_at": "document_start",
+            "all_frames": true
+        },
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "content.js"
+            ],
+            "run_at": "document_start"
+        }
+    ],
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "c2pa.wasm",
+                "c2pa-web.worker.js",
+                "icons/*.svg",
+                "iframe.html"
+            ],
+            "matches": [
+                "<all_urls>"
+            ]
+        }
+    ],
+    "content_security_policy": {
+        "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+    }
+}

@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Verifieddit C2PA engine</title>
+</head>
+<body>
+    <!--
+      Offscreen document that hosts the c2pa engine. The MV3 service worker
+      cannot create a Web Worker or parse a DOM, both of which the c2pa toolkit
+      requires; this offscreen document can. Loading c2pa.js here runs
+      createC2pa() and registers the MSG_C2PA_VALIDATE_URL handler that the
+      background service worker routes manifest-validation requests to.
+      (Restored after it was removed as "dead code" in f0e5a60 — issue #134.)
+    -->
+    <script type="module" src="c2pa.js"></script>
+</body>
+</html>

@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en" style="height: 400px; width: 400px; overflow: visible;">
+
+<head>
+    <meta charset='utf-8'>
+    <meta http-equiv='X-UA-Compatible' content='IE=edge'>
+    <title>Verifieddit</title>
+    <meta name='viewport' content='width=device-width, initial-scale=1'>
+    <script type="module" src="./toggle.js"></script>
+    <link rel='stylesheet' type='text/css' media='screen' href='popup.css'>
+    <!-- TODO: dynamically add attribute type='module' if using manifest v3 and building popup.js as ESM -->
+    <script type='module' src='popup.js'></script>
+</head>
+
+<body>
+    <div id="initErrorBanner" class="init-error-banner" hidden></div>
+    <div class="tab-bar" role="tablist">
+        <button class="tab active" data-tab="validation">Validation</button>
+        <button class="tab" data-tab="trustlists">Trust Lists</button>
+        <button class="tab" data-tab="about">About</button>
+        <button class="tab" data-tab="options">Options</button>
+    </div>
+    <div>
+        <div id="validation" class="tab-content active-content">
+            <h1>Verifieddit</h1>
+            <div id="c2pa-info">
+                <div id="validationEntries"></div>
+                <div id="validationEmpty" class="validation-empty">
+                    Scanning this page for images, video and audio…
+                </div>
+            </div>
+        </div>
+
+        <div id="trustlists" class="tab-content">
+            <h1>Trust Lists</h1>
+            <p class="detail-dim">
+                Every trust list currently loaded by the extension. Certificates whose SHA-256 thumbprint
+                appears in one of these entries render as trusted on signed media; everything else shows
+                a warning.
+            </p>
+            <div id="trustlists-content">
+                <p class="detail-dim">Loading trust lists…</p>
+            </div>
+
+            <hr style="margin-top:14px;border:none;border-top:1px solid #e4e7eb">
+
+            <h2 style="font-size:14px;margin:10px 0 6px;color:#222">Add a trust list</h2>
+            <p class="detail-dim" style="font-size:12px">
+                Import a JSON trust list or a PEM/CRT certificate chain, or fetch one from a URL.
+                Imported lists are stored locally and can be removed from the list above at any time.
+            </p>
+
+            <label style="display:block;font-size:12px;font-weight:600;margin-top:8px;color:#333">From a file</label>
+            <input type="file" id="tl-file-input-trustlists" accept=".json,.pem,.crt" style="display:block;margin-top:4px">
+
+            <label style="display:block;font-size:12px;font-weight:600;margin-top:10px;color:#333">From a URL</label>
+            <div style="display:flex;gap:6px;margin-top:4px">
+                <input type="url" id="tl-url-input" placeholder="https://…/trust-list.json" style="flex:1;padding:4px 6px;font-size:12px;border:1px solid #ccc;border-radius:4px">
+                <button id="tl-url-fetch" type="button" style="padding:4px 10px;font-size:12px;border:1px solid #1f4d7a;background:#1f4d7a;color:#fff;border-radius:4px;cursor:pointer">Fetch</button>
+            </div>
+            <div id="tl-import-status" class="detail-dim" style="font-size:12px;margin-top:6px;min-height:16px"></div>
+        </div>
+
+        <div id="about" class="tab-content">
+            <div class="release-header">
+                <div class="release-tag-row">
+                    <a id="release-tag-link" href="#" target="_blank" rel="noopener">
+                        <span id="release-tag" class="release-tag">v1.0.0</span>
+                    </a>
+                    <span id="release-stage" class="release-stage">pre-release</span>
+                </div>
+                <div class="release-date"><span id="release-date">—</span></div>
+            </div>
+
+            <h1>Verifieddit</h1>
+            <p>Verify content authenticity using <a href="https://c2pa.org/" target="_blank">C2PA
+                    Content Credentials</a>. Detect AI-generated and edited media directly in your browser.</p>
+
+            <p>Visit <a href="https://www.verifieddit.com" target="_blank">www.verifieddit.com</a>
+                for more information.</p>
+
+            <hr>
+            <h2 class="whats-new-heading">What's new</h2>
+            <div id="whats-new" class="whats-new"></div>
+
+            <hr>
+            <details class="build-info-details">
+                <summary>Build metadata</summary>
+                <dl id="build-info" class="build-info">
+                    <dt>Version</dt>
+                    <dd><span id="version">1.0.0</span> <span id="version-name" class="version-name"></span></dd>
+                    <dt>Tag</dt>
+                    <dd><a id="tag-link" href="#" target="_blank"><span id="tag-describe">unknown</span></a></dd>
+                    <dt>Commit</dt>
+                    <dd><a id="commit-link" href="#" target="_blank"><span id="commit-short">unknown</span></a>
+                        <span id="commit-branch" class="build-info-dim"></span></dd>
+                    <dt>Built</dt>
+                    <dd><span id="build-date">—</span> <span id="build-host" class="build-info-dim"></span></dd>
+                </dl>
+            </details>
+        </div>
+
+        <div id="options" class="tab-content">
+            <h1>Options</h1>
+
+            <!--
+              Sign-your-own call to action. A plain outbound link the user
+              chooses to click: no new permission, no request issued by the
+              extension, and nothing recorded about whether it is used. The
+              ?src= parameter is disclosed in the trusteddit.com privacy
+              policy, section 2.5, published before this shipped.
+            -->
+            <div class="sign-cta-card">
+                <p class="sign-cta-title">Signing your own content?</p>
+                <p class="sign-cta-body">
+                    This extension verifies Content Credentials that other people created.
+                    Trusteddit issues the certificates and signs your own media, so it
+                    carries credentials this extension can verify.
+                </p>
+                <a id="trusteddit-link" class="sign-cta-action" href="#" target="_blank" rel="noopener noreferrer">
+                    Sign your own content with Trusteddit
+                </a>
+            </div>
+
+            <hr>
+            <div id="trust-list-option">
+                <p>Import a trust anchor or trust list <span class="info-tooltip">i<span class="tooltip-text">Either a
+                            file with one more more PEM-encoded certificates, or a JSON-encoded trust list (for format
+                            details, see
+                            the <a
+                                href="https://github.com/christianpaquin/c2pa-explorations/blob/main/trust-lists/trust-lists.md#list-of-x509-certificates"
+                                target="_blank">specification</a>)</span></span></p>
+                <input type="file" id="trust-file-input" accept=".json,.pem,.crt">
+                <p>Import a TSA trust anchor.<span class="info-tooltip">i<span class="tooltip-text">A
+                            A file with one or more Trusted Timestamp Authority PEM-encoded certificates</span></span>
+                </p>
+                <input type="file" id="tsa-file-input" accept=".pem,.crt">
+                <div id="trust-list-info"></div>
+            </div>
+            <br>
+            <hr>
+            <br>
+            <toggle-switch label="Automatically scan all media elements" id="toggleAutoScan"></toggle-switch>
+            <br>
+            <toggle-switch label="Check durable credentials online" id="toggleManifestStoreProbe"></toggle-switch>
+            <p class="option-note">
+                Off by default. When on, Verifieddit sends a perceptual fingerprint
+                of images that declare a durable credential to
+                <code>manifests.sanmarcsoft.com</code> to confirm the credential is
+                registered and recoverable. Fingerprints only, never the image, and
+                nothing identifying you or your device. With this off, such assets
+                still verify — their durable binding reads as declared rather than
+                confirmed.
+            </p>
+            <br>
+            <br>
+        </div>
+    </div>
+
+</body>
+
+</html>

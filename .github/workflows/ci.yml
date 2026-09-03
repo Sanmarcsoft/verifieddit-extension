@@ -1,0 +1,50 @@
+name: Build Browser Extension
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v7
+      name: Check out repository code
+      with:
+        # Fetch full history + tags so scripts/generate-build-info.js
+        # can run `git describe --tags --exact-match` and embed the
+        # release tag in the extension's About tab. Without this,
+        # checkout is shallow and tag-less (#61).
+        fetch-depth: 0
+        fetch-tags: true
+
+    - name: Set up Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: latest
+
+    # Frozen so a package.json/bun.lock mismatch fails here instead of
+    # silently resolving something nobody tested. `npm install` used to hide
+    # exactly that, which is how package-lock.json drifted two years unnoticed.
+    - name: Install dependencies
+      run: bun install --frozen-lockfile
+
+    - name: Build the project
+      run: bun run build
+
+    - name: Upload Chrome dist folder's zip as an artifact
+      uses: actions/upload-artifact@v7
+      with:
+        name: dist-chrome
+        path: dist/chrome/
+
+    - name: Upload Firefox dist folder's zip as an artifact
+      uses: actions/upload-artifact@v7
+      with:
+        name: dist-firefox
+        path: dist/firefox/

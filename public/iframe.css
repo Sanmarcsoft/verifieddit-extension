@@ -1,0 +1,23 @@
+/* The iframe body is the frame around the floating <c2pa-overlay> glass card.
+ * It is transparent so the card (a translucent dark frosted-glass pane with
+ * its own rounded corners and shadow) appears to float over the host page —
+ * matching the trusteddit.com verification aesthetic. The <c2pa-overlay>
+ * custom element owns all of its own rendering. */
+
+html, body {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    color-scheme: dark;
+    font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+}
+
+body {
+    min-height: 100%;
+    overflow: hidden;
+}
+
+c2pa-overlay {
+    display: block;
+    width: 100%;
+}

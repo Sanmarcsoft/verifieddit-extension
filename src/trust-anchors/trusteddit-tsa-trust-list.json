@@ -1,0 +1,41 @@
+{
+  "name": "Local TSA Anchors",
+  "description": "Trusteddit.com RFC 3161 timestamp anchors. Trusts timestamps from tsa.trusteddit.com (issued under the Trusteddit-Journalist-Issuer-CA), so durably-signed assets read as signed & timestamped.",
+  "download_url": "",
+  "website": "https://trusteddit.com",
+  "last_updated": "2026-06-08T00:00:00Z",
+  "entities": [
+    {
+      "name": "tsa.trusteddit.com",
+      "display_name": "Trusteddit Time-Stamping Authority",
+      "contact": "https://trusteddit.com",
+      "isCA": false,
+      "jwks": {
+        "keys": [
+          {
+            "kty": "EC",
+            "x5c": [
+              "MIIB2TCCAYCgAwIBAgIUPEZ6ksQ39fwWKBgGMDKS5apVCT0wCgYIKoZIzj0EAwIwKjEoMCYGA1UEAxMfVHJ1c3RlZGRpdC1Kb3VybmFsaXN0LUlzc3Vlci1DQTAeFw0yNjAzMDMxMTUxMDRaFw0yOTAzMDIxMTUxMDRaMDYxFzAVBgNVBAoMDlRydXN0ZWRkaXQuY29tMRswGQYDVQQDDBJ0c2EudHJ1c3RlZGRpdC5jb20wWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAATpz8bpQiQI3AN3GYvstLSBRfiR7x9i1INWE5s447NAcBxFkdX8r+3d52Vjvq+yu3/EdMGSy3+u2aV6eqgCaQD/o3gwdjAfBgNVHSMEGDAWgBQi169gndODeCF7HKnM87MrNc8elTAdBgNVHQ4EFgQU0bwu5Qn58+b9p1dDisPF/x01PiEwDgYDVR0PAQH/BAQDAgeAMBYGA1UdJQEB/wQMMAoGCCsGAQUFBwMIMAwGA1UdEwEB/wQCMAAwCgYIKoZIzj0EAwIDRwAwRAIgbLPtTm08UR4siWkoXfckCssdpUTPxvldCJxsQ8lGtFoCIGLp2SI+NiyJnfPcW/HhUBkX1a67MQGrWjtrU9BwXMYz"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Trusteddit-Journalist-Issuer-CA",
+      "display_name": "Trusteddit Journalist Issuer CA",
+      "contact": "https://trusteddit.com",
+      "isCA": true,
+      "jwks": {
+        "keys": [
+          {
+            "kty": "EC",
+            "x5c": [
+              "MIIB2jCCAX+gAwIBAgIRAMPtFg+/UfZ4/RbPF1QkGgEwCgYIKoZIzj0EAwIwSjEfMB0GA1UEChMWVHJ1c3RlZGRpdC5jb20gUm9vdCBDQTEnMCUGA1UEAxMeVHJ1c3RlZGRpdC5jb20gUm9vdCBDQSBSb290IENBMB4XDTI1MDgyOTA5MjEyN1oXDTM1MDgyNzA5MjEyN1owKjEoMCYGA1UEAxMfVHJ1c3RlZGRpdC1Kb3VybmFsaXN0LUlzc3Vlci1DQTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABMZHQ2SBQwzDMzxSZlno5UtnYS1LXJ6yRiYJlRH4AYfp2fSaqwgecq48tbQF6ShLef66I6HZUFypJ5ETMIdqf5GjZjBkMA4GA1UdDwEB/wQEAwIBBjASBgNVHRMBAf8ECDAGAQH/AgEAMB0GA1UdDgQWBBQi169gndODeCF7HKnM87MrNc8elTAfBgNVHSMEGDAWgBT189Bqom2ijBcsx2NMmNfKbUjkZzAKBggqhkjOPQQDAgNJADBGAiEAzfjM4uyIvsvYc8JicL+DoeZaEiNp93oUh0wtc66m+cACIQCpMIDfzaH0lX4EDtRB2yCDkYFTVfSKx4hpJ0RNfKXWPA=="
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "name": "Verifieddit Dev Fixtures",
+  "download_url": "",
+  "description": "Test-fixture signing CA for the bundled demo corpus (test/fixtures/demo-corpus). NOT an official C2PA anchor. Split out of default-trust-list.json on 2026-08-01 so the production trust list contains only anchors from the C2PA Conformance Program; drop this list from loadDefaultTrustLists() to stop trusting fixture-signed assets.",
+  "website": "https://github.com/Sanmarcsoft/verifieddit-extension",
+  "last_updated": "2026-04-24T12:15:00Z",
+  "entities": [
+    {
+      "name": "Verifieddit Test Signer (local dev fixtures, Apr 2026)",
+      "display_name": "Verifieddit Test Signer",
+      "contact": "https://www.verifieddit.com",
+      "isCA": false,
+      "jwks": {
+        "keys": [
+          {
+            "kty": "EC",
+            "x5c": [
+              "MIICcDCCAfagAwIBAgIUBDlKkihSufUldk8QxHNUIx7zIPkwCgYIKoZIzj0EAwMwRDEhMB8GA1UECgwYQzJQQSBFeHRlbnNpb24gVmFsaWRhdG9yMQ0wCwYDVQQLDARUZXN0MRAwDgYDVQQDDAdUZXN0IENBMB4XDTI2MDQyMTEzMTQ1MFoXDTI4MDQyMDEzMTQ1MFowSDEhMB8GA1UECgwYQzJQQSBFeHRlbnNpb24gVmFsaWRhdG9yMQ0wCwYDVQQLDARUZXN0MRQwEgYDVQQDDAtUZXN0IFNpZ25lcjBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABNg/OPgx33N5uJEi4KNjovo/LJgsbfmKnUb6bftesDBpYr6AAnzQ6+MLoBVtv06sf8g8LiQpzSLVld7HSnqZgmyjgcEwgb4wCQYDVR0TBAIwADALBgNVHQ8EBAMCB4AwTwYDVR0RBEgwRoZEaHR0cHM6Ly9naXRodWIuY29tL21pY3Jvc29mdC9jMnBhLWV4dGVuc2lvbi12YWxpZGF0b3IvdHJlZS9tYWluL3Rlc3QwHQYDVR0OBBYEFFI2T+/M9RGLKd+notfBeYIX5858MB8GA1UdIwQYMBaAFIOFH3r2nqDl5rvHi0xJDBF4dHkdMBMGA1UdJQQMMAoGCCsGAQUFBwMkMAoGCCqGSM49BAMDA2gAMGUCMQDK18/ZOjsp8IwAV6baDtgFBR/McY0C8pDwghXIEiueZe7ws3MMT7LNyLMvTdhMWvsCMGmmluGpBg3zXQbf8/wa/ARqxzCqUSw4whYn2KOOIXCS6G0q4gHxcuWSMTqqyN3Vag=="
+            ],
+            "x5t#S256": "a1d71e68d2a48f08045700119c14a81d62d043a06ccc15249abc59f90b262e59"
+          }
+        ]
+      }
+    }
+  ]
+}
