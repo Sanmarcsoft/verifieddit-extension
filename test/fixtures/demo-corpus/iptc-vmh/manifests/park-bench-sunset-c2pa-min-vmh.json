@@ -1,0 +1,94 @@
+{
+  "active_manifest": "urn:uuid:ad387a2e-04ef-4f2a-91da-335d56f80b18",
+  "manifests": {
+    "urn:uuid:ad387a2e-04ef-4f2a-91da-335d56f80b18": {
+      "claim_generator": "IPTC testing with c2patool c2patool/0.3.8 c2pa-rs/0.15.0",
+      "title": "IPTC test image - minimal VMH metadata version",
+      "format": "video/mp4",
+      "instance_id": "xmp:iid:26110488-a8ad-481d-8b44-248f5181dcf4",
+      "ingredients": [],
+      "assertions": [
+        {
+          "label": "stds.iptc",
+          "data": {
+            "@context": {
+              "Iptc4xmpExt": "http://iptc.org/std/Iptc4xmpExt/2008-02-29/",
+              "dc": "http://purl.org/dc/elements/1.1/"
+            },
+            "Iptc4xmpExt:LocationCreated": [
+              {
+                "Iptc4xmpExt:City": "San Francisco"
+              }
+            ],
+            "dc:language": "en"
+          }
+        }
+      ],
+      "signature_info": {
+        "alg": "Es256",
+        "issuer": "C2PA Test Signing Cert",
+        "common_name": "C2PA Signer",
+        "cert_serial_number": "640229841392226413189608867977836244731148734950",
+        "time": "2023-07-12T14:30:19+00:00"
+      },
+      "label": "urn:uuid:ad387a2e-04ef-4f2a-91da-335d56f80b18"
+    }
+  },
+  "validation_status": [
+    {
+      "code": "signingCredential.untrusted",
+      "url": "self#jumbf=/c2pa/urn:uuid:ad387a2e-04ef-4f2a-91da-335d56f80b18/c2pa.signature",
+      "explanation": "signing certificate untrusted"
+    }
+  ],
+  "validation_results": {
+    "activeManifest": {
+      "success": [
+        {
+          "code": "timeStamp.validated",
+          "url": "self#jumbf=/c2pa/urn:uuid:ad387a2e-04ef-4f2a-91da-335d56f80b18/c2pa.signature",
+          "explanation": "timestamp message digest matched: DigiCert Timestamp 2022 - 2"
+        },
+        {
+          "code": "timeStamp.trusted",
+          "url": "self#jumbf=/c2pa/urn:uuid:ad387a2e-04ef-4f2a-91da-335d56f80b18/c2pa.signature",
+          "explanation": "timestamp cert trusted: DigiCert Timestamp 2022 - 2"
+        },
+        {
+          "code": "claimSignature.insideValidity",
+          "url": "self#jumbf=/c2pa/urn:uuid:ad387a2e-04ef-4f2a-91da-335d56f80b18/c2pa.signature",
+          "explanation": "claim signature valid"
+        },
+        {
+          "code": "claimSignature.validated",
+          "url": "self#jumbf=/c2pa/urn:uuid:ad387a2e-04ef-4f2a-91da-335d56f80b18/c2pa.signature",
+          "explanation": "claim signature valid"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:uuid:ad387a2e-04ef-4f2a-91da-335d56f80b18/c2pa.assertions/stds.iptc",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/stds.iptc"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:uuid:ad387a2e-04ef-4f2a-91da-335d56f80b18/c2pa.assertions/c2pa.hash.bmff",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.hash.bmff"
+        },
+        {
+          "code": "assertion.bmffHash.match",
+          "url": "self#jumbf=/c2pa/urn:uuid:ad387a2e-04ef-4f2a-91da-335d56f80b18/c2pa.assertions/c2pa.hash.bmff",
+          "explanation": "data hash valid"
+        }
+      ],
+      "informational": [],
+      "failure": [
+        {
+          "code": "signingCredential.untrusted",
+          "url": "self#jumbf=/c2pa/urn:uuid:ad387a2e-04ef-4f2a-91da-335d56f80b18/c2pa.signature",
+          "explanation": "signing certificate untrusted"
+        }
+      ]
+    }
+  },
+  "validation_state": "Valid"
+}

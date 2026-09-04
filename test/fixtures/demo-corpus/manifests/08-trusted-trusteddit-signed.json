@@ -1,0 +1,123 @@
+{
+  "active_manifest": "urn:uuid:06a5a588-dce9-4a95-872a-4bcc8ba6f1de",
+  "manifests": {
+    "urn:uuid:06a5a588-dce9-4a95-872a-4bcc8ba6f1de": {
+      "claim_generator": "Trusteddit/1.0 c2pa-node/0.0.0 c2pa-rs/0.49.2",
+      "claim_generator_info": [],
+      "title": "playing-cards-verified.jpg",
+      "format": "image/jpeg",
+      "instance_id": "xmp:iid:3d5b3dd7-3e12-466f-88fe-d96072ede508",
+      "thumbnail": {
+        "format": "image/jpeg",
+        "identifier": "self#jumbf=/c2pa/urn:uuid:06a5a588-dce9-4a95-872a-4bcc8ba6f1de/c2pa.assertions/c2pa.thumbnail.claim.jpeg"
+      },
+      "ingredients": [],
+      "assertions": [
+        {
+          "label": "c2pa.actions.v2",
+          "data": {
+            "actions": [
+              {
+                "action": "c2pa.created",
+                "when": "2026-08-03T11:06:19.542Z",
+                "softwareAgent": "Trusteddit Signing API"
+              }
+            ]
+          }
+        },
+        {
+          "label": "stds.schema-org.CreativeWork",
+          "data": {
+            "@type": "CreativeWork",
+            "author": [
+              {
+                "@type": "Person",
+                "name": "88ae918948ab496a0c0704b2375d8724.access"
+              }
+            ],
+            "copyrightHolder": {
+              "@type": "Organization",
+              "name": "Trusteddit.com"
+            }
+          },
+          "kind": "Json"
+        }
+      ],
+      "signature_info": {
+        "alg": "Es256",
+        "issuer": "Trusteddit.com",
+        "common_name": "sign.trusteddit.com",
+        "cert_serial_number": "344111176054256012944772602277781743593346894140",
+        "time": "2026-08-03T11:06:19+00:00"
+      },
+      "label": "urn:uuid:06a5a588-dce9-4a95-872a-4bcc8ba6f1de"
+    }
+  },
+  "validation_status": [
+    {
+      "code": "signingCredential.untrusted",
+      "url": "self#jumbf=/c2pa/urn:uuid:06a5a588-dce9-4a95-872a-4bcc8ba6f1de/c2pa.signature",
+      "explanation": "signing certificate untrusted"
+    }
+  ],
+  "validation_results": {
+    "activeManifest": {
+      "success": [
+        {
+          "code": "timeStamp.validated",
+          "url": "self#jumbf=/c2pa/urn:uuid:06a5a588-dce9-4a95-872a-4bcc8ba6f1de/c2pa.signature",
+          "explanation": "timestamp message digest matched: tsa.trusteddit.com"
+        },
+        {
+          "code": "timeStamp.trusted",
+          "url": "self#jumbf=/c2pa/urn:uuid:06a5a588-dce9-4a95-872a-4bcc8ba6f1de/c2pa.signature",
+          "explanation": "timestamp cert trusted: tsa.trusteddit.com"
+        },
+        {
+          "code": "claimSignature.insideValidity",
+          "url": "self#jumbf=/c2pa/urn:uuid:06a5a588-dce9-4a95-872a-4bcc8ba6f1de/c2pa.signature",
+          "explanation": "claim signature valid"
+        },
+        {
+          "code": "claimSignature.validated",
+          "url": "self#jumbf=/c2pa/urn:uuid:06a5a588-dce9-4a95-872a-4bcc8ba6f1de/c2pa.signature",
+          "explanation": "claim signature valid"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:uuid:06a5a588-dce9-4a95-872a-4bcc8ba6f1de/c2pa.assertions/c2pa.thumbnail.claim.jpeg",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.thumbnail.claim.jpeg"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:uuid:06a5a588-dce9-4a95-872a-4bcc8ba6f1de/c2pa.assertions/c2pa.actions",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.actions"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:uuid:06a5a588-dce9-4a95-872a-4bcc8ba6f1de/c2pa.assertions/stds.schema-org.CreativeWork",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/stds.schema-org.CreativeWork"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:uuid:06a5a588-dce9-4a95-872a-4bcc8ba6f1de/c2pa.assertions/c2pa.hash.data",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.hash.data"
+        },
+        {
+          "code": "assertion.dataHash.match",
+          "url": "self#jumbf=/c2pa/urn:uuid:06a5a588-dce9-4a95-872a-4bcc8ba6f1de/c2pa.assertions/c2pa.hash.data",
+          "explanation": "data hash valid"
+        }
+      ],
+      "informational": [],
+      "failure": [
+        {
+          "code": "signingCredential.untrusted",
+          "url": "self#jumbf=/c2pa/urn:uuid:06a5a588-dce9-4a95-872a-4bcc8ba6f1de/c2pa.signature",
+          "explanation": "signing certificate untrusted"
+        }
+      ]
+    }
+  },
+  "validation_state": "Valid"
+}

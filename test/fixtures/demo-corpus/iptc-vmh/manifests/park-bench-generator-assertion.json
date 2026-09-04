@@ -1,0 +1,148 @@
+{
+  "active_manifest": "urn:uuid:7ea05eba-ed23-4563-b7de-fd8c3a853974",
+  "manifests": {
+    "urn:uuid:7ea05eba-ed23-4563-b7de-fd8c3a853974": {
+      "claim_generator": "IPTC Video Metadata Hub Generator with c2patool c2patool/0.3.8 c2pa-rs/0.15.0",
+      "title": "Video signed with c2patool",
+      "format": "video/mp4",
+      "instance_id": "xmp:iid:e2cfce74-5058-42e3-a208-78f30f467c32",
+      "ingredients": [],
+      "assertions": [
+        {
+          "label": "stds.iptc",
+          "data": {
+            "@context": {
+              "Iptc4xmpCore": "http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/",
+              "Iptc4xmpExt": "http://iptc.org/std/Iptc4xmpExt/2008-02-29/",
+              "dc": "http://purl.org/dc/elements/1.1/",
+              "photoshop": "http://ns.adobe.com/photoshop/1.0/",
+              "plus": "http://ns.useplus.org/ldf/xmp/1.0/",
+              "xmp": "http://ns.adobe.com/xap/1.0/",
+              "xmpDM": "http://ns.adobe.com/xmp/1.0/DynamicMedia/",
+              "xmpRights": "http://ns.adobe.com/xap/1.0/rights/"
+            },
+            "Iptc4xmpExt:AboutCvTerm": [
+              {
+                "Iptc4xmpExt:CvId": "http://cv.iptc.org/newscodes/mediatopic/",
+                "Iptc4xmpExt:CvTermId": "01000000",
+                "Iptc4xmpExt:CvTermName": "Arts, culture, entertainment and media"
+              },
+              {
+                "Iptc4xmpExt:CvId": "http://cv.iptc.org/newscodes/mediatopic/",
+                "Iptc4xmpExt:CvTermId": "04000000",
+                "Iptc4xmpExt:CvTermName": "Economy, business and finance"
+              },
+              {
+                "Iptc4xmpExt:CvId": "http://cv.iptc.org/newscodes/mediatopic/",
+                "Iptc4xmpExt:CvTermId": "05000000",
+                "Iptc4xmpExt:CvTermName": "Education"
+              }
+            ],
+            "Iptc4xmpExt:Genre": [
+              {
+                "Iptc4xmpExt:CvId": "http://cv.iptc.org/newscodes/genre/",
+                "Iptc4xmpExt:CvTermId": "Archive_material"
+              }
+            ],
+            "Iptc4xmpExt:LocationCreated": [
+              {
+                "Iptc4xmpExt:LocationName": "location shot"
+              }
+            ],
+            "Iptc4xmpExt:LocationShown": [
+              {
+                "Iptc4xmpExt:LocationName": "location shown"
+              }
+            ],
+            "dc:description": "test description",
+            "dc:language": "en",
+            "dc:rights": "copyright notice",
+            "dc:subject": [
+              "keyword1",
+              "keyword2",
+              "keyword3"
+            ],
+            "dc:title": "test title",
+            "photoshop:DateCreated": "2023-03-11",
+            "plus:CopyrightOwner": [
+              {
+                "plus:CopyrightOwnerName": "copyright owner"
+              }
+            ],
+            "plus:ImageSupplier": [
+              {
+                "plus:ImageSupplierName": "Supplier"
+              }
+            ],
+            "xmpDM:releaseDate": "2023-04-02"
+          }
+        }
+      ],
+      "signature_info": {
+        "alg": "Es256",
+        "issuer": "Media Publisher Company",
+        "common_name": "Bob",
+        "cert_serial_number": "540964000020125858473593069256335044252303231294",
+        "time": "2023-03-23T08:51:40+00:00"
+      },
+      "label": "urn:uuid:7ea05eba-ed23-4563-b7de-fd8c3a853974"
+    }
+  },
+  "validation_status": [
+    {
+      "code": "signingCredential.untrusted",
+      "url": "self#jumbf=/c2pa/urn:uuid:7ea05eba-ed23-4563-b7de-fd8c3a853974/c2pa.signature",
+      "explanation": "signing certificate untrusted"
+    }
+  ],
+  "validation_results": {
+    "activeManifest": {
+      "success": [
+        {
+          "code": "timeStamp.validated",
+          "url": "self#jumbf=/c2pa/urn:uuid:7ea05eba-ed23-4563-b7de-fd8c3a853974/c2pa.signature",
+          "explanation": "timestamp message digest matched: DigiCert Timestamp 2022 - 2"
+        },
+        {
+          "code": "timeStamp.trusted",
+          "url": "self#jumbf=/c2pa/urn:uuid:7ea05eba-ed23-4563-b7de-fd8c3a853974/c2pa.signature",
+          "explanation": "timestamp cert trusted: DigiCert Timestamp 2022 - 2"
+        },
+        {
+          "code": "claimSignature.insideValidity",
+          "url": "self#jumbf=/c2pa/urn:uuid:7ea05eba-ed23-4563-b7de-fd8c3a853974/c2pa.signature",
+          "explanation": "claim signature valid"
+        },
+        {
+          "code": "claimSignature.validated",
+          "url": "self#jumbf=/c2pa/urn:uuid:7ea05eba-ed23-4563-b7de-fd8c3a853974/c2pa.signature",
+          "explanation": "claim signature valid"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:uuid:7ea05eba-ed23-4563-b7de-fd8c3a853974/c2pa.assertions/stds.iptc",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/stds.iptc"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:uuid:7ea05eba-ed23-4563-b7de-fd8c3a853974/c2pa.assertions/c2pa.hash.bmff",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.hash.bmff"
+        },
+        {
+          "code": "assertion.bmffHash.match",
+          "url": "self#jumbf=/c2pa/urn:uuid:7ea05eba-ed23-4563-b7de-fd8c3a853974/c2pa.assertions/c2pa.hash.bmff",
+          "explanation": "data hash valid"
+        }
+      ],
+      "informational": [],
+      "failure": [
+        {
+          "code": "signingCredential.untrusted",
+          "url": "self#jumbf=/c2pa/urn:uuid:7ea05eba-ed23-4563-b7de-fd8c3a853974/c2pa.signature",
+          "explanation": "signing certificate untrusted"
+        }
+      ]
+    }
+  },
+  "validation_state": "Valid"
+}

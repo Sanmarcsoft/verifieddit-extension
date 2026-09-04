@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reference corpus - Verifieddit vs c2patool</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 24px; background: #f8fafc; color: #1e293b; }
+  h1 { margin: 0 0 6px; font-size: 22px; }
+  h2 { font-size: 16px; margin: 34px 0 4px; }
+  .count { font-weight: 400; color: #64748b; font-size: 13px; }
+  .src, .note, .lede { margin: 4px 0; font-size: 13px; color: #475569; max-width: 92ch; line-height: 1.5; }
+  .lede { font-size: 14px; color: #334155; }
+  .tally { margin: 14px 0 0; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 16px; margin: 14px 0 0; }
+  .asset { margin: 0; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; }
+  .asset img, .asset video { width: 100%; height: 170px; object-fit: contain; background: #f1f5f9; border-radius: 4px; display: block; }
+  .pdf { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 170px; background: #f1f5f9; border-radius: 4px; font-size: 12px; text-align: center; }
+  figcaption { margin-top: 8px; }
+  .name { font-size: 12px; font-weight: 600; word-break: break-all; display: block; }
+  .chip { display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .chip.good    { background: #dcfce7; color: #166534; }
+  .chip.warn    { background: #fef3c7; color: #92400e; }
+  .chip.expired { background: #ffedd5; color: #9a3412; }
+  .chip.bad     { background: #fee2e2; color: #991b1b; }
+  .chip.none    { background: #f1f5f9; color: #475569; }
+  .meta { font-size: 11px; color: #64748b; margin-top: 4px; word-break: break-word; }
+  .verdicts { margin-top: 7px; border-top: 1px solid #f1f5f9; padding-top: 6px; }
+  .row { display: flex; gap: 6px; font-size: 10.5px; margin-top: 3px; }
+  .k { flex: 0 0 58px; color: #94a3b8; text-transform: uppercase; letter-spacing: .04em; }
+  .v { font-family: ui-monospace, SFMono-Regular, monospace; color: #334155; }
+  .clean { color: #166534; font-weight: 600; }
+  .links { margin-top: 7px; font-size: 12px; }
+  .dim { color: #94a3b8; font-size: 12px; }
+</style>
+</head>
+<body>
+  <h1>Reference corpus</h1>
+  <p class="lede">
+    47 assets, each paired with the manifest <strong>c2patool</strong> reads from it.
+    c2patool is the c2pa-rs reference implementation, so where the extension's badge
+    disagrees with the JSON linked here, the reference is right and the extension is
+    wrong until proven otherwise.
+  </p>
+  <p class="lede">
+    Every asset is read twice, because a C2PA verdict is not a property of the file alone.
+    <b>Bare</b> is c2patool with no trust anchors: hashes, signature, claim structure.
+    Every signer reads <code>signingCredential.untrusted</code> there, ours included,
+    because there is nothing to trust against, so ignore that one code in that row.
+    <b>Anchored</b> re-runs the check against the public Trusteddit anchors, which
+    answers the separate question of whether the signer is one we recognise.
+  </p>
+  <p class="lede">
+    <b>Neither row is the extension's answer.</b> Verifieddit ships six trust lists and
+    82 entities, including the CAI known-certificate anchors, so it recognises signers
+    these anchors alone do not. Expect it to be <i>more</i> permissive on the Adobe,
+    Truepic and CAI assets. What it must never do is disagree on the integrity codes:
+    a <span class="chip bad">integrity failure</span> here has to be an error there.
+  </p>
+  <p class="tally"><span class="chip none">5 no Content Credentials</span> <span class="chip bad">8 integrity failure</span> <span class="chip expired">4 certificate expired</span> <span class="chip warn">29 signer not recognised</span> <span class="chip good">1 valid and trusted</span></p>
+  <p class="lede">
+    Summary table: <a href="REFERENCE-NOTES.md">REFERENCE-NOTES.md</a> &middot;
+    The curated 8-fixture page the e2e suite asserts against: <a href="index.html">index.html</a>
+  </p>
+    <section>
+      <h2>C2PA public test files <span class="count">28 assets</span></h2>
+      <p class="src">Source: <a href="https://spec.c2pa.org/public-testfiles/" target="_blank">https://spec.c2pa.org/public-testfiles/</a></p>
+      <p class="note">The conformance corpus. The adobe-20220124-* names encode the construction: C a claim, A a parent asset, I an ingredient, and E-sig / E-clm / E-dat / E-uri a deliberately broken signature, claim, data hash or URI reference. The E-* and X* assets are the ones that must come back red.</p>
+      <div class="grid">
+      <figure class="asset">
+        <img src="c2pa-official/jpeg/adobe-20220124-A.jpg" alt="c2pa-official/jpeg/adobe-20220124-A.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">adobe-20220124-A.jpg</code>
+          <div class="chip none">no Content Credentials</div>
+          <div class="meta">no claim generator</div>
+          <div class="meta">0 ingredient(s), 0 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">c2patool</span><span class="v">no Content Credentials</span></div></div>
+          <div class="links"><span class="dim">no manifest to read</span></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="c2pa-official/jpeg/adobe-20220124-C.jpg" alt="c2pa-official/jpeg/adobe-20220124-C.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">adobe-20220124-C.jpg</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">make_test_images/0.16.1 c2pa-rs/0.16.1</div>
+          <div class="meta">0 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="c2pa-official/manifests/adobe-20220124-C.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="c2pa-official/jpeg/adobe-20220124-CA.jpg" alt="c2pa-official/jpeg/adobe-20220124-CA.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">adobe-20220124-CA.jpg</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">make_test_images/0.16.1 c2pa-rs/0.16.1</div>
+          <div class="meta">1 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="c2pa-official/manifests/adobe-20220124-CA.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="c2pa-official/jpeg/adobe-20220124-CACA.jpg" alt="c2pa-official/jpeg/adobe-20220124-CACA.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">adobe-20220124-CACA.jpg</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">make_test_images/0.16.1 c2pa-rs/0.16.1</div>
+          <div class="meta">1 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="c2pa-official/manifests/adobe-20220124-CACA.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="c2pa-official/jpeg/adobe-20220124-CACAICAICICA.jpg" alt="c2pa-official/jpeg/adobe-20220124-CACAICAICICA.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">adobe-20220124-CACAICAICICA.jpg</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">make_test_images/0.16.1 c2pa-rs/0.16.1</div>
+          <div class="meta">2 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="c2pa-official/manifests/adobe-20220124-CACAICAICICA.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="c2pa-official/jpeg/adobe-20220124-CAI.jpg" alt="c2pa-official/jpeg/adobe-20220124-CAI.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">adobe-20220124-CAI.jpg</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">make_test_images/0.16.1 c2pa-rs/0.16.1</div>
+          <div class="meta">2 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="c2pa-official/manifests/adobe-20220124-CAI.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="c2pa-official/jpeg/adobe-20220124-CAIAIIICAICIICAIICICA.jpg" alt="c2pa-official/jpeg/adobe-20220124-CAIAIIICAICIICAIICICA.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">adobe-20220124-CAIAIIICAICIICAIICICA.jpg</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">make_test_images/0.16.1 c2pa-rs/0.16.1</div>
+          <div class="meta">7 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="c2pa-official/manifests/adobe-20220124-CAIAIIICAICIICAIICICA.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="c2pa-official/jpeg/adobe-20220124-CAICA.jpg" alt="c2pa-official/jpeg/adobe-20220124-CAICA.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">adobe-20220124-CAICA.jpg</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">make_test_images/0.16.1 c2pa-rs/0.16.1</div>
+          <div class="meta">2 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="c2pa-official/manifests/adobe-20220124-CAICA.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="c2pa-official/jpeg/adobe-20220124-CAICAI.jpg" alt="c2pa-official/jpeg/adobe-20220124-CAICAI.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">adobe-20220124-CAICAI.jpg</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">make_test_images/0.16.1 c2pa-rs/0.16.1</div>
+          <div class="meta">2 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="c2pa-official/manifests/adobe-20220124-CAICAI.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="c2pa-official/jpeg/adobe-20220124-CI.jpg" alt="c2pa-official/jpeg/adobe-20220124-CI.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">adobe-20220124-CI.jpg</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">make_test_images/0.16.1 c2pa-rs/0.16.1</div>
+          <div class="meta">1 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="c2pa-official/manifests/adobe-20220124-CI.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="c2pa-official/jpeg/adobe-20220124-CICA.jpg" alt="c2pa-official/jpeg/adobe-20220124-CICA.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">adobe-20220124-CICA.jpg</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">make_test_images/0.16.1 c2pa-rs/0.16.1</div>
+          <div class="meta">1 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="c2pa-official/manifests/adobe-20220124-CICA.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="c2pa-official/jpeg/adobe-20220124-CICACACA.jpg" alt="c2pa-official/jpeg/adobe-20220124-CICACACA.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">adobe-20220124-CICACACA.jpg</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">make_test_images/0.16.1 c2pa-rs/0.16.1</div>
+          <div class="meta">1 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="c2pa-official/manifests/adobe-20220124-CICACACA.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="c2pa-official/jpeg/adobe-20220124-CIE-sig-CA.jpg" alt="c2pa-official/jpeg/adobe-20220124-CIE-sig-CA.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">adobe-20220124-CIE-sig-CA.jpg</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">make_test_images/0.16.1 c2pa-rs/0.16.1</div>
+          <div class="meta">1 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="c2pa-official/manifests/adobe-20220124-CIE-sig-CA.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="c2pa-official/jpeg/adobe-20220124-CII.jpg" alt="c2pa-official/jpeg/adobe-20220124-CII.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">adobe-20220124-CII.jpg</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">make_test_images/0.16.1 c2pa-rs/0.16.1</div>
+          <div class="meta">1 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="c2pa-official/manifests/adobe-20220124-CII.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="c2pa-official/jpeg/adobe-20220124-E-clm-CAICAI.jpg" alt="c2pa-official/jpeg/adobe-20220124-E-clm-CAICAI.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">adobe-20220124-E-clm-CAICAI.jpg</code>
+          <div class="chip bad">integrity failure</div>
+          <div class="meta">make_test_images/0.16.1 c2pa-rs/0.16.1</div>
+          <div class="meta">2 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">claim.missing<br>signingCredential.untrusted<br>assertion.hashedURI.mismatch<br>ingredient.manifest.missing</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">claim.missing<br>signingCredential.untrusted<br>assertion.hashedURI.mismatch<br>ingredient.manifest.missing</span></div></div>
+          <div class="links"><a href="c2pa-official/manifests/adobe-20220124-E-clm-CAICAI.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="c2pa-official/jpeg/adobe-20220124-E-dat-CA.jpg" alt="c2pa-official/jpeg/adobe-20220124-E-dat-CA.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">adobe-20220124-E-dat-CA.jpg</code>
+          <div class="chip bad">integrity failure</div>
+          <div class="meta">make_test_images/0.16.1 c2pa-rs/0.16.1</div>
+          <div class="meta">1 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted<br>assertion.dataHash.mismatch</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted<br>assertion.dataHash.mismatch</span></div></div>
+          <div class="links"><a href="c2pa-official/manifests/adobe-20220124-E-dat-CA.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="c2pa-official/jpeg/adobe-20220124-E-sig-CA.jpg" alt="c2pa-official/jpeg/adobe-20220124-E-sig-CA.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">adobe-20220124-E-sig-CA.jpg</code>
+          <div class="chip bad">integrity failure</div>
+          <div class="meta">make_test_xxxxxx/0.16.1 c2pa-rs/0.16.1</div>
+          <div class="meta">1 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted<br>claimSignature.mismatch</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted<br>claimSignature.mismatch</span></div></div>
+          <div class="links"><a href="c2pa-official/manifests/adobe-20220124-E-sig-CA.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="c2pa-official/jpeg/adobe-20220124-E-uri-CA.jpg" alt="c2pa-official/jpeg/adobe-20220124-E-uri-CA.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">adobe-20220124-E-uri-CA.jpg</code>
+          <div class="chip bad">integrity failure</div>
+          <div class="meta">make_test_images/0.16.1 c2pa-rs/0.16.1</div>
+          <div class="meta">1 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted<br>assertion.hashedURI.mismatch</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted<br>assertion.hashedURI.mismatch</span></div></div>
+          <div class="links"><a href="c2pa-official/manifests/adobe-20220124-E-uri-CA.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="c2pa-official/jpeg/adobe-20220124-E-uri-CIE-sig-CA.jpg" alt="c2pa-official/jpeg/adobe-20220124-E-uri-CIE-sig-CA.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">adobe-20220124-E-uri-CIE-sig-CA.jpg</code>
+          <div class="chip bad">integrity failure</div>
+          <div class="meta">make_test_images/0.16.1 c2pa-rs/0.16.1</div>
+          <div class="meta">1 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted<br>assertion.hashedURI.mismatch</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted<br>assertion.hashedURI.mismatch</span></div></div>
+          <div class="links"><a href="c2pa-official/manifests/adobe-20220124-E-uri-CIE-sig-CA.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="c2pa-official/jpeg/adobe-20220124-I.jpg" alt="c2pa-official/jpeg/adobe-20220124-I.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">adobe-20220124-I.jpg</code>
+          <div class="chip none">no Content Credentials</div>
+          <div class="meta">no claim generator</div>
+          <div class="meta">0 ingredient(s), 0 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">c2patool</span><span class="v">no Content Credentials</span></div></div>
+          <div class="links"><span class="dim">no manifest to read</span></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="c2pa-official/jpeg/adobe-20220124-XCA.jpg" alt="c2pa-official/jpeg/adobe-20220124-XCA.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">adobe-20220124-XCA.jpg</code>
+          <div class="chip bad">integrity failure</div>
+          <div class="meta">make_test_images/0.16.1 c2pa-rs/0.16.1</div>
+          <div class="meta">1 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted<br>assertion.dataHash.mismatch</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted<br>assertion.dataHash.mismatch</span></div></div>
+          <div class="links"><a href="c2pa-official/manifests/adobe-20220124-XCA.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="c2pa-official/jpeg/adobe-20220124-XCI.jpg" alt="c2pa-official/jpeg/adobe-20220124-XCI.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">adobe-20220124-XCI.jpg</code>
+          <div class="chip bad">integrity failure</div>
+          <div class="meta">make_test_images/0.16.1 c2pa-rs/0.16.1</div>
+          <div class="meta">1 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted<br>assertion.dataHash.mismatch</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted<br>assertion.dataHash.mismatch</span></div></div>
+          <div class="links"><a href="c2pa-official/manifests/adobe-20220124-XCI.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="c2pa-official/jpeg/nikon-20221019-building.jpeg" alt="c2pa-official/jpeg/nikon-20221019-building.jpeg" loading="lazy">
+        <figcaption>
+          <code class="name">nikon-20221019-building.jpeg</code>
+          <div class="chip expired">certificate expired</div>
+          <div class="meta">Nikon_Z_9_Sample_for_Adobe_MAX_2022 c2pa-rs/0.14.0</div>
+          <div class="meta">0 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.expired<br>signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.expired<br>signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="c2pa-official/manifests/nikon-20221019-building.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="c2pa-official/jpeg/truepic-20230212-camera.jpg" alt="c2pa-official/jpeg/truepic-20230212-camera.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">truepic-20230212-camera.jpg</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">Truepic_Lens_SDK_libc2pa/2.5.1</div>
+          <div class="meta">0 ingredient(s), 5 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="c2pa-official/manifests/truepic-20230212-camera.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="c2pa-official/jpeg/truepic-20230212-landscape.jpg" alt="c2pa-official/jpeg/truepic-20230212-landscape.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">truepic-20230212-landscape.jpg</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">Truepic_Lens_SDK_libc2pa/2.5.1</div>
+          <div class="meta">0 ingredient(s), 5 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="c2pa-official/manifests/truepic-20230212-landscape.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="c2pa-official/jpeg/truepic-20230212-library.jpg" alt="c2pa-official/jpeg/truepic-20230212-library.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">truepic-20230212-library.jpg</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">Truepic_Lens_SDK_libc2pa/2.5.1</div>
+          <div class="meta">0 ingredient(s), 5 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="c2pa-official/manifests/truepic-20230212-library.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <a class="pdf" href="c2pa-official/pdf/adobe-20240110-single_manifest_store.pdf">PDF<br>adobe-20240110-single_manifest_store.pdf</a>
+        <figcaption>
+          <code class="name">adobe-20240110-single_manifest_store.pdf</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">Adobe_Express/1.0.0 adobe_c2pa/0.7.11 c2pa-rs/0.28.1</div>
+          <div class="meta">2 ingredient(s), 1 assertion(s) &middot; <b>AI declared</b></div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="c2pa-official/manifests/adobe-20240110-single_manifest_store.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <video src="c2pa-official/video/truepic-20230212-zoetrope.mp4" controls preload="metadata"></video>
+        <figcaption>
+          <code class="name">truepic-20230212-zoetrope.mp4</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">Truepic_Lens_SDK_libc2pa/2.5.1</div>
+          <div class="meta">0 ingredient(s), 7 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="c2pa-official/manifests/truepic-20230212-zoetrope.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      </div>
+    </section>
+    <section>
+      <h2>CAI example assets <span class="count">7 assets</span></h2>
+      <p class="src">Source: <a href="https://contentauth.github.io/example-assets/" target="_blank">https://contentauth.github.io/example-assets/</a></p>
+      <p class="note">Content Authenticity Initiative sample media, including generative output from Firefly, ChatGPT and Sora that should surface an AI-origin declaration.</p>
+      <div class="grid">
+      <figure class="asset">
+        <img src="cai-example-assets/images/ChatGPT_Image.png" alt="cai-example-assets/images/ChatGPT_Image.png" loading="lazy">
+        <figcaption>
+          <code class="name">ChatGPT_Image.png</code>
+          <div class="chip expired">certificate expired</div>
+          <div class="meta">no claim generator</div>
+          <div class="meta">1 ingredient(s), 1 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.expired<br>signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.expired<br>signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="cai-example-assets/images/manifests/ChatGPT_Image.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="cai-example-assets/images/Firefly_tabby_cat.jpg" alt="cai-example-assets/images/Firefly_tabby_cat.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">Firefly_tabby_cat.jpg</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">Adobe_Firefly</div>
+          <div class="meta">0 ingredient(s), 1 assertion(s) &middot; <b>AI declared</b></div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="cai-example-assets/images/manifests/Firefly_tabby_cat.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="cai-example-assets/images/car-es-Ps-Cr.jpg" alt="cai-example-assets/images/car-es-Ps-Cr.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">car-es-Ps-Cr.jpg</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">Adobe_Photoshop/26.11.0 adobe_c2pa/0.14.2 c2pa-rs/0.43.0</div>
+          <div class="meta">1 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="cai-example-assets/images/manifests/car-es-Ps-Cr.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="cai-example-assets/images/cloudscape-ACA-Cr.jpeg" alt="cai-example-assets/images/cloudscape-ACA-Cr.jpeg" loading="lazy">
+        <figcaption>
+          <code class="name">cloudscape-ACA-Cr.jpeg</code>
+          <div class="chip expired">certificate expired</div>
+          <div class="meta">no claim generator</div>
+          <div class="meta">1 ingredient(s), 6 assertion(s) &middot; <b>AI declared</b></div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.expired<br>signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.expired<br>signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="cai-example-assets/images/manifests/cloudscape-ACA-Cr.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="cai-example-assets/images/crater-lake-cr.jpg" alt="cai-example-assets/images/crater-lake-cr.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">crater-lake-cr.jpg</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">lightroom/8.5.1</div>
+          <div class="meta">1 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="cai-example-assets/images/manifests/crater-lake-cr.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="cai-example-assets/images/crater-lake.jpeg" alt="cai-example-assets/images/crater-lake.jpeg" loading="lazy">
+        <figcaption>
+          <code class="name">crater-lake.jpeg</code>
+          <div class="chip none">no Content Credentials</div>
+          <div class="meta">no claim generator</div>
+          <div class="meta">0 ingredient(s), 0 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">c2patool</span><span class="v">no Content Credentials</span></div></div>
+          <div class="links"><span class="dim">no manifest to read</span></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <video src="cai-example-assets/videos/sora.MP4" controls preload="metadata"></video>
+        <figcaption>
+          <code class="name">sora.MP4</code>
+          <div class="chip expired">certificate expired</div>
+          <div class="meta">no claim generator</div>
+          <div class="meta">0 ingredient(s), 2 assertion(s) &middot; <b>AI declared</b></div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.expired<br>signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.expired<br>signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="cai-example-assets/videos/manifests/sora.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      </div>
+    </section>
+    <section>
+      <h2>IPTC Video Metadata Hub <span class="count">4 assets</span></h2>
+      <p class="src">Source: <a href="https://iptc.org/standards/video-metadata-hub/" target="_blank">https://iptc.org/standards/video-metadata-hub/</a></p>
+      <p class="note">Video assertions: minimal and maximal VMH payloads, a generator assertion, and the uncredentialed original for contrast.</p>
+      <div class="grid">
+      <figure class="asset">
+        <video src="iptc-vmh/video/park-bench-generator-assertion.mp4" controls preload="metadata"></video>
+        <figcaption>
+          <code class="name">park-bench-generator-assertion.mp4</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">IPTC Video Metadata Hub Generator with c2patool c2patool/0.3.8 c2pa-rs/0.15.0</div>
+          <div class="meta">0 ingredient(s), 1 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="iptc-vmh/manifests/park-bench-generator-assertion.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <video src="iptc-vmh/video/park-bench-sunset-c2pa-max-vmh.mp4" controls preload="metadata"></video>
+        <figcaption>
+          <code class="name">park-bench-sunset-c2pa-max-vmh.mp4</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">IPTC testing with c2patool c2patool/0.3.8 c2pa-rs/0.15.0</div>
+          <div class="meta">0 ingredient(s), 1 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="iptc-vmh/manifests/park-bench-sunset-c2pa-max-vmh.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <video src="iptc-vmh/video/park-bench-sunset-c2pa-min-vmh.mp4" controls preload="metadata"></video>
+        <figcaption>
+          <code class="name">park-bench-sunset-c2pa-min-vmh.mp4</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">IPTC testing with c2patool c2patool/0.3.8 c2pa-rs/0.15.0</div>
+          <div class="meta">0 ingredient(s), 1 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="iptc-vmh/manifests/park-bench-sunset-c2pa-min-vmh.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <video src="iptc-vmh/video/park-bench-sunset-original.mp4" controls preload="metadata"></video>
+        <figcaption>
+          <code class="name">park-bench-sunset-original.mp4</code>
+          <div class="chip none">no Content Credentials</div>
+          <div class="meta">no claim generator</div>
+          <div class="meta">0 ingredient(s), 0 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">c2patool</span><span class="v">no Content Credentials</span></div></div>
+          <div class="links"><span class="dim">no manifest to read</span></div>
+        </figcaption>
+      </figure>
+      </div>
+    </section>
+    <section>
+      <h2>Curated fixtures <span class="count">8 assets</span></h2>
+      
+      <p class="note">The eight hand-built fixtures the e2e suite asserts against. Deliberately not all green: 04 is an untrusted signer, 05 has tampered pixels, 06 carries no credentials at all, and 08 is the only asset in the whole corpus that the Trusteddit anchors actually validate.</p>
+      <div class="grid">
+      <figure class="asset">
+        <img src="01-greentrust-jpeg.jpg" alt="01-greentrust-jpeg.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">01-greentrust-jpeg.jpg</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">verifieddit-alpha-gold-fixture/1.0 c2pa-node/0.0.0 c2pa-rs/0.49.2</div>
+          <div class="meta">0 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="manifests/01-greentrust-jpeg.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="02-greentrust-png.png" alt="02-greentrust-png.png" loading="lazy">
+        <figcaption>
+          <code class="name">02-greentrust-png.png</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">verifieddit-alpha-gold-fixture/1.0 c2pa-node/0.0.0 c2pa-rs/0.49.2</div>
+          <div class="meta">0 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="manifests/02-greentrust-png.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="03-greentrust-webp.webp" alt="03-greentrust-webp.webp" loading="lazy">
+        <figcaption>
+          <code class="name">03-greentrust-webp.webp</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">verifieddit-alpha-gold-fixture/1.0 c2pa-node/0.0.0 c2pa-rs/0.49.2</div>
+          <div class="meta">0 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="manifests/03-greentrust-webp.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="04-warning-untrusted-signer.jpg" alt="04-warning-untrusted-signer.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">04-warning-untrusted-signer.jpg</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">verifieddit-untrusted-fixture/1.0 c2pa-node/0.0.0 c2pa-rs/0.49.2</div>
+          <div class="meta">0 ingredient(s), 1 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="manifests/04-warning-untrusted-signer.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="05-error-tampered-pixels.jpg" alt="05-error-tampered-pixels.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">05-error-tampered-pixels.jpg</code>
+          <div class="chip bad">integrity failure</div>
+          <div class="meta">verifieddit-alpha-gold-fixture/1.0 c2pa-node/0.0.0 c2pa-rs/0.49.2</div>
+          <div class="meta">0 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted<br>assertion.dataHash.mismatch</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted<br>assertion.dataHash.mismatch</span></div></div>
+          <div class="links"><a href="manifests/05-error-tampered-pixels.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="06-no-c2pa-plain-jpeg.jpg" alt="06-no-c2pa-plain-jpeg.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">06-no-c2pa-plain-jpeg.jpg</code>
+          <div class="chip none">no Content Credentials</div>
+          <div class="meta">no claim generator</div>
+          <div class="meta">0 ingredient(s), 0 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">c2patool</span><span class="v">no Content Credentials</span></div></div>
+          <div class="links"><span class="dim">no manifest to read</span></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="07-edge-realworld-cbc-signed.jpg" alt="07-edge-realworld-cbc-signed.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">07-edge-realworld-cbc-signed.jpg</code>
+          <div class="chip warn">signer not recognised</div>
+          <div class="meta">CBC/Radio-Canada libc2pa/3.8.19</div>
+          <div class="meta">0 ingredient(s), 1 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
+          <div class="links"><a href="manifests/07-edge-realworld-cbc-signed.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      <figure class="asset">
+        <img src="08-trusted-trusteddit-signed.jpg" alt="08-trusted-trusteddit-signed.jpg" loading="lazy">
+        <figcaption>
+          <code class="name">08-trusted-trusteddit-signed.jpg</code>
+          <div class="chip good">valid and trusted</div>
+          <div class="meta">Trusteddit/1.0 c2pa-node/0.0.0 c2pa-rs/0.49.2</div>
+          <div class="meta">0 ingredient(s), 2 assertion(s)</div>
+          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
+          <div class="row"><span class="k">anchored</span><span class="v"><span class="clean">clean</span></span></div></div>
+          <div class="links"><a href="manifests/08-trusted-trusteddit-signed.json" target="_blank">reference JSON</a></div>
+        </figcaption>
+      </figure>
+      </div>
+    </section>
+</body>
+</html>

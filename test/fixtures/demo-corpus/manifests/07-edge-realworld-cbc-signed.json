@@ -1,0 +1,106 @@
+{
+  "active_manifest": "com.truepic:urn:uuid:5572f955-49cc-4eb4-a79c-f24a62ed0b14",
+  "manifests": {
+    "com.truepic:urn:uuid:5572f955-49cc-4eb4-a79c-f24a62ed0b14": {
+      "claim_generator": "CBC/Radio-Canada libc2pa/3.8.19",
+      "claim_generator_info": [
+        {
+          "name": "CBC/Radio-Canada",
+          "icon": {
+            "format": "image/png",
+            "identifier": "self#jumbf=-c2pa-com.truepic-urn-uuid-5572f955-49cc-4eb4-a79c-f24a62ed0b14-c2pa.databoxes-c2pa.data.png"
+          }
+        }
+      ],
+      "title": "mtleclipse009-signed.jpg",
+      "format": "image/jpeg",
+      "instance_id": "e5e7bc9e-c803-49ad-9775-c6eacc9370e7",
+      "thumbnail": {
+        "format": "image/jpeg",
+        "identifier": "self#jumbf=/c2pa/com.truepic:urn:uuid:5572f955-49cc-4eb4-a79c-f24a62ed0b14/c2pa.assertions/c2pa.thumbnail.claim.jpeg"
+      },
+      "ingredients": [],
+      "assertions": [
+        {
+          "label": "com.truepic.libc2pa",
+          "data": {
+            "lib_name": "Truepic C2PA C++ Library",
+            "lib_version": "3.8.19",
+            "target_spec_version": "1.4",
+            "git_hash": "v3.8.19"
+          }
+        }
+      ],
+      "signature_info": {
+        "alg": "Es256",
+        "issuer": "CBC/Radio-Canada",
+        "common_name": "Truepic Lens CLI in Lens CLI",
+        "cert_serial_number": "602845329019681995070327503345704224948809365238",
+        "time": "2024-04-11T20:26:53+00:00"
+      },
+      "label": "com.truepic:urn:uuid:5572f955-49cc-4eb4-a79c-f24a62ed0b14"
+    }
+  },
+  "validation_status": [
+    {
+      "code": "signingCredential.untrusted",
+      "url": "self#jumbf=/c2pa/com.truepic:urn:uuid:5572f955-49cc-4eb4-a79c-f24a62ed0b14/c2pa.signature",
+      "explanation": "signing certificate untrusted"
+    }
+  ],
+  "validation_results": {
+    "activeManifest": {
+      "success": [
+        {
+          "code": "timeStamp.validated",
+          "url": "self#jumbf=/c2pa/com.truepic:urn:uuid:5572f955-49cc-4eb4-a79c-f24a62ed0b14/c2pa.signature",
+          "explanation": "timestamp message digest matched: Truepic Lens Time-Stamping Authority"
+        },
+        {
+          "code": "timeStamp.trusted",
+          "url": "self#jumbf=/c2pa/com.truepic:urn:uuid:5572f955-49cc-4eb4-a79c-f24a62ed0b14/c2pa.signature",
+          "explanation": "timestamp cert trusted: Truepic Lens Time-Stamping Authority"
+        },
+        {
+          "code": "claimSignature.insideValidity",
+          "url": "self#jumbf=/c2pa/com.truepic:urn:uuid:5572f955-49cc-4eb4-a79c-f24a62ed0b14/c2pa.signature",
+          "explanation": "claim signature valid"
+        },
+        {
+          "code": "claimSignature.validated",
+          "url": "self#jumbf=/c2pa/com.truepic:urn:uuid:5572f955-49cc-4eb4-a79c-f24a62ed0b14/c2pa.signature",
+          "explanation": "claim signature valid"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/com.truepic:urn:uuid:5572f955-49cc-4eb4-a79c-f24a62ed0b14/c2pa.assertions/com.truepic.libc2pa",
+          "explanation": "hashed uri matched: self#jumbf=/c2pa/com.truepic:urn:uuid:5572f955-49cc-4eb4-a79c-f24a62ed0b14/c2pa.assertions/com.truepic.libc2pa"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/com.truepic:urn:uuid:5572f955-49cc-4eb4-a79c-f24a62ed0b14/c2pa.assertions/c2pa.thumbnail.claim.jpeg",
+          "explanation": "hashed uri matched: self#jumbf=/c2pa/com.truepic:urn:uuid:5572f955-49cc-4eb4-a79c-f24a62ed0b14/c2pa.assertions/c2pa.thumbnail.claim.jpeg"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/com.truepic:urn:uuid:5572f955-49cc-4eb4-a79c-f24a62ed0b14/c2pa.assertions/c2pa.hash.data",
+          "explanation": "hashed uri matched: self#jumbf=/c2pa/com.truepic:urn:uuid:5572f955-49cc-4eb4-a79c-f24a62ed0b14/c2pa.assertions/c2pa.hash.data"
+        },
+        {
+          "code": "assertion.dataHash.match",
+          "url": "self#jumbf=/c2pa/com.truepic:urn:uuid:5572f955-49cc-4eb4-a79c-f24a62ed0b14/c2pa.assertions/c2pa.hash.data",
+          "explanation": "data hash valid"
+        }
+      ],
+      "informational": [],
+      "failure": [
+        {
+          "code": "signingCredential.untrusted",
+          "url": "self#jumbf=/c2pa/com.truepic:urn:uuid:5572f955-49cc-4eb4-a79c-f24a62ed0b14/c2pa.signature",
+          "explanation": "signing certificate untrusted"
+        }
+      ]
+    }
+  },
+  "validation_state": "Valid"
+}

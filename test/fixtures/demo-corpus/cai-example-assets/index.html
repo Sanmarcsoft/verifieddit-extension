@@ -1,0 +1,75 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>CAI Example Assets - Verifieddit corpus</title>
+<style>
+ body { font: 15px/1.45 system-ui, sans-serif; margin: 2rem; background: #fafafa; }
+ .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; }
+ figure { margin: 0; background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: .75rem; }
+ figcaption { font-weight: 600; font-size: 13px; margin-bottom: .5rem; word-break: break-all; }
+ img, video { width: 100%; height: auto; display: block; border-radius: 4px; }
+ p { font-size: 12px; color: #555; margin: .5rem 0 0; }
+ .banner { background: #e8f5e9; border: 1px solid #2a8a3c; padding: .75rem 1rem; border-radius: 8px; margin-bottom: 1.5rem; }
+ .tag { font-size: 10px; padding: 1px 6px; border-radius: 999px; vertical-align: middle; }
+ .ai { background: #ede7f6; color: #4527a0; border: 1px solid #7e57c2; }
+ .dur { background: #e3f2fd; color: #0d47a1; border: 1px solid #1976d2; }
+ .none { background: #eee; color: #555; border: 1px solid #bbb; }
+</style>
+<h1>CAI Example Assets</h1>
+<div class="banner">
+  <strong>Unlike the other two corpora, these are signed by PRODUCTION certificates</strong>
+  (Adobe Inc. and OpenAI), not by a test certificate. Trusted signers are therefore an
+  expected outcome here. Three assets are genuinely AI-generated and carry
+  <code>trainedAlgorithmicMedia</code> on the content claim, which is the only correct
+  basis for an AI label. Never infer AI from the signer.
+</div>
+<p>Source: <a href="https://github.com/contentauth/example-assets">contentauth/example-assets</a>,
+ MIT licence. See <code>ATTRIBUTION.md</code> for per-file expectations and the two
+ findings that look like bugs and are not.</p>
+<h2>Images (6)</h2>
+<div class="grid">
+    <figure>
+      <figcaption>ChatGPT_Image.png <span class="tag ai">AI-GENERATED</span></figcaption>
+      <img src="images/ChatGPT_Image.png" alt="images/ChatGPT_Image.png" loading="lazy">
+      <p><b>Signer:</b> OpenAI</p>
+      <p>PNG. OpenAI signer, trainedAlgorithmicMedia. Upstream reports Invalid, and the single failure is signingCredential.untrusted; our build bundles an AI trust list containing OpenAI, so a trusted verdict here is a configuration difference, not a disagreement.</p>
+    </figure>
+    <figure>
+      <figcaption>Firefly_tabby_cat.jpg <span class="tag ai">AI-GENERATED</span></figcaption>
+      <img src="images/Firefly_tabby_cat.jpg" alt="images/Firefly_tabby_cat.jpg" loading="lazy">
+      <p><b>Signer:</b> Adobe Inc.</p>
+      <p>Adobe Firefly. c2pa.created with digitalSourceType trainedAlgorithmicMedia. The cleanest AI-image case in the corpus. Expect the AI label to fire on the CONTENT claim, not on the signer.</p>
+    </figure>
+    <figure>
+      <figcaption>car-es-Ps-Cr.jpg </figcaption>
+      <img src="images/car-es-Ps-Cr.jpg" alt="images/car-es-Ps-Cr.jpg" loading="lazy">
+      <p><b>Signer:</b> Adobe Inc.</p>
+      <p>Photoshop 26.11.0. Actions: opened, cropped, resized. Valid upstream. Must NOT show an AI label.</p>
+    </figure>
+    <figure>
+      <figcaption>cloudscape-ACA-Cr.jpeg <span class="tag dur">DURABLE</span></figcaption>
+      <img src="images/cloudscape-ACA-Cr.jpeg" alt="images/cloudscape-ACA-Cr.jpeg" loading="lazy">
+      <p><b>Signer:</b> Adobe Inc.</p>
+      <p>Signed c2pa.soft-binding (com.adobe.trustmark.P) plus a dense watermark, cawg.identity, and training-mining set to notAllowed. Expect pillar P2 to light and a live manifest-store probe for P3.</p>
+    </figure>
+    <figure>
+      <figcaption>crater-lake-cr.jpg <span class="tag none">NO EMBEDDED MANIFEST</span></figcaption>
+      <img src="images/crater-lake-cr.jpg" alt="images/crater-lake-cr.jpg" loading="lazy">
+      <p><b>Signer:</b> (sidecar only)</p>
+      <p>Lightroom export with a sidecar manifest but ZERO embedded JUMBF in the bytes. Expect no Content Credentials. This is upstream's state, not a truncated download.</p>
+    </figure>
+    <figure>
+      <figcaption>crater-lake.jpeg <span class="tag none">UNSIGNED CONTROL</span></figcaption>
+      <img src="images/crater-lake.jpeg" alt="images/crater-lake.jpeg" loading="lazy">
+      <p><b>Signer:</b> none</p>
+      <p>Unsigned original. Negative control. Must show no Content Credentials and no AI label.</p>
+    </figure>
+</div>
+<h2>Video (1)</h2>
+<div class="grid">
+    <figure>
+      <figcaption>sora.MP4 <span class="tag ai">AI-GENERATED</span></figcaption>
+      <video src="videos/sora.MP4" controls preload="metadata"></video>
+      <p><b>Signer:</b> OpenAI</p>
+      <p>Sora. c2pa.created + trainedAlgorithmicMedia, c2pa.hash.bmff.v3, RFC 3161 timestamp from DigiCert. Valid upstream.</p>
+    </figure>
+</div>

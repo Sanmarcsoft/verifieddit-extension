@@ -1,0 +1,429 @@
+{
+  "active_manifest": "urn:uuid:173cf31e-4bcb-4824-9a4a-0571bb4796fb",
+  "manifests": {
+    "urn:uuid:173cf31e-4bcb-4824-9a4a-0571bb4796fb": {
+      "claim_generator": "IPTC testing with c2patool c2patool/0.3.8 c2pa-rs/0.15.0",
+      "title": "IPTC test image - maximal metadata version",
+      "format": "video/mp4",
+      "instance_id": "xmp:iid:a1084265-881f-4010-9f65-5cc5cb9e5a90",
+      "ingredients": [],
+      "assertions": [
+        {
+          "label": "stds.iptc",
+          "data": {
+            "@context": {
+              "Iptc4xmpCore": "http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/",
+              "Iptc4xmpExt": "http://iptc.org/std/Iptc4xmpExt/2008-02-29/",
+              "dc": "http://purl.org/dc/elements/1.1/",
+              "photoshop": "http://ns.adobe.com/photoshop/1.0/",
+              "plus": "http://ns.useplus.org/ldf/xmp/1.0/",
+              "stDim": "http://ns.adobe.com/xap/1.0/sType/Dimensions#",
+              "xmp": "http://ns.adobe.com/xap/1.0/",
+              "xmpDM": "http://ns.adobe.com/xmp/1.0/DynamicMedia/",
+              "xmpRights": "http://ns.adobe.com/xap/1.0/rights/"
+            },
+            "Iptc4xmpCore:AltTextAccessibility": "Video of Erika Fictional standing in front of the Golden Gate Bridge at sunset.",
+            "Iptc4xmpCore:ExtDescrAccessibility": "Erika Fictional, a prominent member of the Bay Area penguin preservation community, is photographed standing in front of the Golden Gate Bridge in San Francisco. The late-afternoon sun is shining on Ms Fictional's face, highlighting eyes tired from many years of penguin preservation. She is holding a painting of the Golden Gate Bridge from the 19th century.",
+            "Iptc4xmpExt:AboutCvTerm": [
+              {
+                "Iptc4xmpExt:CvId": "https://cv.iptc.org/newscodes/mediatopic/",
+                "Iptc4xmpExt:CvTermId": "https://cv.iptc.org/newscodes/mediatopic/20000420",
+                "Iptc4xmpExt:CvTermName": "conservation",
+                "Iptc4xmpExt:CvTermRefinedAbout": "https://cv.iptc.org/newscodes/mediatopic/20000500"
+              }
+            ],
+            "Iptc4xmpExt:ArtworkOrObject": [
+              {
+                "Iptc4xmpExt:AOCircaDateCreated": "19th Century",
+                "Iptc4xmpExt:AOContentDescription": "Oil painting of the Golden Gate Bridge, with penguins playing in the foreground",
+                "Iptc4xmpExt:AOContributionDescription": "The painting was restored by the Penguin Preservation Trust",
+                "Iptc4xmpExt:AOCopyrightNotice": "The artwork is now in the public domain",
+                "Iptc4xmpExt:AOCreator": [
+                  "Susan Smith"
+                ],
+                "Iptc4xmpExt:AOCreatorId": [
+                  "ART0123"
+                ],
+                "Iptc4xmpExt:AOCurrentCopyrightOwnerId": "public domain",
+                "Iptc4xmpExt:AOCurrentCopyrightOwnerName": "public domain",
+                "Iptc4xmpExt:AOCurrentLicensorId": "public domain",
+                "Iptc4xmpExt:AOCurrentLicensorName": "public domain",
+                "Iptc4xmpExt:AODateCreated": "1876-04-03",
+                "Iptc4xmpExt:AOPhysicalDescription": "Oil painting in a gilded wooden frame",
+                "Iptc4xmpExt:AOSource": "SFMOMA Museum",
+                "Iptc4xmpExt:AOSourceInvNo": "ART0123",
+                "Iptc4xmpExt:AOSourceInvURL": "http://www.example.org/ART0123",
+                "Iptc4xmpExt:AOStylePeriod": "Late Romantic",
+                "Iptc4xmpExt:AOTitle": "Golden Gate Bridge at sunset, with penguins"
+              }
+            ],
+            "Iptc4xmpExt:CircaDateCreated": "21st Century",
+            "Iptc4xmpExt:ContainerFormat": {
+              "Iptc4xmpExt:Name": "MPEG4",
+              "xmp:Identifier": "MP4"
+            },
+            "Iptc4xmpExt:ContentWarning": [
+              {
+                "Iptc4xmpExt:CvId": "https://cv.iptc.org/newscodes/contentwarning/",
+                "Iptc4xmpExt:CvTermId": "http://cv.iptc.org/newscodes/contentwarning/suffering",
+                "Iptc4xmpExt:CvTermName": "suffering",
+                "Iptc4xmpExt:CvTermRefinedAbout": ""
+              }
+            ],
+            "Iptc4xmpExt:Contributor": [
+              {
+                "Iptc4xmpExt:Name": "Susan Jones",
+                "Iptc4xmpExt:Role": "Hair and make-up artist",
+                "xmp:Identifier": "jsmith25346"
+              }
+            ],
+            "Iptc4xmpExt:CopyrightYear": "2023",
+            "Iptc4xmpExt:Creator": "Julie Smith",
+            "Iptc4xmpExt:DataOnScreen": "",
+            "Iptc4xmpExt:DigitalSourceType": "https://cv.iptc.org/newscodes/digitalsourcetype/digitalCapture",
+            "Iptc4xmpExt:Dopesheet": "",
+            "Iptc4xmpExt:DopesheetLink": "",
+            "Iptc4xmpExt:EmbdEncRightsExpr": [
+              {
+                "Iptc4xmpExt:EncRightsExpr": "{ \"@context\": [\"http://www.w3.org/ns/odrl.jsonld\", \"https://iptc.org/std/RightsML/odrl-profile/rightsml.jsonld\"], \"@type\": \"Set\", \"uid\": \"http://epa.eu/cv/policy/2\", \"profile\": \"https://iptc.org/std/RightsML/odrl-profile/\", \"permission\": [{ \"target\": \"urn:newsml:epa.eu:20120101:180106-999-000013\", \"assigner\": \"http://example.com/cv/party/epa\", \"assignee\": \"http://example.com/cv/party/ansa\", \"action\": \"grantUse\", \"constraint\": [{ \"leftOperand\": \"spatial\", \"operator\": \"eq\", \"rightOperand\": \"http://cvx.iptc.org/iso3166-1a3/ITA\" }], \"duty\": [{ \"target\": \"http://epa.eu/cv/policy/3\", \"action\": \"nextPolicy\" }] }]   }",
+                "Iptc4xmpExt:RightsExprEncType": "application/ld+json",
+                "Iptc4xmpExt:RightsExprLangId": "https://iptc.org/std/RightsML/"
+              }
+            ],
+            "Iptc4xmpExt:Episode": {
+              "Iptc4xmpExt:Identifier": "GGB-2023-001",
+              "Iptc4xmpExt:Name": "Episode 1",
+              "Iptc4xmpExt:Number": "1"
+            },
+            "Iptc4xmpExt:EventExt": [
+              {}
+            ],
+            "Iptc4xmpExt:ExternalMetadataLink": [
+              ""
+            ],
+            "Iptc4xmpExt:FeedIdentifier": "",
+            "Iptc4xmpExt:Genre": [
+              {
+                "Iptc4xmpExt:CvId": "https://cv.iptc.org/newscodes/genre/",
+                "Iptc4xmpExt:CvTermId": "https://cv.iptc.org/newscodes/Actuality",
+                "Iptc4xmpExt:CvTermName": "Actuality",
+                "Iptc4xmpExt:CvTermRefinedAbout": "http://cv.iptc.org/newscodes/genre/Archive_material"
+              }
+            ],
+            "Iptc4xmpExt:Headline": "Erika Fictional awarded lifetime achievement award for her work on penguin preservation",
+            "Iptc4xmpExt:LinkedEncRightsExpr": [
+              {
+                "Iptc4xmpExt:LinkedRightsExpr": "http://www.iptc.org/rights/CC-BY",
+                "Iptc4xmpExt:RightsExprEncType": "application/ld+json",
+                "Iptc4xmpExt:RightsExprLangId": "https://iptc.org/std/RightsML/"
+              }
+            ],
+            "Iptc4xmpExt:LocationCreated": [
+              {
+                "Iptc4xmpExt:City": "San Francisco",
+                "Iptc4xmpExt:CountryCode": "US",
+                "Iptc4xmpExt:CountryName": "United States of America",
+                "Iptc4xmpExt:LocationId": "https://sws.geonames.org/5352844/",
+                "Iptc4xmpExt:LocationName": "Golden Gate Bridge",
+                "Iptc4xmpExt:ProvinceState": "CA",
+                "Iptc4xmpExt:Sublocation": "San Francisco County",
+                "Iptc4xmpExt:WorldRegion": "North America",
+                "exif:GPSAltitude": "0",
+                "exif:GPSLatitude": "37.8185",
+                "exif:GPSLongitude": "-122.4738"
+              }
+            ],
+            "Iptc4xmpExt:LocationShown": [
+              {
+                "Iptc4xmpExt:City": "San Francisco",
+                "Iptc4xmpExt:CountryCode": "US",
+                "Iptc4xmpExt:CountryName": "United States of America",
+                "Iptc4xmpExt:LocationId": "https://sws.geonames.org/5352844/",
+                "Iptc4xmpExt:LocationName": "Golden Gate Bridge",
+                "Iptc4xmpExt:ProvinceState": "CA",
+                "Iptc4xmpExt:Sublocation": "San Francisco County",
+                "Iptc4xmpExt:WorldRegion": "North America",
+                "exif:GPSAltitude": "0",
+                "exif:GPSLatitude": "37.8185",
+                "exif:GPSLongitude": "-122.4738"
+              }
+            ],
+            "Iptc4xmpExt:OrganisationInImageCode": [
+              "PenguinPreservationSociety"
+            ],
+            "Iptc4xmpExt:OrganisationInImageName": [
+              "Penguin Preservation Society"
+            ],
+            "Iptc4xmpExt:PersonHeard": "",
+            "Iptc4xmpExt:PersonInImageWDetails": [
+              {
+                "Iptc4xmpExt:PersonCharacteristic": [
+                  {
+                    "Iptc4xmpExt:CvId": "https://cv.iptc.org/newscodes/x-person-characteristic/",
+                    "Iptc4xmpExt:CvTermId": "https://cv.iptc.org/newscodes/x-person-characteristic/female",
+                    "Iptc4xmpExt:CvTermName": "female",
+                    "Iptc4xmpExt:CvTermRefinedAbout": ""
+                  }
+                ],
+                "Iptc4xmpExt:PersonDescription": "Female organisation leader",
+                "Iptc4xmpExt:PersonId": "erika-fictional-1234",
+                "Iptc4xmpExt:PersonName": "Erika Fictional"
+              }
+            ],
+            "Iptc4xmpExt:PlanningRef": [
+              {
+                "Iptc4xmpExt:Name": "Julie Smith",
+                "Iptc4xmpExt:Role": "planner",
+                "xmp:Identifier": "jsmith-1234"
+              }
+            ],
+            "Iptc4xmpExt:ProductInImage": [
+              {
+                "Iptc4xmpExt:ProductDescription": "Penguin Preservation Society t-shirt",
+                "Iptc4xmpExt:ProductGTIN": "0811571013579",
+                "Iptc4xmpExt:ProductId": [
+                  "https://www.wikidata.org/wiki/Q131151"
+                ],
+                "Iptc4xmpExt:ProductName": "Penguin Preservation Society t-shirt"
+              }
+            ],
+            "Iptc4xmpExt:PublicationEvent": [
+              {
+                "Iptc4xmpExt:Date": "2023-02-22",
+                "Iptc4xmpExt:Identifier": "iptc-pub-12345",
+                "Iptc4xmpExt:Name": "Publication on IPTC site"
+              }
+            ],
+            "Iptc4xmpExt:Rating": [
+              {
+                "Iptc4xmpExt:RatingSourceLink": "https://movielabs.com/md/ratings/v2.3/html/US_MPAA_Ratings.html#G",
+                "Iptc4xmpExt:RatingValue": "G"
+              }
+            ],
+            "Iptc4xmpExt:RecDevice": {
+              "Iptc4xmpExt:AttLensDescription": "EF-EOS R 0.71x",
+              "Iptc4xmpExt:Manufacturer": "Canon",
+              "Iptc4xmpExt:ModelName": "EOS M50 Mark II",
+              "Iptc4xmpExt:OwnersDeviceId": "45676789",
+              "Iptc4xmpExt:SerialNumber": "1234567890"
+            },
+            "Iptc4xmpExt:RegistryId": [
+              {
+                "Iptc4xmpExt:RegEntryRole": "artwork registry",
+                "Iptc4xmpExt:RegItemId": "plus:artworkimage284645",
+                "Iptc4xmpExt:RegOrgId": "https://www.plusregistry.org/"
+              }
+            ],
+            "Iptc4xmpExt:ReleaseReady": "True",
+            "Iptc4xmpExt:ReviewRating": [
+              {
+                "Iptc4xmpExt:RatingScaleMaxValue": "100",
+                "Iptc4xmpExt:RatingScaleMinValue": "0",
+                "Iptc4xmpExt:RatingSourceLink": "https://www.rottentomatoes.com/m/golden_gate",
+                "Iptc4xmpExt:RatingValue": "65"
+              }
+            ],
+            "Iptc4xmpExt:Season": {
+              "Iptc4xmpExt:Identifier": "GGB-2023",
+              "Iptc4xmpExt:Name": "History of the Golden Gate Bridge: 2023 Season",
+              "Iptc4xmpExt:Number": "1"
+            },
+            "Iptc4xmpExt:Series": {
+              "Iptc4xmpExt:Identifier": "GGB",
+              "Iptc4xmpExt:Name": "History of the Golden Gate Bridge"
+            },
+            "Iptc4xmpExt:SnapshotLink": [
+              {}
+            ],
+            "Iptc4xmpExt:StorylineIdentifier": [
+              "GGB-2023-001"
+            ],
+            "Iptc4xmpExt:StreamReady": "true",
+            "Iptc4xmpExt:StylePeriod": "21st Century",
+            "Iptc4xmpExt:TemporalCoverage": "2023",
+            "Iptc4xmpExt:TimedTextLink": [
+              {}
+            ],
+            "Iptc4xmpExt:Transcript": "",
+            "Iptc4xmpExt:TranscriptLink": [
+              {}
+            ],
+            "Iptc4xmpExt:VideoShotType": [
+              {}
+            ],
+            "Iptc4xmpExt:VisualColour": "",
+            "Iptc4xmpExt:WorkflowTag": "",
+            "Iptc4xmpExt:audioBitRate": "160 Kbps",
+            "Iptc4xmpExt:audioBitRateMode": "variable",
+            "Iptc4xmpExt:audioBitsPerSample": "32",
+            "Iptc4xmpExt:audioChannelCount": "2",
+            "Iptc4xmpExt:metadataAuthority": {
+              "Iptc4xmpExt:Name": "Julie Smith",
+              "xmp:Identifier": "jsmith-1234"
+            },
+            "Iptc4xmpExt:metadataLastEdited": "2023-02-22",
+            "Iptc4xmpExt:metadataLastEditor": {
+              "Iptc4xmpExt:Name": "Julie Smith",
+              "xmp:Identifier": "jsmith-1234"
+            },
+            "Iptc4xmpExt:parentId": "GGB-2023-001-master",
+            "Iptc4xmpExt:videoBitRate": "40000000",
+            "Iptc4xmpExt:videoBitRateMode": "fixed",
+            "Iptc4xmpExt:videoDisplayAspectRatio": "16:9",
+            "Iptc4xmpExt:videoEncodingProfile": "High 4:2:2",
+            "Iptc4xmpExt:videoStreamsCount": "1",
+            "dc:description": "Video of Erika Fictional standing in front of the Golden Gate Bridge at sunset.",
+            "dc:format": "video/mp4",
+            "dc:identifier": "GGB-2023-001-screener",
+            "dc:language": "en",
+            "dc:rights": "Copyright (C) 2022 Example Photo Agency. All Rights Reserved.",
+            "dc:subject": [
+              "Erika Fictional",
+              "Golden Gate Bridge",
+              "San Francisco",
+              "sunset"
+            ],
+            "dc:title": "Erika Fictional at Golden Gate Bridge",
+            "photoshop:Credit": "Copyright (C) 2022 Julie Smith Photography",
+            "photoshop:DateCreated": "2022-08-31",
+            "photoshop:Source": "Julie Smith Photography / Example Photo Agency",
+            "plus:CopyrightOwner": [
+              {
+                "plus:CopyrightOwnerID": "jsmith1234",
+                "plus:CopyrightOwnerName": "Julie Smith Photography"
+              }
+            ],
+            "plus:ImageSupplier": [
+              {
+                "plus:ImageSupplierID": "jsmith1234",
+                "plus:ImageSupplierName": "Julie Smith Photography"
+              }
+            ],
+            "plus:ModelReleaseID": [
+              "http://jsmith.com/model-release-A1234"
+            ],
+            "plus:ModelReleaseStatus": "http://ns.useplus.org/ldf/vocab/MR-UMR",
+            "plus:PropertyReleaseID": [
+              "http://jsmith.com/property-release-A1234"
+            ],
+            "plus:PropertyReleaseStatus": "http://ns.useplus.org/ldf/vocab/PR-NON",
+            "plus:licensor": [
+              {
+                "plus:LicensorCity": "Homeville",
+                "plus:LicensorCountry": "USA",
+                "plus:LicensorEmail": "info@acmephotostudio.com",
+                "plus:LicensorExtendedAddress": "Studio 8",
+                "plus:LicensorID": "http://plus-id.org/AAA-123",
+                "plus:LicensorName": "Acme Photo Studio",
+                "plus:LicensorPostalCode": "98888",
+                "plus:LicensorRegion": "CA",
+                "plus:LicensorStreetAddress": "123 Somewhere St",
+                "plus:LicensorTelephone1": "123-456-7890",
+                "plus:LicensorTelephone2": "123-456-7891",
+                "plus:LicensorTelephoneType1": "http://ns.useplus.org/ldf/vocab/work",
+                "plus:LicensorTelephoneType2": "http://ns.useplus.org/ldf/vocab/fax",
+                "plus:LicensorURL": "http://examplephotoagency.com/images/"
+              },
+              {
+                "plus:LicensorName": "Example Distributor",
+                "plus:LicensorURL": "http://exampledistributor.com/"
+              }
+            ],
+            "tiff:orientation": "0",
+            "xmp:ModifyDate": "2023-02-22",
+            "xmp:Rating": "4",
+            "xmpDM:audioChannelType": "stereo",
+            "xmpDM:audioCompressor": {
+              "Iptc4xmpExt:Name": "MP3",
+              "xmp:Identifier": "audio/mpeg"
+            },
+            "xmpDM:audioSampleRate": "44.1kHz",
+            "xmpDM:duration": {
+              "xmpDM:TimeFormat": "normalPlayTime",
+              "xmpDM:TimeValue": "00:03:45"
+            },
+            "xmpDM:fileDataRate": "40 Mbps",
+            "xmpDM:markers": [],
+            "xmpDM:releaseDate": "2023-02-22",
+            "xmpDM:videoCompressor": "h264",
+            "xmpDM:videoFieldOrder": "1080p",
+            "xmpDM:videoFrameRate": "25",
+            "xmpDM:videoFrameSize": {
+              "stDim:h": "768",
+              "stDim:unit": "pixels",
+              "stDim:w": "1024"
+            },
+            "xmpDM:videoPixelAspectRatio": "16:9",
+            "xmpMM:RenditionClass": "screener-mp4",
+            "xmpMM:VersionID": "GGB-2023-001-screener-v1"
+          }
+        }
+      ],
+      "signature_info": {
+        "alg": "Es256",
+        "issuer": "C2PA Test Signing Cert",
+        "common_name": "C2PA Signer",
+        "cert_serial_number": "640229841392226413189608867977836244731148734950",
+        "time": "2023-07-12T14:31:14+00:00"
+      },
+      "label": "urn:uuid:173cf31e-4bcb-4824-9a4a-0571bb4796fb"
+    }
+  },
+  "validation_status": [
+    {
+      "code": "signingCredential.untrusted",
+      "url": "self#jumbf=/c2pa/urn:uuid:173cf31e-4bcb-4824-9a4a-0571bb4796fb/c2pa.signature",
+      "explanation": "signing certificate untrusted"
+    }
+  ],
+  "validation_results": {
+    "activeManifest": {
+      "success": [
+        {
+          "code": "timeStamp.validated",
+          "url": "self#jumbf=/c2pa/urn:uuid:173cf31e-4bcb-4824-9a4a-0571bb4796fb/c2pa.signature",
+          "explanation": "timestamp message digest matched: DigiCert Timestamp 2022 - 2"
+        },
+        {
+          "code": "timeStamp.trusted",
+          "url": "self#jumbf=/c2pa/urn:uuid:173cf31e-4bcb-4824-9a4a-0571bb4796fb/c2pa.signature",
+          "explanation": "timestamp cert trusted: DigiCert Timestamp 2022 - 2"
+        },
+        {
+          "code": "claimSignature.insideValidity",
+          "url": "self#jumbf=/c2pa/urn:uuid:173cf31e-4bcb-4824-9a4a-0571bb4796fb/c2pa.signature",
+          "explanation": "claim signature valid"
+        },
+        {
+          "code": "claimSignature.validated",
+          "url": "self#jumbf=/c2pa/urn:uuid:173cf31e-4bcb-4824-9a4a-0571bb4796fb/c2pa.signature",
+          "explanation": "claim signature valid"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:uuid:173cf31e-4bcb-4824-9a4a-0571bb4796fb/c2pa.assertions/stds.iptc",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/stds.iptc"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:uuid:173cf31e-4bcb-4824-9a4a-0571bb4796fb/c2pa.assertions/c2pa.hash.bmff",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.hash.bmff"
+        },
+        {
+          "code": "assertion.bmffHash.match",
+          "url": "self#jumbf=/c2pa/urn:uuid:173cf31e-4bcb-4824-9a4a-0571bb4796fb/c2pa.assertions/c2pa.hash.bmff",
+          "explanation": "data hash valid"
+        }
+      ],
+      "informational": [],
+      "failure": [
+        {
+          "code": "signingCredential.untrusted",
+          "url": "self#jumbf=/c2pa/urn:uuid:173cf31e-4bcb-4824-9a4a-0571bb4796fb/c2pa.signature",
+          "explanation": "signing certificate untrusted"
+        }
+      ]
+    }
+  },
+  "validation_state": "Valid"
+}

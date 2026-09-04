@@ -1,0 +1,118 @@
+{
+  "active_manifest": "urn:uuid:5c3ecfab-e927-4dec-a9cc-ecd0e84096ca",
+  "manifests": {
+    "urn:uuid:5c3ecfab-e927-4dec-a9cc-ecd0e84096ca": {
+      "claim_generator": "verifieddit-alpha-gold-fixture/1.0 c2pa-node/0.0.0 c2pa-rs/0.49.2",
+      "claim_generator_info": [],
+      "title": "Alpha-Gold Green-Trust Fixture 01: playing cards (JPEG)",
+      "format": "image/jpeg",
+      "instance_id": "xmp:iid:7951c128-6091-414a-9369-1a1a7b512cca",
+      "thumbnail": {
+        "format": "image/jpeg",
+        "identifier": "self#jumbf=/c2pa/urn:uuid:5c3ecfab-e927-4dec-a9cc-ecd0e84096ca/c2pa.assertions/c2pa.thumbnail.claim.jpeg"
+      },
+      "ingredients": [],
+      "assertions": [
+        {
+          "label": "c2pa.actions.v2",
+          "data": {
+            "actions": [
+              {
+                "action": "c2pa.created"
+              }
+            ]
+          }
+        },
+        {
+          "label": "stds.schema-org.CreativeWork",
+          "data": {
+            "@context": "https://schema.org",
+            "@type": "CreativeWork",
+            "author": [
+              {
+                "@type": "Organization",
+                "name": "verifieddit test suite"
+              }
+            ]
+          },
+          "kind": "Json"
+        }
+      ],
+      "signature_info": {
+        "alg": "Es256",
+        "issuer": "C2PA Extension Validator",
+        "common_name": "Test Signer",
+        "cert_serial_number": "24113601603594784173334581595831771243419476217",
+        "time": "2026-04-21T13:15:09+00:00"
+      },
+      "label": "urn:uuid:5c3ecfab-e927-4dec-a9cc-ecd0e84096ca"
+    }
+  },
+  "validation_status": [
+    {
+      "code": "signingCredential.untrusted",
+      "url": "self#jumbf=/c2pa/urn:uuid:5c3ecfab-e927-4dec-a9cc-ecd0e84096ca/c2pa.signature",
+      "explanation": "signing certificate untrusted"
+    }
+  ],
+  "validation_results": {
+    "activeManifest": {
+      "success": [
+        {
+          "code": "timeStamp.validated",
+          "url": "self#jumbf=/c2pa/urn:uuid:5c3ecfab-e927-4dec-a9cc-ecd0e84096ca/c2pa.signature",
+          "explanation": "timestamp message digest matched: DigiCert SHA256 RSA4096 Timestamp Responder 2025 1"
+        },
+        {
+          "code": "timeStamp.trusted",
+          "url": "self#jumbf=/c2pa/urn:uuid:5c3ecfab-e927-4dec-a9cc-ecd0e84096ca/c2pa.signature",
+          "explanation": "timestamp cert trusted: DigiCert SHA256 RSA4096 Timestamp Responder 2025 1"
+        },
+        {
+          "code": "claimSignature.insideValidity",
+          "url": "self#jumbf=/c2pa/urn:uuid:5c3ecfab-e927-4dec-a9cc-ecd0e84096ca/c2pa.signature",
+          "explanation": "claim signature valid"
+        },
+        {
+          "code": "claimSignature.validated",
+          "url": "self#jumbf=/c2pa/urn:uuid:5c3ecfab-e927-4dec-a9cc-ecd0e84096ca/c2pa.signature",
+          "explanation": "claim signature valid"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:uuid:5c3ecfab-e927-4dec-a9cc-ecd0e84096ca/c2pa.assertions/c2pa.thumbnail.claim.jpeg",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.thumbnail.claim.jpeg"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:uuid:5c3ecfab-e927-4dec-a9cc-ecd0e84096ca/c2pa.assertions/c2pa.actions",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.actions"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:uuid:5c3ecfab-e927-4dec-a9cc-ecd0e84096ca/c2pa.assertions/stds.schema-org.CreativeWork",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/stds.schema-org.CreativeWork"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:uuid:5c3ecfab-e927-4dec-a9cc-ecd0e84096ca/c2pa.assertions/c2pa.hash.data",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.hash.data"
+        },
+        {
+          "code": "assertion.dataHash.match",
+          "url": "self#jumbf=/c2pa/urn:uuid:5c3ecfab-e927-4dec-a9cc-ecd0e84096ca/c2pa.assertions/c2pa.hash.data",
+          "explanation": "data hash valid"
+        }
+      ],
+      "informational": [],
+      "failure": [
+        {
+          "code": "signingCredential.untrusted",
+          "url": "self#jumbf=/c2pa/urn:uuid:5c3ecfab-e927-4dec-a9cc-ecd0e84096ca/c2pa.signature",
+          "explanation": "signing certificate untrusted"
+        }
+      ]
+    }
+  },
+  "validation_state": "Valid"
+}

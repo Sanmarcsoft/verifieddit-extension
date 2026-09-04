@@ -1,0 +1,79 @@
+{
+	"alg": "es256",
+	"private_key": "es256_private.key",
+	"sign_cert": "es256_certs.pem",
+	"ta_url": "http://timestamp.digicert.com",
+	"claim_generator": "IPTC Video Metadata Hub Generator with c2patool",
+	"title": "Video signed with c2patool",
+	"assertions": [
+		{
+			"label": "stds.iptc",
+			"data": {
+				"@context": {
+					"Iptc4xmpCore": "http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/",
+					"Iptc4xmpExt": "http://iptc.org/std/Iptc4xmpExt/2008-02-29/",
+					"dc": "http://purl.org/dc/elements/1.1/",
+					"photoshop": "http://ns.adobe.com/photoshop/1.0/",
+					"plus": "http://ns.useplus.org/ldf/xmp/1.0/",
+					"xmp": "http://ns.adobe.com/xap/1.0/",
+					"xmpDM": "http://ns.adobe.com/xmp/1.0/DynamicMedia/",
+					"xmpRights": "http://ns.adobe.com/xap/1.0/rights/"
+				},
+				"dc:language": "en",
+				"photoshop:DateCreated": "2023-03-11",
+				"xmpDM:releaseDate": "2023-04-02",
+				"dc:title": "test title",
+				"dc:description": "test description",
+				"dc:subject": [
+					"keyword1",
+					"keyword2",
+					"keyword3"
+				],
+				"plus:ImageSupplier": [
+					{
+						"plus:ImageSupplierName": "Supplier"
+					}
+				],
+				"Iptc4xmpExt:Genre": [
+					{
+						"Iptc4xmpExt:CvId": "http://cv.iptc.org/newscodes/genre/",
+						"Iptc4xmpExt:CvTermId": "Archive_material"
+					}
+				],
+				"Iptc4xmpExt:AboutCvTerm": [
+					{
+						"Iptc4xmpExt:CvId": "http://cv.iptc.org/newscodes/mediatopic/",
+						"Iptc4xmpExt:CvTermId": "01000000",
+						"Iptc4xmpExt:CvTermName": "Arts, culture, entertainment and media"
+					},
+					{
+						"Iptc4xmpExt:CvId": "http://cv.iptc.org/newscodes/mediatopic/",
+						"Iptc4xmpExt:CvTermId": "04000000",
+						"Iptc4xmpExt:CvTermName": "Economy, business and finance"
+					},
+					{
+						"Iptc4xmpExt:CvId": "http://cv.iptc.org/newscodes/mediatopic/",
+						"Iptc4xmpExt:CvTermId": "05000000",
+						"Iptc4xmpExt:CvTermName": "Education"
+					}
+				],
+				"plus:CopyrightOwner": [
+					{
+						"plus:CopyrightOwnerName": "copyright owner"
+					}
+				],
+				"dc:rights": "copyright notice",
+				"Iptc4xmpExt:LocationCreated": [
+					{
+						"Iptc4xmpExt:LocationName": "location shot"
+					}
+				],
+				"Iptc4xmpExt:LocationShown": [
+					{
+						"Iptc4xmpExt:LocationName": "location shown"
+					}
+				]
+			}
+		}
+	]
+}
