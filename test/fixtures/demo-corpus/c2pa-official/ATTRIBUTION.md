@@ -37,9 +37,11 @@ So every signed file here is expected to render as an UNTRUSTED signer in a prod
 build of this extension, exactly as it does in Adobe's Verify. That is the correct result,
 not a regression. This set exists for negative and error-path coverage.
 
-It deliberately does NOT replace `test/fixtures/demo-corpus`, which still holds the only
-assets that exercise the trusted path (`08-trusted-trusteddit-signed.jpg`: trusted signer,
-RFC 3161 timestamp, durable soft binding).
+It deliberately does NOT replace `test/fixtures/demo-corpus`, which holds the curated
+fixtures. Note that no corpus asset exercises the trusted path any more:
+`08-trusted-trusteddit-signed.jpg` did, and it was excised because a dataset used to
+validate our own verifiers must not lean on our own signer. Restoring that coverage means
+sourcing third-party media whose signer is in the production trust list.
 
 ## Expected verdict per file
 

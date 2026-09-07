@@ -14,8 +14,9 @@
 <div class="banner">
   <strong>Every signed file here is expected to show an untrusted signer.</strong>
   Upstream signed these with the C2PA Tool test certificate, which is on no known-certificate
-  list. That is the correct result, not a regression. The trusted path is covered by
-  <code>demo-corpus/08-trusted-trusteddit-signed.jpg</code>.
+  list. That is the correct result, not a regression. No asset in this corpus covers the
+  trusted path: the one that did was signed by our own signer and was excised, so a
+  "verified" verdict cannot be demonstrated from bundled media.
 </div>
 <p>Source: <a href="https://github.com/c2pa-org/public-testfiles">c2pa-org/public-testfiles</a>,
  <code>legacy/1.4/</code>, CC-BY-SA-4.0. See <code>ATTRIBUTION.md</code>.</p>

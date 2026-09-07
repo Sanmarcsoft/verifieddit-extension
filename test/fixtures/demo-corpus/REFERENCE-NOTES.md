@@ -74,12 +74,10 @@ disagree on the integrity codes.
 | `05-error-tampered-pixels.jpg` | `manifests/05-error-tampered-pixels.json` | Alpha-Gold Green-Trust Fixture 01: playing cards (JPEG) | verifieddit-alpha-gold-fixture/1.0 c2pa-node/0.0.0 c2pa-rs/0.49.2 | 0 | 2 | `signingCredential.untrusted`<br>`assertion.dataHash.mismatch` | `signingCredential.untrusted`<br>`assertion.dataHash.mismatch` | integrity failure |
 | `06-no-c2pa-plain-jpeg.jpg` | `(none)` | - | - | 0 | 0 | `Error: No claim found` | - | no Content Credentials |
 | `07-edge-realworld-cbc-signed.jpg` | `manifests/07-edge-realworld-cbc-signed.json` | mtleclipse009-signed.jpg | CBC/Radio-Canada libc2pa/3.8.19 | 0 | 1 | `signingCredential.untrusted` | `signingCredential.untrusted` | signer not recognised |
-| `08-trusted-trusteddit-signed.jpg` | `manifests/08-trusted-trusteddit-signed.json` | playing-cards-verified.jpg | Trusteddit/1.0 c2pa-node/0.0.0 c2pa-rs/0.49.2 | 0 | 2 | `signingCredential.untrusted` | `(clean)` | valid and trusted |
 
-**47 assets. 42 carry Content Credentials, 5 do not.**
+**46 assets. 41 carry Content Credentials, 5 do not.**
 
 - 5 no Content Credentials
 - 8 integrity failure
 - 4 certificate expired
 - 29 signer not recognised
-- 1 valid and trusted

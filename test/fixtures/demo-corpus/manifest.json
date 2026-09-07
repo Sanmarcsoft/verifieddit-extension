@@ -108,16 +108,6 @@
       "signature_time": "2024-04-11T20:26:53+00:00",
       "use_case": "edge case \u2014 real-world third-party C2PA interop. Large file (~4.7MB). Proves extension handles production signers from outside the local PKI.",
       "level": 3
-    },
-    {
-      "id": "08-trusted-trusteddit-signed",
-      "path": "08-trusted-trusteddit-signed.jpg",
-      "source": "06-no-c2pa-plain-jpeg.jpg re-signed via sign.trusteddit.com",
-      "format": "image/jpeg",
-      "c2pa": true,
-      "expected_status": "success",
-      "expected_ui": "green trust badge \u2014 signer chains to Trusteddit-Journalist-Issuer-CA, which ships in the bundled trust list",
-      "note": "The only corpus asset that reads as trusted in a PRODUCTION build. 01-03 are signed by the dev fixture CA, which production deliberately does not load."
     }
   ]
 }

@@ -37,7 +37,7 @@
 <body>
   <h1>Reference corpus</h1>
   <p class="lede">
-    47 assets, each paired with the manifest <strong>c2patool</strong> reads from it.
+    46 assets, each paired with the manifest <strong>c2patool</strong> reads from it.
     c2patool is the c2pa-rs reference implementation, so where the extension's badge
     disagrees with the JSON linked here, the reference is right and the extension is
     wrong until proven otherwise.
@@ -57,7 +57,7 @@
     Truepic and CAI assets. What it must never do is disagree on the integrity codes:
     a <span class="chip bad">integrity failure</span> here has to be an error there.
   </p>
-  <p class="tally"><span class="chip none">5 no Content Credentials</span> <span class="chip bad">8 integrity failure</span> <span class="chip expired">4 certificate expired</span> <span class="chip warn">29 signer not recognised</span> <span class="chip good">1 valid and trusted</span></p>
+  <p class="tally"><span class="chip none">5 no Content Credentials</span> <span class="chip bad">8 integrity failure</span> <span class="chip expired">4 certificate expired</span> <span class="chip warn">29 signer not recognised</span></p>
   <p class="lede">
     Summary table: <a href="REFERENCE-NOTES.md">REFERENCE-NOTES.md</a> &middot;
     The curated 8-fixture page the e2e suite asserts against: <a href="index.html">index.html</a>
@@ -548,7 +548,7 @@
       </div>
     </section>
     <section>
-      <h2>Curated fixtures <span class="count">8 assets</span></h2>
+      <h2>Curated fixtures <span class="count">7 assets</span></h2>
       
       <p class="note">The eight hand-built fixtures the e2e suite asserts against. Deliberately not all green: 04 is an untrusted signer, 05 has tampered pixels, 06 carries no credentials at all, and 08 is the only asset in the whole corpus that the Trusteddit anchors actually validate.</p>
       <div class="grid">
@@ -633,18 +633,6 @@
           <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
           <div class="row"><span class="k">anchored</span><span class="v">signingCredential.untrusted</span></div></div>
           <div class="links"><a href="manifests/07-edge-realworld-cbc-signed.json" target="_blank">reference JSON</a></div>
-        </figcaption>
-      </figure>
-      <figure class="asset">
-        <img src="08-trusted-trusteddit-signed.jpg" alt="08-trusted-trusteddit-signed.jpg" loading="lazy">
-        <figcaption>
-          <code class="name">08-trusted-trusteddit-signed.jpg</code>
-          <div class="chip good">valid and trusted</div>
-          <div class="meta">Trusteddit/1.0 c2pa-node/0.0.0 c2pa-rs/0.49.2</div>
-          <div class="meta">0 ingredient(s), 2 assertion(s)</div>
-          <div class="verdicts"><div class="row"><span class="k">bare</span><span class="v">signingCredential.untrusted</span></div>
-          <div class="row"><span class="k">anchored</span><span class="v"><span class="clean">clean</span></span></div></div>
-          <div class="links"><a href="manifests/08-trusted-trusteddit-signed.json" target="_blank">reference JSON</a></div>
         </figcaption>
       </figure>
       </div>
