@@ -78,6 +78,29 @@ describe('shipped bundle carries no test media', () => {
     expect(offenders, 'These media files would ship in the extension package.').toEqual([])
   })
 
+  it('no single public/ file is heavy enough to be an unreferenced asset', () => {
+    /*
+     * public/ is copied verbatim into both browser targets, so a heavy file here
+     * ships twice. The cause of this check: icons/Verifieddit_logo.png, a 1.29 MB
+     * 1024x1024 master byte-identical to the repo-root copy, referenced by nothing.
+     * Every runtime icon load names an .svg or a vd{16,32,48,128}.png, and the
+     * manifest declares only the vd sizes. It was costing users 2.58 MB across the
+     * two targets for an asset no code path could reach.
+     *
+     * The ceiling is deliberately far above the real maximum (c2pa-web.worker.js at
+     * ~37 KB) so it flags a master-artwork mistake rather than policing normal churn.
+     */
+    const LIMIT = 256 * 1024
+    const heavy = walk(join(repoRoot, 'public'))
+      .map((f) => [f.slice(repoRoot.length + 1), statSync(f).size] as const)
+      .filter(([, size]) => size > LIMIT)
+    expect(
+      heavy,
+      'Files this large in public/ are usually source artwork that belongs in the ' +
+      'repo root, not in the shipped bundle. Reference the sized icons instead.'
+    ).toEqual([])
+  })
+
   it.skipIf(!distExists)('built dist/ stays under 30 MB', () => {
     const bytes = walk(distDir).reduce((sum, f) => sum + statSync(f).size, 0)
     const mb = bytes / 1024 / 1024
