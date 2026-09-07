@@ -3,7 +3,7 @@
   "download_url": "",
   "description": "Official C2PA trust anchors, generated from trust-list/C2PA-TRUST-LIST.pem in Sanmarcsoft/c2pa-org-conformance-public. Do not edit by hand — run bun scripts/sync-c2pa-trust-lists.ts.",
   "website": "https://github.com/Sanmarcsoft/c2pa-org-conformance-public",
-  "last_updated": "2026-09-01T10:34:41Z",
+  "last_updated": "2026-09-07T12:01:45Z",
   "entities": [
     {
       "name": "Adobe Inc - Adobe Product Issuing CA vault-a-or2.adobe.net cai",
@@ -16,6 +16,22 @@
             "kty": "EC",
             "x5c": [
               "MIIDhDCCAwugAwIBAgIUTNz+Jl3kNFEJK5md8Tp/Cwsm/B4wCgYIKoZIzj0EAwMwbzELMAkGA1UEBhMCVVMxETAPBgNVBAcTCFNhbiBKb3NlMRMwEQYDVQQKEwpBZG9iZSBJbmMuMRAwDgYDVQQLEwdQcm9kdWN0MSYwJAYDVQQDEx1BZG9iZSBQcm9kdWN0IEludGVybWVkaWF0ZSBDQTAeFw0yNTExMTkxODI5NDRaFw0zMDExMjAwMDMwMTRaMIGGMTswOQYDVQQDEzJBZG9iZSBQcm9kdWN0IElzc3VpbmcgQ0EgdmF1bHQtYS1vcjIuYWRvYmUubmV0IGNhaTESMBAGA1UEChMJQWRvYmUgSW5jMQswCQYDVQQGEwJVUzERMA8GA1UEBxMIU2FuIEpvc2UxEzARBgNVBAgTCkNhbGlmb3JuaWEwdjAQBgcqhkjOPQIBBgUrgQQAIgNiAASArJB/ZRkabuyoSoGy/6JS124LqMOeKRTruZ4GIxZ3Rg2UKXeWDINVsgXVewJalg98T0HgeXyXM8Ia0y0dLQUhxT++kVaascgJBuevPs8z5Z+n+grN03x6ttUORdJ4O9qjggFOMIIBSjASBgNVHRMBAf8ECDAGAQH/AgEAMB8GA1UdIwQYMBaAFBldp+77+M3A85KlrD7gVNgW7D8UMFsGCCsGAQUFBwEBBE8wTTBLBggrBgEFBQcwAoY/aHR0cDovL3BraS1jZG4uYWRvYmUubmV0L2NhL2Fkb2JlX2ludGVybmFsX2ludGVybWVkaWF0ZV9wcm9kdWN0ME0GA1UdHwRGMEQwQqBAoD6GPGh0dHA6Ly9wa2ktY2RuLmFkb2JlLm5ldC9hZG9iZV9pbnRlcm5hbF9pbnRlcm1lZGlhdGVfcHJvZHVjdDAOBgNVHQ8BAf8EBAMCAQYwHQYDVR0OBBYEFC76762PJu/wKMyE92MRuG8aw1sIMBcGA1UdIAQQMA4wDAYKKwYBBAGD6F4BATAfBgNVHSUEGDAWBgorBgEEAYPoXgIBBggrBgEFBQcDBDAKBggqhkjOPQQDAwNnADBkAjAfjQ+ZR+qrZcyWiOVr07JrjClkluOhKPreYGCIQjRXvZPiFPDorO1df9tEIPmJ2Q4CMAIfpEWAmTsAggP/MIJIBoTabnBjhwmUcaqRdjK/LuT3KvwkZzZ6R7iPDkQs0d+dQA=="
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Castlabs - Castlabs C2PA ECC P-384 Root CA",
+      "display_name": "Castlabs C2PA ECC P-384 Root CA",
+      "contact": "https://c2pa.org",
+      "isCA": true,
+      "jwks": {
+        "keys": [
+          {
+            "kty": "EC",
+            "x5c": [
+              "MIICyDCCAk2gAwIBAgIUN5SkK2Lb2Ts/j1AC3K8Y3eVydFQwCgYIKoZIzj0EAwMwgZAxKDAmBgNVBAMMH0Nhc3RsYWJzIEMyUEEgRUNDIFAtMzg0IFJvb3QgQ0ExCzAJBgNVBAYTAkRFMQ8wDQYDVQQHDAZCZXJsaW4xETAPBgNVBAoMCENhc3RsYWJzMSIwIAYDVQQLDBlDMlBBIFRydXN0IEluZnJhc3RydWN0dXJlMQ8wDQYDVQQIDAZCZXJsaW4wHhcNMjYwNzA4MDE0NDMwWhcNMzYwNzA1MDE0NDMwWjCBkDEoMCYGA1UEAwwfQ2FzdGxhYnMgQzJQQSBFQ0MgUC0zODQgUm9vdCBDQTELMAkGA1UEBhMCREUxDzANBgNVBAcMBkJlcmxpbjERMA8GA1UECgwIQ2FzdGxhYnMxIjAgBgNVBAsMGUMyUEEgVHJ1c3QgSW5mcmFzdHJ1Y3R1cmUxDzANBgNVBAgMBkJlcmxpbjB2MBAGByqGSM49AgEGBSuBBAAiA2IABPXhd9L+pjQVnUXH6I7+oFSrd6JpO4A+CYDm/AuDZgJvwiuJlrM9dC3CAE7UAK8IcQEo85qzuak0TfLdPaJWD26+q3tJ/S7NW4sOKhH09KRN7iFqXbsOe8FOxaQql/UrMqNmMGQwDgYDVR0PAQH/BAQDAgEGMBIGA1UdEwEB/wQIMAYBAf8CAQIwHQYDVR0OBBYEFHNKe2PoAANQBj4/25eRv2VY4Fy7MB8GA1UdIwQYMBaAFHNKe2PoAANQBj4/25eRv2VY4Fy7MAoGCCqGSM49BAMDA2kAMGYCMQDUlNJD49UxzwBccYHiz0wgmbIXBDdgpVrLfWTQnbi21BhfPBQ6j0HJ24FY36L5oj8CMQCv5+bKgBIkJq9USBx2FjjDkukYjQMI/WDD6SH6QGTdotsH3cQQ6bjr9C+0ruxxx08="
             ]
           }
         ]

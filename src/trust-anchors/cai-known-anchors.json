@@ -3,7 +3,7 @@
   "download_url": "",
   "description": "CAI known-certificate anchors (contentcredentials.org/trust/anchors.pem), the list the Content Credentials Verify site trusts. Carries the production roots (Adobe Root CA G2, Leica, Nikon, Canon, Sony, Microsoft, Truepic) absent from the conformance list. Do not edit by hand - run bun scripts/sync-c2pa-trust-lists.ts.",
   "website": "https://contentcredentials.org/verify",
-  "last_updated": "2026-09-01T10:34:41Z",
+  "last_updated": "2026-09-07T12:01:45Z",
   "entities": [
     {
       "name": "Adobe Systems Incorporated - Adobe Root CA G2",
