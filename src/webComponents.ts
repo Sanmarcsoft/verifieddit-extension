@@ -9,6 +9,7 @@ import { type ExtensionC2paIngredient, type C2paResult } from './c2pa'
 import { type CertificateInfoExtended } from './certs/certs'
 import { type DurablePillars } from './durableCredentials'
 import { buildExpiryEvidence, classifyExpiry, expiryReason, type ExpiryVerdict } from './signatureValidity'
+import { computeVerdict, durabilityApplies, isFatalValidationCode, type Verdict } from './verdict'
 import { MSG_L3_INSPECT_URL, TRUSTEDDIT_LINK, taggedLink, MSG_SET_MANIFEST_STORE_PROBE, MANIFEST_STORE_PROBE_KEY, MANIFEST_STORE_PROBE_DEFAULT } from './constants'
 import './provenanceDiagram'
 
@@ -23,16 +24,10 @@ interface IconTextItem {
   text: string[]
 }
 
-type StatusTone = 'verified' | 'authentic' | 'invalid' | 'unsigned'
+type StatusTone = Verdict
 
-// A C2PA validation_status code is a real INTEGRITY failure (→ "invalid"/red)
-// unless it is merely a trust/expiry signal. signingCredential.untrusted just
-// means the signer is not in the trust list (shown separately as the trust
-// state); signingCredential.expired / timeStamp.untrusted are expiry/trust, not
-// tampering. Treating those as "invalid" wrongly implies the content was
-// altered. Everything else in the list (hash/signature mismatch, missing
-// assertions, malformed claims, …) is a genuine failure.
-const NON_FATAL_VALIDATION_CODE = /\.(untrusted|expired)$/i
+// Fatal-code classification and the verdict rule live in src/verdict.ts so the
+// websites can be tested against the same definition. See that file for the reasoning.
 
 /**
  * What the panel, the log rows and the screen-reader summary all read from.
@@ -45,10 +40,6 @@ interface StatusSummary {
   tone: StatusTone
   expired: boolean
   expiry: ExpiryVerdict
-}
-
-function isFatalValidationCode (code: string): boolean {
-  return code !== '' && !NON_FATAL_VALIDATION_CODE.test(code)
 }
 
 /*
@@ -445,11 +436,7 @@ export class C2paOverlay extends LitElement {
     const trusted = c2paResult.trustList != null
     const signed = (c2paResult.certChain?.length ?? 0) > 0 ||
       (c2paResult.manifestStore?.manifests?.length ?? 0) > 0
-    const tone: StatusTone = errors
-      ? 'invalid'
-      : !signed
-          ? 'unsigned'
-          : trusted ? 'verified' : 'authentic'
+    const tone: StatusTone = computeVerdict({ codes, signed, trusted })
     return { errors, trusted, tone, expired, expiry }
   }
 
@@ -587,7 +574,7 @@ export class C2paOverlay extends LitElement {
 
       ${this.renderLog(c2paResult)}
 
-      ${pillars != null
+      ${pillars != null && durabilityApplies(tone)
         ? html`<c2pa-pillars class="reveal" style="animation-delay:${pillarsDelay}ms; display:block" .pillars=${pillars} .signerTrusted=${this.status?.trusted === true}></c2pa-pillars>`
         : nothing}
 
