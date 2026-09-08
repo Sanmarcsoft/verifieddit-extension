@@ -42,6 +42,13 @@ function synthetic (width: number, height: number, fill: (x: number, y: number) 
 const STORE_RECORD = { phash: 'a4b31bcc4e1d3fd8', dhash: '3fcccc8ca6ecd61c' }
 const STORE_MAX_HAMMING = 8
 
+// A post-#376 asset, signed after the server-side fingerprint fix landed, so
+// the store holds imagehash's exact output rather than a near-miss. Read back
+// from https://manifests.sanmarcsoft.com/v1 on 2026-09-08 for the Content
+// Credentials icon served on sanmarcsoft.com. Exact equality is the real
+// contract; the Hamming bound above is the weaker legacy case.
+const STORE_RECORD_CC_ICON = { phash: 'c19116c66f9b9a3c', dhash: 'e08e3b2b96cc7196' }
+
 describe('perceptualHash interop with the signing API (imagehash)', () => {
   for (const [rel, expected] of Object.entries(groundTruth)) {
     if (rel.startsWith('_')) continue
@@ -57,6 +64,12 @@ describe('perceptualHash interop with the signing API (imagehash)', () => {
     const img = loadPng('interop/marquee-signed.png')
     expect(hammingDistance(computePerceptualHash(img), STORE_RECORD.phash)).toBeLessThanOrEqual(STORE_MAX_HAMMING)
     expect(hammingDistance(computeDifferenceHash(img), STORE_RECORD.dhash)).toBeLessThanOrEqual(STORE_MAX_HAMMING)
+  })
+
+  it('a post-#376 signed asset reproduces the live store record exactly', () => {
+    const img = loadPng('interop/sanmarcsoft-cc-icon-signed.png')
+    expect(computePerceptualHash(img)).toBe(STORE_RECORD_CC_ICON.phash)
+    expect(computeDifferenceHash(img)).toBe(STORE_RECORD_CC_ICON.dhash)
   })
 
   it('dHash sets a bit when the RIGHT pixel is brighter (imagehash direction)', () => {
