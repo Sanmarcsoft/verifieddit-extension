@@ -1,11 +1,18 @@
-# Chrome Web Store Listing — Verifieddit
+# Chrome Web Store Listing: Verifieddit
 
-> Operational submission doc. Verified against the v1.1.0 source tree — every
+> Operational submission doc. Verified against the v1.1.0 source tree. Every
 > permission below is one the manifest actually requests, and every UI string is
 > the one the code actually renders. Re-verify before each submission; a
 > justification that describes a menu item by the wrong name is a review finding.
 >
 > **Applies to:** v1.1.0 · **Last verified:** 2026-08-03
+>
+> **Partial re-verification, 2026-09-08 (v1.2.6).** One claim in this file was
+> re-checked and corrected: the bundled trust-anchor counts, read directly from
+> `src/trust-anchors/*.json` at tag `v1.2.6` after #487 resynced the c2pa.org
+> anchors. Nothing else here has been re-audited since v1.1.0, so this file is
+> still not a source for submission copy. The audited copy is
+> `releases/store-assets/LISTING-COPY.md`, which is verified at v1.2.6.
 
 ## Extension Name
 Verifieddit - C2PA Content Credential Verifier
@@ -36,7 +43,7 @@ English
 - **Privacy policy URL:** https://www.verifieddit.com/privacy
 - **Source repository:** https://github.com/Sanmarcsoft/verifieddit-browser-extension
 
-Listing the LLC as Publisher on the Chrome Web Store requires either (a) submitting from a Google Workspace account on a SanMarcSoft-owned domain, or (b) setting "SanMarcSoft LLC" as the verified Publisher name on an existing CWS developer account. CWS will display the registered publisher name to end users — verify spelling before submit.
+Listing the LLC as Publisher on the Chrome Web Store requires either (a) submitting from a Google Workspace account on a SanMarcSoft-owned domain, or (b) setting "SanMarcSoft LLC" as the verified Publisher name on an existing CWS developer account. CWS will display the registered publisher name to end users, so verify spelling before submit.
 
 ## Single Purpose Description
 Verify the authenticity and provenance of images, videos, and audio on any webpage using the C2PA content credentials standard.
@@ -53,10 +60,10 @@ Content Credentials are a new open standard (C2PA) for proving where digital con
 - Automatic Detection: Scans media elements on any webpage for C2PA content credentials
 - Visual Indicators: Shows overlay icons on media with verified content credentials (green = valid, yellow = warning, red = invalid)
 - AI Origin, As Declared: Reports the IPTC `digitalSourceType` the signer recorded in their own signed manifest. It reads a declaration; it does not analyse pixels or guess. Media carrying no such declaration is shown as "not declared", never as "not AI"
-- Interactive Provenance Graph: Explore the full chain of custody as a graph — click a node to expand its detail, drag to pan, zoom, fit to frame, or open it full screen. Shows multi-generation ingredient history, assertions, and sensor telemetry
+- Interactive Provenance Graph: Explore the full chain of custody as a graph: click a node to expand its detail, drag to pan, zoom, fit to frame, or open it full screen. Shows multi-generation ingredient history, assertions, and sensor telemetry
 - Certificate Verification: Validates signer certificates against the C2PA Trust List, including RFC 3161 trusted timestamps
 - Right-Click Inspection: Right-click any image, video, or audio to inspect its Content Credentials
-- Trust List Management: Ships the 29 anchors from the C2PA Conformance Program, the 21 official timestamp authorities, and the 26 known-certificate anchors the Content Authenticity Initiative publishes, so mainstream cameras and editing software read as trusted out of the box; import your own trust anchors and TSA certificates alongside them
+- Trust List Management: Ships the 30 anchors from the C2PA Conformance Program, the 22 official timestamp authorities, and the 26 known-certificate anchors the Content Authenticity Initiative publishes, so mainstream cameras and editing software read as trusted out of the box; import your own trust anchors and TSA certificates alongside them
 - Auto-Scan Toggle: Enable or disable automatic scanning per your preference
 
 **Privacy-First:**
@@ -126,7 +133,7 @@ trusteddit.com privacy policy §2.5, both published before the parameter shipped
 The manifest-store lookup is the extension's only request not begun by a click,
 which is why it ships off and is granted in context: the "Cloud-recoverable"
 pillar in the panel states what would be sent before anything is. Consent
-applies forward only — enabling it never re-checks media already on screen.
+applies forward only; enabling it never re-checks media already on screen.
 
 Beyond these, the extension collects nothing, sends no analytics, and sets no
 cookies. Verified against the source: zero analytics SDKs, and no
@@ -135,7 +142,7 @@ cookies. Verified against the source: zero analytics SDKs, and no
 ## Screenshots
 
 Captured from the built v1.1.0 extension in real Chrome, 1280x800. Regenerate
-with `bun scripts/capture-listing-screenshots.mjs` after any UI change — stale
+with `bun scripts/capture-listing-screenshots.mjs` after any UI change. Stale
 screenshots that show a superseded interface are a listing-accuracy defect.
 
 | # | File | Shows |

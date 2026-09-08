@@ -15,7 +15,7 @@
 > correct: `storage`, `activeTab`, `contextMenus`, `alarms`, `<all_urls>`, and
 > no `offscreen`. What did change since v1.1.1 is the bundled trust material
 > (#160 added the CAI known-certificate anchors, so the shipped build carries
-> six lists and 82 entities) and the auto-scan badge behaviour (#169: media
+> six lists and 82 entities; #487 later resynced those to 84) and the auto-scan badge behaviour (#169: media
 > with no Content Credentials is no longer badged during an auto-scan).
 
 > **v1.2.5 delta a reviewer will see.** `options_ui` now points at a real

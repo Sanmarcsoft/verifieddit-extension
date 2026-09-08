@@ -1,4 +1,4 @@
-# Notes to Reviewer — Verifieddit
+# Notes to Reviewer: Verifieddit
 
 Thank you for reviewing. This document covers the build, the two findings the
 linter reports, and the reasoning behind the broad host permission.
@@ -45,7 +45,7 @@ that directory archived at its root (no wrapping folder), which is exactly what
    archive** so you do not have to reproduce it. It records the git commit and
    an ISO `buildDate`; that timestamp differs on every build, so the bundle is
    not byte-identical between runs. Everything else is deterministic. If you
-   rebuild in a directory with no `.git`, the git fields read `"unknown"` —
+   rebuild in a directory with no `.git`, the git fields read `"unknown"`;
    that is expected, not tampering.
 2. `scripts/extract-c2pa-worker.mjs` copies the C2PA worker out of
    `node_modules/@contentauth/c2pa-web` into `public/c2pa-web.worker.js`, and
@@ -57,16 +57,17 @@ that directory archived at its root (no wrapping folder), which is exactly what
 
 ## Linter findings, and why they stand
 
-`addons-linter` 10.10.0 reports **0 errors** and 8 warnings on this package.
+`addons-linter` 10.10.0 reports **0 errors** and 8 warnings on the v1.2.6
+package (`verifieddit-firefox-1.2.6.zip`).
 The 8 break down as follows.
 
-### 6x `UNSAFE_VAR_ASSIGNMENT` — assignment to innerHTML
+### 6x `UNSAFE_VAR_ASSIGNMENT`: assignment to innerHTML
 
 Two sources:
 
-- **Lit** (`chunk-property-*.js`) — the templating library's own internals.
-- **`popup.js`**, from `src/popup.ts` — building the trust-list and validation
-  panels.
+- **Lit** (`chunk-property-*.js`), the templating library's own internals.
+- **`popup.js`**, from `src/popup.ts`, which builds the trust-list and
+  validation panels.
 
 Every interpolated value in `popup.ts` that could carry untrusted content is
 escaped through the `esc()` helper defined at `src/popup.ts:356` before it
@@ -75,14 +76,16 @@ assignments interpolate either escaped strings or string literals under our
 control. The add-on's CSP is `script-src 'self' 'wasm-unsafe-eval'` with no
 `unsafe-inline`, so injected markup cannot execute script regardless.
 
-### 2x `KEY_FIREFOX_UNSUPPORTED_BY_MIN_VERSION` — data_collection_permissions
+### 1x `KEY_FIREFOX_UNSUPPORTED_BY_MIN_VERSION` and 1x `KEY_FIREFOX_ANDROID_UNSUPPORTED_BY_MIN_VERSION`: data_collection_permissions
 
 > "strict_min_version" requires Firefox 115, which was released before version
 > 140 introduced support for "data_collection_permissions".
 
 Intentional. We declare `data_collection_permissions` because AMO requires the
 disclosure, and we target `strict_min_version: 115.0` so that ESR 115 and ESR
-128 users are supported. Firefox versions below 140 ignore the key harmlessly.
+128 users are supported. Firefox versions below 140 ignore the key harmlessly,
+and the Android warning is the same finding restated against the Firefox for
+Android version line.
 Raising the minimum to 140 purely to silence a warning would drop every ESR user
 for no functional benefit.
 
@@ -152,5 +155,5 @@ site that publishes Content Credentials and choose "Verify with Verifieddit."
 
 ## Contact
 
-support@verifieddit.com — happy to answer anything or supply additional builds.
+support@verifieddit.com. Happy to answer anything or supply additional builds.
 Source: https://github.com/Sanmarcsoft/verifieddit-browser-extension (MIT).

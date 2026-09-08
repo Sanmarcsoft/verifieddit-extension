@@ -1,6 +1,6 @@
-# Verifieddit v1.2.5 Chrome Web Store listing copy
+# Verifieddit v1.2.6 Chrome Web Store listing copy
 
-Every claim checked against the v1.2.5 source. No em-dashes. No brand roll-calls
+Every claim checked against the v1.2.6 source. No em-dashes. No brand roll-calls
 (see "No brand roll-call" under SEO before touching the trust section).
 
 ---
@@ -89,7 +89,7 @@ Content Credentials can appear on any page you visit, so the extension has to re
 
 TRUST IS YOURS TO SET
 
-Six trust lists ship built in, 82 entities in total: the C2PA Conformance Program anchors, 29 for signing and 21 official timestamp authorities; the Content Authenticity Initiative's 26 known-certificate anchors, the same production roots the Content Credentials Verify site trusts, so photos from mainstream cameras and edits from mainstream software read as trusted out of the box; an AI trust list; and the Trusteddit signing and timestamp anchors.
+Six trust lists ship built in, 84 entities in total: the C2PA Conformance Program anchors, 30 for signing and 22 official timestamp authorities; the Content Authenticity Initiative's 26 known-certificate anchors, the same production roots the Content Credentials Verify site trusts, so photos from mainstream cameras and edits from mainstream software read as trusted out of the box; an AI trust list; and the Trusteddit signing and timestamp anchors.
 
 Add your own trust list from a file or a web address at any time, or remove any list you would rather not rely on. Who counts as trustworthy is configuration you control, not a decision we make for you.
 

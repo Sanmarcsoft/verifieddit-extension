@@ -1,4 +1,4 @@
-# Verifieddit — Chrome Web Store listing copy
+# Verifieddit: Chrome Web Store listing copy
 
 > Drafted from a code-evidence audit of v1.1.0. See `CHROME_WEB_STORE_LISTING.md`
 > in the same repo for the operational submission doc with permission
@@ -11,7 +11,7 @@
 
 > Maximum 132 characters per Chrome Web Store policy.
 
-**See, in one click, whether an image, video, or audio file is real, AI-made, or edited — using open C2PA Content Credentials.**
+**See, in one click, whether an image, video, or audio file is real, AI-made, or edited, using open C2PA Content Credentials.**
 
 *(127 characters, including spaces and punctuation.)*
 
@@ -39,7 +39,7 @@ The internet is now a mix of authentic media and synthetic media at industrial s
 
 1. **Install the extension.** No account, no sign-up.
 2. **Browse normally.** When auto-scan is enabled, Verifieddit detects media with C2PA Content Credentials and overlays a small badge: **green** for verified trusted, **yellow** for valid manifest from an unknown signer, **red** for integrity failure.
-3. **Click any badge** to open the provenance panel — full claim chain, signer details, certificate trust state, timestamp authority, and ingredient history.
+3. **Click any badge** to open the provenance panel: full claim chain, signer details, certificate trust state, timestamp authority, and ingredient history.
 4. **Right-click** any image, video, or audio element to manually inspect Content Credentials, even when auto-scan is off.
 
 ### Key features
@@ -47,10 +47,10 @@ The internet is now a mix of authentic media and synthetic media at industrial s
 - **Automatic detection** of C2PA-credentialed media on any web page (toggle on or off from the popup).
 - **Visual badges** distinguish *verified trusted*, *unknown signer*, and *integrity failure* states at a glance.
 - **AI content identification** based on C2PA metadata and digital-source-type assertions, surfaced when the manifest declares AI involvement.
-- **Interactive provenance graph** — the chain of custody as a graph you can explore: expand any node for its detail, pan, zoom, fit to frame, or open it full screen. Covers multi-generation ingredient history, assertions, sensor telemetry, signer certificate, timestamp authority, and trust-list match.
+- **Interactive provenance graph**: the chain of custody as a graph you can explore: expand any node for its detail, pan, zoom, fit to frame, or open it full screen. Covers multi-generation ingredient history, assertions, sensor telemetry, signer certificate, timestamp authority, and trust-list match.
 - **Right-click manual inspection** for images, videos, and audio files, even outside the auto-scan flow.
-- **Trust list management** — bring your own trust anchors, or use the bundled lists: the 29 anchors from the C2PA Conformance Program, the 21 official C2PA timestamp authorities, the 26 known-certificate anchors the Content Authenticity Initiative publishes (so mainstream cameras and editing software read as trusted out of the box), an AI trust list, and the Trusteddit anchors.
-- **100% local processing** — see Privacy below.
+- **Trust list management**: bring your own trust anchors, or use the bundled lists: the 30 anchors from the C2PA Conformance Program, the 22 official C2PA timestamp authorities, the 26 known-certificate anchors the Content Authenticity Initiative publishes (so mainstream cameras and editing software read as trusted out of the box), an AI trust list, and the Trusteddit anchors.
+- **100% local processing**: see Privacy below.
 
 ### What it can read
 
@@ -70,7 +70,7 @@ MIT-licensed. Source code: <https://github.com/Sanmarcsoft/verifieddit-extension
 
 ### Single Purpose Description
 
-*(Required by Chrome Web Store policy — single sentence.)*
+*(Required by Chrome Web Store policy: single sentence.)*
 
 Verifieddit verifies the authenticity and provenance of images, videos, and audio on any webpage using the C2PA Content Credentials standard.
 
@@ -83,7 +83,7 @@ Verifieddit verifies the authenticity and provenance of images, videos, and audi
 > <https://www.verifieddit.com/privacy> (the URL referenced by the Chrome Web
 > Store listing), which is authoritative where the two differ.
 
-**Last updated:** 2026-08-03  
+**Last updated:** 2026-08-03 (trust-anchor counts re-verified 2026-09-08 at v1.2.6)  
 **Applies to:** Verifieddit v1.1.0 Chrome extension  
 **Publisher:** SanMarcSoft LLC
 
@@ -99,8 +99,8 @@ Verifieddit is built to a **local-first** principle: all C2PA verification runs 
 |---|---|
 | **Media files (images, videos, audio)** on pages you visit | Verifieddit reads media bytes that your browser has already loaded for the page, and processes them inside your browser using locally-bundled WebAssembly (WASM). **Nothing is uploaded.** No copy of the media leaves your machine. |
 | **URLs of verified media** | Sent to `www.verifieddit.com` (as a `?url=` query parameter) **only** when you explicitly click "Inspect on Verifieddit", so the site can pre-fill its verifier. Never transmitted automatically; auto-scan does not trigger this. |
-| **Which extension surface a link was clicked from** | When you click "Sign your own content with Trusteddit", the opened URL carries `?src=` followed by a fixed word naming the surface — one of `extension-panel`, `extension-popup`, `extension-options`, `extension-context-menu`, `extension-release-notes`. It identifies a place in the interface, never you, your device, your session, or the media you were looking at. Disclosed by trusteddit.com's privacy policy §2.5. |
-| **A perceptual fingerprint of an image** (only if you switch on "Check durable credentials online") | For images whose credential declares a durable binding, Verifieddit can ask `manifests.sanmarcsoft.com` whether that credential is actually registered and recoverable. The request carries a short perceptual hash (pHash and dHash) computed in your browser — **never the image itself**, and nothing identifying you, your device or your session. Sent with `credentials: 'omit'`, so no cookies. **Off by default**; turn it on from the pillar in the panel or the Options tab, and off again the same way. |
+| **Which extension surface a link was clicked from** | When you click "Sign your own content with Trusteddit", the opened URL carries `?src=` followed by a fixed word naming the surface, one of `extension-panel`, `extension-popup`, `extension-options`, `extension-context-menu`, `extension-release-notes`. It identifies a place in the interface, never you, your device, your session, or the media you were looking at. Disclosed by trusteddit.com's privacy policy §2.5. |
+| **A perceptual fingerprint of an image** (only if you switch on "Check durable credentials online") | For images whose credential declares a durable binding, Verifieddit can ask `manifests.sanmarcsoft.com` whether that credential is actually registered and recoverable. The request carries a short perceptual hash (pHash and dHash) computed in your browser, **never the image itself**, and nothing identifying you, your device or your session. Sent with `credentials: 'omit'`, so no cookies. **Off by default**; turn it on from the pillar in the panel or the Options tab, and off again the same way. |
 | **Verification results** | Computed and displayed in your browser only. Not transmitted. Not retained beyond the current page session. |
 | **User preferences** (auto-scan toggle, imported trust lists) | Stored locally in `chrome.storage.local`. Never synced to any server. Never transmitted. |
 | **Diagnostic state** (ephemeral init errors so the popup can show a banner if the C2PA engine fails to load) | Stored in `chrome.storage.session`, which is wiped automatically when the browser is closed. Never transmitted. |

@@ -143,9 +143,10 @@ is the one that reads as trusted.
 
 ## Trust setup
 
-Five trust lists ship built in, 56 entities in total: the C2PA Conformance
-Program anchors (29 signing, 21 official timestamp authorities), an AI trust
-list, and the Trusteddit signing and timestamp anchors.
+Six trust lists ship built in, 84 entities in total: the C2PA Conformance
+Program anchors (30 signing, 22 official timestamp authorities), the Content
+Authenticity Initiative's 26 known-certificate anchors, an AI trust list, and
+the Trusteddit signing and timestamp anchors.
 
 Add your own from a file or a URL, or remove any list you would rather not rely
 on, from the options page. Who counts as trustworthy is configuration you
