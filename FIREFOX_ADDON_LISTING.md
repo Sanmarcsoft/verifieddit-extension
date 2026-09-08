@@ -1,10 +1,10 @@
 # Firefox Add-ons (AMO) Listing: Verifieddit
 
-> Operational submission doc for addons.mozilla.org. Verified against the v1.2.5
+> Operational submission doc for addons.mozilla.org. Verified against the v1.2.6
 > source tree: every permission below is one `src/manifest.firefox.v3.json`
 > actually requests, and every UI string is one the code actually renders.
 >
-> **Applies to:** v1.2.5 · **Last verified:** 2026-09-04
+> **Applies to:** v1.2.6 · **Last verified:** 2026-09-08
 > **Chrome equivalent:** `releases/store-assets/LISTING-COPY.md` is the current
 > user-facing copy; `CHROME_WEB_STORE_LISTING.md` is the older operational doc
 > and still carries v1.1.0 counts. This file records only what AMO does
@@ -28,6 +28,33 @@
 > it renders inline in the Add-ons Manager. Chrome's manifest drops `options_ui`
 > altogether; the same two controls live in the toolbar popup there. No
 > permission changed.
+
+> **v1.2.6 delta a reviewer will see.** Four changes, none of them touching
+> permissions, hosts or data flow.
+>
+> 1. `src/verdict.ts` is new (#174, #179). An expired signing certificate no
+>    longer reads as a failed integrity check when a *trusted* timestamp
+>    authority recorded a signing time *before* that certificate expired. Pure
+>    predicates, unit-tested. The durability panel is also gated so a tampered
+>    file does not additionally report self-asserted durability.
+> 2. `src/trust-anchors/*.json` resynced with the official c2pa.org lists
+>    (#487): 29 to 30 signing anchors, 21 to 22 TSA anchors. The addition is the
+>    Castlabs C2PA ECC P-384 Root CA. These are bundled data files, not code.
+> 3. `src/perceptualHash.ts` rewritten (#164). The optional durable-credential
+>    check sends two perceptual hashes of an image to
+>    `manifests.sanmarcsoft.com` and asks whether that fingerprint is on record.
+>    Our port of the server's hashing pipeline disagreed with it, so the answer
+>    was always no. The port is now faithful. **The host, the request shape and
+>    the two values sent are unchanged**; only their computation is corrected.
+>    Still off by default, still `credentials: 'omit'`, still disclosed in the
+>    preferences page and in `PRIVACY_POLICY.md` row 3.4.
+> 4. `public/icons/Verifieddit_logo.png` removed. A 1024px master that nothing
+>    loaded, copied verbatim into both targets, so it shipped twice. The package
+>    drops from 19.82 MiB to 17.36 MiB.
+>
+> No permission changed, no host changed, no new data category. The remainder of
+> the diff is the version bump, `CHANGELOG.md`, `src/releaseNotes.ts` and test
+> fixtures, which are not packaged.
 
 ## How AMO differs from the Chrome Web Store
 

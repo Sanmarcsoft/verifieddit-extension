@@ -1,6 +1,6 @@
 {
   "name": "verifieddit-extension",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "description": "Chrome extension to verify C2PA Content Credentials on any webpage",
   "main": "index.js",
   "type": "module",
@@ -37,6 +37,7 @@
     "@rollup/plugin-typescript": "^11.1.6",
     "@types/chrome": "^0.0.259",
     "@types/node": "^20.10.0",
+    "@types/pngjs": "^6.0.5",
     "@types/webextension-polyfill": "^0.10.7",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
@@ -53,6 +54,7 @@
     "http-server": "^14.1.1",
     "lit": "^3.1.2",
     "patch-package": "^8.0.0",
+    "pngjs": "^7.0.0",
     "rimraf": "^5.0.5",
     "rollup": "^4.13.2",
     "rollup-plugin-copy": "^3.5.0",

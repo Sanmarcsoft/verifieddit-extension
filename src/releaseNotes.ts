@@ -30,6 +30,28 @@ export const DEMO_URL = 'https://www.verifieddit.com/demo'
 
 export const RELEASE_NOTES: readonly ReleaseEntry[] = [
   {
+    tag: 'v1.2.6',
+    date: '2026-09-08',
+    summary: 'An expired certificate no longer looks like a broken file, and the third durable pillar can be verified again.',
+    fixes: [
+      {
+        title: 'An expired certificate is not evidence the picture changed',
+        howToVerify:
+          'Verify a photograph whose signing certificate has since expired, such as a press photo from a news site. If a trusted timestamp authority recorded the signing time and that time falls before the certificate expired, the badge no longer says the file failed its integrity check. Both conditions have to hold: an untrusted authority\'s clock is only a claim, and a timestamp taken after expiry proves the opposite of what is needed.'
+      },
+      {
+        title: 'Castlabs-signed media is recognised',
+        howToVerify:
+          'The bundled trust lists were a month out of date. They now match the official c2pa.org lists, which added the Castlabs C2PA ECC P-384 Root CA. A Castlabs-signed file that previously read as valid but from an unrecognised signer now shows as trusted. No other file\'s verdict changed.'
+      },
+      {
+        title: 'Durable Content Credentials no longer stop at 2 of 3',
+        howToVerify:
+          'Turn on "Check durable credentials online" in Options, then verify a durably signed image such as the ones on sanmarcsoft.com/blog. The Durable Content Credentials line now reads 3 of 3 verified rather than 2 of 3. The third pillar asks our public manifest store whether the picture\'s fingerprint is on record, and the fingerprint this extension computed disagreed with the one the signing service recorded, so the answer was always no. Both sides now compute it the same way. The check stays off until you switch it on, and with it off 2 of 3 is still the correct reading.'
+      }
+    ]
+  },
+  {
     tag: 'v1.2.5',
     date: '2026-09-04',
     summary: 'Preferences opens a real settings page instead of an empty one.',

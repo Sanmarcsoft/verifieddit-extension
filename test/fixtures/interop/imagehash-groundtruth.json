@@ -1,0 +1,6 @@
+{
+  "_comment": "Ground truth from Python imagehash 4.3.x on Pillow (the signing API's fingerprint pipeline). Regenerate: PYTHONPATH=... python3 -c \"import imagehash; from PIL import Image; im=Image.open(f); print(imagehash.phash(im), imagehash.dhash(im))\"",
+  "interop/marquee-signed.png": { "phash": "a4b31bcc4e1d3ec1", "dhash": "3fcccc8ca6ecd6c0" },
+  "alpha-gold-greentrust-02.png": { "phash": "cc80f0fe4c7e6721", "dhash": "209ccf6373211423" },
+  "demo-corpus/02-greentrust-png.png": { "phash": "cc80f0fe4c7e6721", "dhash": "209ccf6373211423" }
+}

@@ -1,5 +1,62 @@
 # CHANGELOG
 
+## v1.2.6
+
+- An expired signing certificate no longer reads as a broken file when a
+  trusted timestamp authority vouches for the signing time (#174, #179). Both
+  halves are required: the authority must be in the trust list, and the stamp
+  must predate the certificate's expiry. An untrusted authority's clock is only
+  an assertion, and a stamp taken after expiry proves the opposite of what is
+  needed. `src/verdict.ts` holds the predicates as pure functions
+  (`timestampRedeemsExpiry`, `timestampEvidenceFromC2pa`, `invalidIsExpiryOnly`,
+  `verdictFromHubState`) with field names matching the hub contract, so a hub
+  response feeds them without translation. The durability panel is now gated on
+  `durabilityApplies`, so a tampered file no longer reports a second, lesser
+  finding about self-asserted durability on top of the pixel-integrity failure.
+
+- Bundled trust anchors resynced with the official c2pa.org lists (#487). The
+  committed anchors were a month stale: `default-trust-list.json` 29 to 30,
+  `default-tsa-trust-list.json` 21 to 22, `cai-known-anchors.json` unchanged
+  because upstream froze it. The new entry in both official lists is the
+  Castlabs C2PA ECC P-384 Root CA, which until now would have rendered a
+  Castlabs-signed asset valid but untrusted. No existing corpus verdict moved.
+
+- The package is 2.46 MiB smaller, 19.82 MiB down to 17.36 MiB. A 1024px logo
+  master sat in `public/`, which is copied verbatim into both browser targets,
+  so it shipped twice and nothing loaded it. Removed, with a guard that no
+  single file in `public/` may exceed 256 KB.
+
+- Durable Content Credentials reported 2 of 3 pillars on every image, even when
+  the third pillar was genuinely present (#164). The manifest-store probe asks
+  `manifests.sanmarcsoft.com` whether an image's perceptual fingerprint is on
+  record. The store is populated by the signing API using Python `imagehash` on
+  Pillow, and this client's port of that pipeline disagreed with it in three
+  places: the dHash gradient ran left to right where `imagehash` compares
+  `pixels[:, 1:] > pixels[:, :-1]`, so every dHash we computed was the bitwise
+  complement of the stored one; resizing used an area average where `imagehash`
+  uses Pillow's Lanczos; and the pHash median was taken over the AC
+  coefficients only where `imagehash` includes the DC term. The pHash was close
+  enough to match on its own, so the query looked healthy right up to the
+  cross-validation, which the inverted dHash then failed at a Hamming distance
+  in the fifties against a limit of 8.
+
+  `src/perceptualHash.ts` is now a faithful port: Pillow's integer luma with
+  alpha ignored, Pillow's separable Lanczos with 22-bit fixed-point
+  coefficients and an 8-bit clamp between passes, a scipy-order 2-D DCT-II, and
+  the median of all 64 low-frequency coefficients. Measured against the four
+  signed images on a live SanMarcSoft blog post, the probe went from verifying
+  1 of 4 to verifying 4 of 4, and the computed hashes are byte-identical to the
+  store's records. Kept in sync with
+  `verifieddit-www/src/utils/perceptualHash.ts`, which carries the same port.
+
+  Locked by test/perceptualHash.test.ts, which pins both hashes to `imagehash`
+  ground truth on PNG fixtures and holds a post-#376 signed asset to exact
+  equality with its live store record.
+
+  Note that the probe remains opt-in. "Check durable credentials online" is off
+  by default in both the popup and the options page, and with it off the third
+  pillar cannot be verified by design, so 2 of 3 stays the correct reading.
+
 ## v1.2.5
 
 - Expanded diagram nodes can be resized again (#175). `.node.expanded` has
