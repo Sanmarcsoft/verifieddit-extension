@@ -17,7 +17,12 @@ import os from 'node:os'
  * destination page, both in a real Chrome with real user activation.
  */
 
-const EXT_PATH = process.env.EXT_PATH!
+// EXT_PATH is set by nobody: not e2e.yml, not playwright.config.ts, not any
+// package script. Reading it bare left every arg as the string "undefined",
+// so Chrome loaded no extension, no MV3 service worker ever registered, and
+// the wait below sat until the test timed out. Same fallback as its siblings
+// node-resize.spec.ts and node-export.spec.ts (#180).
+const EXT_PATH = process.env.EXT_PATH ?? path.resolve(__dirname, '..', '..', 'dist', 'chrome')
 
 const GRAPH = {
   nodes: [
@@ -28,6 +33,10 @@ const GRAPH = {
 }
 
 async function launch () {
+  // Fail here, loudly, rather than 180 seconds later on a bare timeout.
+  if (!fs.existsSync(path.join(EXT_PATH, 'manifest.json'))) {
+    throw new Error(`built extension must exist at ${EXT_PATH}; run "bun run build" first`)
+  }
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fs-tab-'))
   const ctx = await chromium.launchPersistentContext(dir, {
     headless: false,
@@ -37,7 +46,7 @@ async function launch () {
   })
   await new Promise(r => setTimeout(r, 2000))
   let [sw] = ctx.serviceWorkers()
-  if (sw == null) sw = await ctx.waitForEvent('serviceworker')
+  if (sw == null) sw = await ctx.waitForEvent('serviceworker', { timeout: 30_000 })
   return { ctx, sw, extensionId: new URL(sw.url()).host }
 }
 
