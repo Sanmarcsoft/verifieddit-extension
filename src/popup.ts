@@ -7,6 +7,7 @@ import { type TrustListInfo, getTrustListInfos, removeTrustList, addTSATrustFile
 import packageManifest from '../package.json'
 import { BUILD_INFO } from './build-info'
 import { AUTO_SCAN_DEFAULT, MSG_AUTO_SCAN_UPDATED, MSG_REQUEST_C2PA_ENTRIES, TRUSTEDDIT_LINK, taggedLink, MSG_RESPONSE_C2PA_ENTRIES, MSG_RESPONSE_C2PA_SUMMARY, MANIFEST_STORE_PROBE_DEFAULT, MANIFEST_STORE_PROBE_KEY } from './constants.js'
+import { getAnalyticsConsent, setAnalyticsConsent, options_opened } from './analytics.js'
 import { type C2paEntryDetails, type MSG_RESPONSE_C2PA_ENTRIES_PAYLOAD, type MSG_RESPONSE_C2PA_SUMMARY_PAYLOAD } from './inject.js'
 import { crIconDataUrl } from './icon.js'
 // Side-effect import: registers <c2pa-provenance-graph>. rollup's
@@ -190,10 +191,44 @@ async function renderInitErrorBanner (): Promise<void> {
   banner.removeAttribute('hidden')
 }
 
+async function renderAnalyticsConsentBanner (): Promise<void> {
+  const banner = document.getElementById('analyticsConsentBanner')
+  if (banner == null) return
+
+  const consent = await getAnalyticsConsent()
+  if (consent !== 'unset') {
+    banner.setAttribute('hidden', '')
+    return
+  }
+
+  banner.removeAttribute('hidden')
+
+  const btnYes = document.getElementById('consentBtnYes')
+  const btnNo = document.getElementById('consentBtnNo')
+  const linkOptions = document.getElementById('consentBannerOptionsLink')
+
+  btnYes?.addEventListener('click', () => {
+    void setAnalyticsConsent('granted')
+    banner.setAttribute('hidden', '')
+  })
+
+  btnNo?.addEventListener('click', () => {
+    void setAnalyticsConsent('denied')
+    banner.setAttribute('hidden', '')
+  })
+
+  linkOptions?.addEventListener('click', (e) => {
+    e.preventDefault()
+    const optionsTabBtn = document.querySelector('.tab[data-tab="options"]') as HTMLButtonElement | null
+    optionsTabBtn?.click()
+  })
+}
+
 document.addEventListener('DOMContentLoaded', function (): void {
   populateBuildInfo()
   renderWhatsNew()
   void renderInitErrorBanner()
+  void renderAnalyticsConsentBanner()
   // The Options-tab call to action ships as href="#" in the static markup and
   // is resolved here, so the surface tag lives in one place (constants.ts)
   // rather than being hand-written into HTML where it would drift.
@@ -206,9 +241,18 @@ document.addEventListener('DOMContentLoaded', function (): void {
   // touch the session storage keys we care about, so a delayed init
   // failure still becomes visible to the user.
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'session') return
-    if ('c2paInitError' in changes || 'trustListsInitError' in changes) {
+    if (area === 'session' && ('c2paInitError' in changes || 'trustListsInitError' in changes)) {
       void renderInitErrorBanner()
+    }
+    if (area === 'local' && 'analyticsConsent' in changes) {
+      const consentToggle = document.getElementById('toggleAnalyticsConsent') as ToggleSwitch | null
+      if (consentToggle != null) {
+        consentToggle.checked = changes.analyticsConsent.newValue === 'granted'
+      }
+      if (changes.analyticsConsent.newValue !== 'unset') {
+        const banner = document.getElementById('analyticsConsentBanner')
+        banner?.setAttribute('hidden', '')
+      }
     }
   })
 
@@ -238,6 +282,18 @@ document.addEventListener('DOMContentLoaded', function (): void {
     void chrome.storage.local.set({ [MANIFEST_STORE_PROBE_KEY]: checked })
   })
 
+  const analyticsConsentToggle = document.getElementById('toggleAnalyticsConsent') as ToggleSwitch | null
+  if (analyticsConsentToggle != null) {
+    void getAnalyticsConsent().then((consent) => {
+      analyticsConsentToggle.checked = consent === 'granted'
+    })
+
+    analyticsConsentToggle.addEventListener('change', (event) => {
+      const checked = (event as CustomEvent).detail.checked
+      void setAnalyticsConsent(checked ? 'granted' : 'denied')
+    })
+  }
+
   // Add event listeners to switch tabs
   const tabs = document.querySelectorAll('.tab')
   const tabContents = document.querySelectorAll('.tab-content')
@@ -254,6 +310,7 @@ document.addEventListener('DOMContentLoaded', function (): void {
 
       // refresh the trust lists info in the option tab
       if (tabContentId === 'options') {
+        void options_opened()
         const info = document.getElementById('trust-list-info')
         if (info !== null && info.innerHTML === '') {
           // Paint an immediate placeholder so the Options tab never
@@ -356,6 +413,7 @@ async function showResults (): Promise<void> {
     return
   }
   armScanTimeout()
+  chrome.runtime.sendMessage({ action: MSG_REQUEST_C2PA_ENTRIES }).catch(() => {})
   chrome.tabs.sendMessage(id, { action: MSG_REQUEST_C2PA_ENTRIES, data: null })
     .catch(() => {
       // No content script in this tab: a browser page, the Web Store, a PDF

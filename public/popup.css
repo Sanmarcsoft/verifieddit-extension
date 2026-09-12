@@ -296,6 +296,46 @@
     margin-bottom: 2px;
 }
 
+.consent-banner {
+    background: #f0f9ff;
+    border-left: 3px solid #0284c7;
+    color: #0c4a6e;
+    padding: 8px 10px;
+    margin: 0 0 8px 0;
+    font-size: 12px;
+    line-height: 1.4;
+    border-radius: 3px;
+}
+.consent-banner-text {
+    margin-bottom: 6px;
+}
+.consent-banner-link {
+    color: #0284c7;
+    text-decoration: underline;
+    margin-left: 4px;
+    cursor: pointer;
+}
+.consent-banner-actions {
+    display: flex;
+    gap: 8px;
+}
+.consent-btn {
+    border: none;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 3px;
+    cursor: pointer;
+}
+.consent-btn-primary {
+    background: #0284c7;
+    color: #ffffff;
+}
+.consent-btn-secondary {
+    background: #e2e8f0;
+    color: #1e293b;
+}
+
 .ingredient-header {
     font-weight: 600;
     color: #555;

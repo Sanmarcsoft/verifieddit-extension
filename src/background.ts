@@ -12,11 +12,23 @@ import { type C2paError, type C2paResult } from './c2pa'
 // worker, where `Worker` is undefined.
 import { toC2paErrorWire } from './c2paWire'
 import { detectDurablePillars } from './durableCredentials'
+import { computeVerdict } from './verdict'
+import {
+  extension_installed,
+  extension_updated,
+  verify_started,
+  verify_completed,
+  badge_scan,
+  mapMediaType,
+  mapVerificationResult,
+  shouldEmitScanEvent,
+  type MediaType
+} from './analytics.js'
 import {
   MSG_GET_ID, MSG_L3_INSPECT_URL, MSG_REMOTE_INSPECT_URL, MSG_FORWARD_TO_CONTENT, REMOTE_VALIDATION_LINK,
   MSG_VALIDATE_URL, AWAIT_ASYNC_RESPONSE, MSG_C2PA_RESULT_FROM_CONTEXT, AUTO_SCAN_DEFAULT, MSG_AUTO_SCAN_UPDATED,
   MSG_SET_MANIFEST_STORE_PROBE, MANIFEST_STORE_PROBE_KEY, MSG_OPEN_OVERLAY, PORT_OVERLAY_FRAME, MSG_RELAY_READY,
-  TRUSTLIST_UPDATE_INTERVAL
+  TRUSTLIST_UPDATE_INTERVAL, MSG_REQUEST_C2PA_ENTRIES
 } from './constants'
 import { sendMessageToAllTabs } from './utils'
 
@@ -42,8 +54,10 @@ initTrustlist().catch((err) => {
 
 chrome.runtime.onInstalled.addListener(function (details) {
   if (details.reason === 'install') {
+    void extension_installed()
     void chrome.storage.local.set({ autoScan: AUTO_SCAN_DEFAULT })
   } else if (details.reason === 'update') {
+    void extension_updated(details.previousVersion ?? 'unknown')
     // rc11.7 / #86 — one-shot migration to force auto-scan OFF for any
     // user who was silently stuck on the old rc<=11.6 build where
     // AUTO_SCAN=true was baked into the bundle as the install default.
@@ -71,13 +85,38 @@ function createContextMenu (): void {
   })
 }
 
+function emitVerifyCompleted (c2paResult: C2paResult | C2paError, mediaType: MediaType): void {
+  const isError = c2paResult instanceof Error
+  let verdict: string | null = null
+  let hasDurableBinding = false
+  if (!isError) {
+    const res = c2paResult as C2paResult
+    const codes = res.manifestStore?.validationStatus ?? []
+    const signed = (res.certChain?.length ?? 0) > 0 ||
+      (res.manifestStore?.manifests?.length ?? 0) > 0
+    const trusted = res.trustList != null
+    verdict = computeVerdict({ codes, signed, trusted })
+    hasDurableBinding = res.durablePillars?.durable ?? false
+  }
+
+  void verify_completed({
+    result: mapVerificationResult(c2paResult, verdict),
+    has_durable_binding: hasDurableBinding,
+    media_type: mediaType
+  })
+}
+
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   const url = info.srcUrl
   if (url == null) {
     return
   }
 
+  void verify_started('context_menu')
+
   void validateUrl(url).then(c2paResult => {
+    emitVerifyCompleted(c2paResult, mapMediaType(info.mediaType))
+
     // A thrown Error used to be dropped here with a bare `return`, so when the
     // engine failed to come up the user's explicit right-click produced no
     // badge, no toast and no error — indistinguishable from the extension not
@@ -153,6 +192,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     chrome.tabs.sendMessage(tabId, data).catch(() => { /* content script may be absent on this tab */ })
   }
 
+  if (action === MSG_REQUEST_C2PA_ENTRIES) {
+    void verify_started('popup')
+  }
+
   // #149 — relay a badge click's payload to this tab's overlay iframe. The
   // content script cannot reach that frame itself on Gecko, so the hop through
   // here is what makes the overlay open on both engines.
@@ -175,9 +218,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (action === MSG_VALIDATE_URL) {
+    const shouldEmit = shouldEmitScanEvent(sender?.tab?.id, Date.now())
+    if (shouldEmit) {
+      void verify_started('auto_scan')
+      void badge_scan()
+    }
     // Flatten Errors before they cross the port — see C2paErrorWire in c2pa.ts.
     void validateUrl(data as string)
-      .then((result) => { sendResponse(result instanceof Error ? toC2paErrorWire(result, data as string) : result) })
+      .then((result) => {
+        if (shouldEmit) {
+          // media_type is not known on this path (the content script sends only a URL)
+          emitVerifyCompleted(result, mapMediaType(null))
+        }
+        sendResponse(result instanceof Error ? toC2paErrorWire(result, data as string) : result)
+      })
     return AWAIT_ASYNC_RESPONSE
   }
 

@@ -14,6 +14,16 @@
 
 <body>
     <div id="initErrorBanner" class="init-error-banner" hidden></div>
+    <div id="analyticsConsentBanner" class="consent-banner" hidden>
+        <div class="consent-banner-text">
+            Share anonymous usage statistics to help improve Verifieddit? No URLs or page content are ever sent.
+            <a href="#" id="consentBannerOptionsLink" class="consent-banner-link">Options</a>
+        </div>
+        <div class="consent-banner-actions">
+            <button type="button" id="consentBtnYes" class="consent-btn consent-btn-primary">Yes</button>
+            <button type="button" id="consentBtnNo" class="consent-btn consent-btn-secondary">No thanks</button>
+        </div>
+    </div>
     <div class="tab-bar" role="tablist">
         <button class="tab active" data-tab="validation">Validation</button>
         <button class="tab" data-tab="trustlists">Trust Lists</button>
@@ -120,8 +130,18 @@
                 <code>manifests.sanmarcsoft.com</code> to confirm the credential is
                 registered and recoverable. Fingerprints only, never the image, and
                 nothing identifying you or your device. With this off, such assets
-                still verify — their durable binding reads as declared rather than
+                still verify: their durable binding reads as declared rather than
                 confirmed.
+            </p>
+            <br>
+            <toggle-switch label="Share anonymous usage statistics" id="toggleAnalyticsConsent"></toggle-switch>
+            <p class="option-note">
+                Off by default. When on, Verifieddit shares anonymous usage statistics
+                to help improve the extension. What is sent: an anonymous random id,
+                the event name, and the extension version. No URLs, no page content,
+                no file names, and no image data are ever sent. Statistics are sent to
+                Google Analytics, and Google sees the request's IP address as it would
+                for any HTTPS request.
             </p>
 
             <hr>

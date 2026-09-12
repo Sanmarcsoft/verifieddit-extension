@@ -216,7 +216,7 @@ function isValidSessionData (obj: unknown): obj is SessionData {
  */
 async function readSessionData (): Promise<SessionData | null> {
   // Firefox or older browsers might not support chrome.storage.session
-  if (chrome?.storage.session == null) {
+  if (chrome?.storage?.session == null) {
     return inMemorySession
   }
 
@@ -239,7 +239,7 @@ async function readSessionData (): Promise<SessionData | null> {
 async function writeSessionData (session: SessionData): Promise<void> {
   inMemorySession = { ...session }
 
-  if (chrome?.storage.session == null) {
+  if (chrome?.storage?.session == null) {
     return
   }
 
@@ -409,7 +409,90 @@ export async function consent_changed (value: 'granted' | 'denied'): Promise<voi
 
 /* eslint-enable @typescript-eslint/naming-convention */
 
+/**
+ * Map an arbitrary media type string to GA4 MediaType ('image' | 'video' | 'audio' | 'pdf').
+ * Defaults to 'image' for any unrecognized or missing value.
+ */
+export function mapMediaType (rawType?: string | null): MediaType {
+  if (rawType == null) return 'image'
+  const normalized = rawType.toLowerCase().trim()
+  if (normalized === 'video' || normalized.startsWith('video/')) return 'video'
+  if (normalized === 'audio' || normalized.startsWith('audio/')) return 'audio'
+  if (normalized === 'pdf' || normalized === 'application/pdf') return 'pdf'
+  return 'image'
+}
+
+/**
+ * Map a verification outcome to GA4 VerifyResult ('valid' | 'invalid' | 'none' | 'error').
+ * Reuses repo's verdict semantics without inventing parallel classification.
+ */
+export function mapVerificationResult (
+  c2paResult: unknown,
+  computedVerdict?: string | null
+): VerifyResult {
+  if (c2paResult instanceof Error) {
+    const errorObj = c2paResult as { name?: string, message?: string }
+    if (errorObj.name === 'No Manifest' || errorObj.message === 'No manifest found') {
+      return 'none'
+    }
+    return 'error'
+  }
+
+  if (typeof c2paResult === 'object' && c2paResult !== null) {
+    const candidate = c2paResult as { name?: string, message?: string }
+    if (candidate.name === 'No Manifest' || candidate.message === 'No manifest found') {
+      return 'none'
+    }
+  }
+
+  if (computedVerdict != null) {
+    if (computedVerdict === 'verified' || computedVerdict === 'authentic') {
+      return 'valid'
+    }
+    if (computedVerdict === 'invalid') {
+      return 'invalid'
+    }
+    if (computedVerdict === 'unsigned') {
+      return 'none'
+    }
+  }
+
+  return 'none'
+}
+
+// Auto-scan throttle state: at most one auto_scan + badge_scan per tab per window
+export const SCAN_EVENT_THROTTLE_MSEC = 60_000
+const UNDEFINED_TAB_KEY = -1
+const lastScanEmissionByTab = new Map<number, number>()
+
+/**
+ * Gate auto-scan and badge-scan telemetry emissions to at most once per tab per window.
+ * Prunes expired entries on every call to keep memory usage bounded.
+ */
+export function shouldEmitScanEvent (tabId: number | undefined, now: number): boolean {
+  // Prune entries older than the window
+  for (const [key, timestamp] of lastScanEmissionByTab) {
+    if (now - timestamp >= SCAN_EVENT_THROTTLE_MSEC) {
+      lastScanEmissionByTab.delete(key)
+    }
+  }
+
+  const key = tabId ?? UNDEFINED_TAB_KEY
+  const lastEmitted = lastScanEmissionByTab.get(key)
+
+  if (lastEmitted != null && now - lastEmitted < SCAN_EVENT_THROTTLE_MSEC) {
+    return false
+  }
+
+  lastScanEmissionByTab.set(key, now)
+  return true
+}
+
 // Testing hooks for mocking and unit verification
+
+export function _scanThrottleSizeForTesting (): number {
+  return lastScanEmissionByTab.size
+}
 
 export function _resetStateForTesting (): void {
   cachedClientId = null
@@ -420,6 +503,7 @@ export function _resetStateForTesting (): void {
   testMeasurementId = null
   testApiSecret = null
   testDebug = null
+  lastScanEmissionByTab.clear()
 }
 
 export function _setCredentialsForTesting (creds: {
