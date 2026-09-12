@@ -92,11 +92,11 @@ for no functional benefit.
 ## Data collection
 
 ```json
-"data_collection_permissions": { "required": ["none"], "optional": ["websiteContent"] }
+"data_collection_permissions": { "required": ["none"], "optional": ["websiteContent", "technicalAndInteraction"] }
 ```
 
 - **Required: none.** In its default configuration the add-on makes no outbound
-  request carrying user data.
+  request carrying user data. No data is collected without user consent.
 - **Optional: websiteContent.** One feature, the Manifest Store probe
   (`src/manifestStore.ts`), is **off by default** and must be switched on by the
   user. When on, it sends perceptual hashes (pHash/dHash hex digests) of images
@@ -104,11 +104,47 @@ for no functional benefit.
   stripped from a file. Image bytes are never sent. We still disclose it,
   because a perceptual hash of a viewed image is information about what the user
   is viewing.
+- **Optional: technicalAndInteraction.** Anonymous usage statistics via the
+  Google Analytics 4 Measurement Protocol (`src/analytics.ts`). This is
+  **off by default** and sends nothing unless the user explicitly opts in. When
+  enabled, it sends a random installation UUID (`ga4ClientId`), ephemeral session
+  ID (`ga4SessionData`), event name, extension version, engagement time, and
+  typed operational parameters (`source`, `result`, `has_durable_binding`,
+  `media_type`, `previous_version`, `value`). It never sends URLs, page titles,
+  page content, file names, media bytes, hashes of user media, signer identities,
+  certificate details, or account credentials. Google receives the request's IP
+  address per standard HTTPS transport. Auto-scan telemetry is throttled to at
+  most once per tab per minute. Turning it off in Preferences stops all outbound
+  analytics immediately. There is no account or personal data collected.
 
-The gate is enforced at a single entry point in `manifestStore.ts` rather than at
-each call site, so no caller can reach the network by forgetting to check.
+The gate for the manifest store is enforced at a single entry point in
+`manifestStore.ts` rather than at each call site, so no caller can reach the
+network by forgetting to check. Similarly, `src/analytics.ts` guards all calls
+with `getAnalyticsConsent() === 'granted'` and `isAnalyticsConfigured()`.
 
-There is no analytics, no telemetry, and no account.
+### How a reviewer can exercise the opt-in flow
+
+1. Install the extension.
+2. Open the extension popup: observe the consent banner asking whether to share
+   anonymous usage statistics.
+3. Choose "No" (or do nothing): observe zero network traffic to
+   `google-analytics.com`. The extension remains fully functional.
+4. Choose "Yes" (or toggle "Share anonymous usage statistics" on in
+   Preferences): observe outbound HTTPS POST requests to
+   `https://www.google-analytics.com/mp/collect` for extension events (e.g.
+   `consent_changed`, `verify_started`, `verify_completed`).
+5. Toggle the setting off in Preferences: observe that all outbound analytics
+   requests cease immediately.
+
+### Note on building from source
+
+The analytics endpoint credentials (`GA4_MEASUREMENT_ID` and `GA4_API_SECRET`)
+are build-time constants inlined by rollup via `@rollup/plugin-replace`. When
+building from the submitted source archive without these environment variables
+set, `isAnalyticsConfigured()` evaluates to `false` and the client is an inert
+no-op: it never initiates network requests and never logs. This is by design,
+and the absence of production analytics credentials in the source archive is
+intentional and not a missing-source finding.
 
 Other network traffic, none of it user data:
 

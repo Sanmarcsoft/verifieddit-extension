@@ -67,9 +67,10 @@ Content Credentials are a new open standard (C2PA) for proving where digital con
 - Auto-Scan Toggle: Enable or disable automatic scanning per your preference
 
 **Privacy-First:**
-- All processing happens locally in your browser using WebAssembly
+- All verification processing happens locally in your browser using WebAssembly
 - No media files are ever uploaded to any server
-- No analytics, tracking, or telemetry
+- Anonymous usage statistics are strictly opt-in and off by default
+- No advertising, tracking, or profiling
 - No account required
 
 **What It Can Read:**
@@ -94,7 +95,7 @@ https://www.verifieddit.com/privacy
 ## Permission Justifications
 
 ### storage
-Saves the user's auto-scan preference and a local cache of the loaded trust lists in the browser. Nothing is synced to a server.
+Saves the user's auto-scan preference and a local cache of the loaded trust lists in the browser. Also stores the analytics opt-in consent state (`analyticsConsent`) and the local random client UUID (`ga4ClientId`). Ephemeral session state (`ga4SessionData`) is stored in `chrome.storage.session`. Nothing is synced to a server. No new permission is required for analytics.
 
 ### activeTab
 Accesses the currently active tab when the user clicks the toolbar action or selects an item from the right-click context menu, scoped to that single interaction.
@@ -112,32 +113,55 @@ The opt-in for the manifest-store lookup is kept in `chrome.storage.local` under
 Hosts the C2PA WebAssembly verification engine in an offscreen document. A Manifest V3 service worker cannot run the WASM toolkit directly, so verification work is delegated to this document. It renders nothing to the user, performs no network calls of its own, and exists only for the duration of verification.
 
 ### Host Permissions: <all_urls>
-The extension needs access to all URLs because C2PA content credentials can appear on any website. The extension scans image, video, and audio elements on the current page to detect and verify cryptographic provenance data embedded in media files. Without broad host access, users would need to manually allowlist every website, defeating the purpose of automatic content credential detection.
+The extension needs access to all URLs because C2PA content credentials can appear on any website. The extension scans image, video, and audio elements on the current page to detect and verify cryptographic provenance data embedded in media files. Without broad host access, users would need to manually allowlist every website, defeating the purpose of automatic content credential detection. The existing `<all_urls>` host permission also covers outbound fetch requests to endpoints such as `https://www.google-analytics.com/mp/collect` when optional analytics is enabled, so no additional host permission is required.
 
 ## Data Sent Off-Device
 
-Declare in the CWS Privacy tab as **Website content → App functionality**. Two
-user-initiated navigations, both plain link clicks, neither automatic:
+In the Chrome Web Store Developer Console Privacy tab, disclosures are declared
+under the following categories and purposes:
+
+1. **Website content → App functionality**:
+   - User-initiated click to inspect media (`verifieddit.com/?url=<media-url>`)
+   - Opt-in durable credential lookup (`manifests.sanmarcsoft.com/v1/matches/byBinding`) sending a perceptual hash
+2. **User activity → Analytics**:
+   - Opt-in interaction events (`extension_installed`, `extension_updated`, `verify_started`, `verify_completed`, `badge_scan`, `options_opened`, `consent_changed`)
+3. **Personally identifiable information: User identifiers → Analytics**:
+   - Opt-in random client UUID (`crypto.randomUUID()`) stored locally in `chrome.storage.local` (`ga4ClientId`)
+
+Outbound destinations:
 
 | Destination | When | What travels |
 |---|---|---|
 | `www.verifieddit.com/?url=<media-url>` | User clicks "Inspect on Verifieddit" | The URL of the one media file they chose to inspect |
 | `www.trusteddit.com/?src=<surface>` | User clicks "Sign your own content with Trusteddit" | A constant naming which extension surface the link was clicked from. No user, device, asset or session identifier |
 | `manifests.sanmarcsoft.com/v1/matches/byBinding` | **Only after the user opts in** to "Check durable credentials online" (off by default), for images whose credential declares a durable binding | A perceptual hash of the image (pHash + dHash). Never the image, never a user, device or session identifier. `credentials: 'omit'` |
+| `www.google-analytics.com/mp/collect` | **Only after the user opts in** to "Share anonymous usage statistics" (off by default) | A random client UUID (`ga4ClientId`), session ID (`ga4SessionData`), event name, extension version, engagement time, and typed event parameters (`source`, `result`, `has_durable_binding`, `media_type`, `previous_version`, `value`). `fetch` POST. |
 
 The `src` value is drawn from a fixed set (`extension-panel`, `extension-popup`,
 `extension-options`, `extension-context-menu`, `extension-release-notes`) and is
 disclosed by the receiving sites: verifieddit.com privacy policy §2.8 and
 trusteddit.com privacy policy §2.5, both published before the parameter shipped.
 
-The manifest-store lookup is the extension's only request not begun by a click,
-which is why it ships off and is granted in context: the "Cloud-recoverable"
-pillar in the panel states what would be sent before anything is. Consent
-applies forward only; enabling it never re-checks media already on screen.
+The manifest-store lookup is off by default and is granted in context: the
+"Cloud-recoverable" pillar in the panel states what would be sent before anything
+is. Consent applies forward only; enabling it never re-checks media already on
+screen.
 
-Beyond these, the extension collects nothing, sends no analytics, and sets no
-cookies. Verified against the source: zero analytics SDKs, and no
-`document.cookie`, `localStorage` or `sessionStorage` anywhere in `src/`.
+The anonymous analytics collection uses the Google Analytics 4 Measurement
+Protocol (`src/analytics.ts`). It is strictly **off by default** and transmits
+nothing unless the user explicitly opts in via the initial popup consent banner
+or the Options tab toggle. It sends no URLs, page titles, page content, file
+names, media bytes, hashes of user media, signer identities, certificate
+details, or account credentials. Google receives the sender IP address as part
+of standard HTTPS transport. Auto-scan telemetry is throttled to at most one
+verify/scan event set per tab per minute. Users can turn off usage statistics at
+any time from the popup Options tab, immediately stopping all transmission. A
+build produced without `GA4_MEASUREMENT_ID` and `GA4_API_SECRET` contains no
+endpoint credentials and the analytics client is completely inert.
+
+Beyond these, the extension collects nothing and sets no cookies. Verified
+against the source: zero analytics SDKs, and no `document.cookie`,
+`localStorage` or `sessionStorage` anywhere in `src/`.
 
 ## Screenshots
 

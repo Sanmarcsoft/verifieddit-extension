@@ -16,8 +16,8 @@ was altered, or whose certificate chain is broken, gets caught here instead of
 being shown to you as fine.
 
 Verification runs entirely in your browser using locally bundled WebAssembly.
-Media bytes never leave your machine. No account, no analytics, no telemetry, no
-cookies.
+Media bytes never leave your machine. No account, no advertising, and no cookies.
+Anonymous usage statistics are strictly opt-in and off by default.
 
 ---
 
@@ -61,18 +61,19 @@ guessing.
 
 ## Privacy
 
-Verification is local. The extension collects nothing about you and keeps no
-record of what you inspected. There are zero analytics SDKs, zero tracking calls,
-and no use of cookies, `localStorage` or `sessionStorage` anywhere in `src/`.
+Verification is local. The extension keeps no record of what you inspected and
+collects no personal data about you. There are no advertising trackers, no
+third-party analytics SDKs, and no use of cookies, `localStorage` or
+`sessionStorage` anywhere in `src/`.
 
-Data leaves the device in exactly five cases. Each one follows something you
-did, and none carries an identifier for you, your device or your session:
+Data leaves the device only in specific, user-controlled scenarios:
 
 | What | When |
 |---|---|
 | The URL of one media file | You click *Inspect on Verifieddit* |
 | A fixed word naming an extension surface (`?src=`) | You click the Trusteddit link |
 | A perceptual hash of one image | **Only if you opt in** to the durable credential check, which ships off |
+| Anonymous usage statistics | **Only if you opt in** to share anonymous usage statistics, which ships off |
 | A trust-list refresh | Once a day, and only for a list you imported from a URL yourself |
 | A trust-list fetch | You paste a URL into the importer and click Fetch |
 
@@ -132,6 +133,15 @@ any image, video or audio element and choose *Verify with Verifieddit.*
 | `bun run serve:fixtures` | Serve the demo corpus on `:3000` |
 
 Always use **bun**, never npm/npx.
+
+### Build environment variables
+
+A build reads `GA4_MEASUREMENT_ID`, `GA4_API_SECRET`, and optionally `GA_DEBUG`
+from the environment or a local `.env` file (`.env.example` lists them). Rollup
+inlines these variables as build-time constants via the `@rollup/plugin-replace`
+allowlist. Leaving them unset produces a build whose analytics client is
+completely inert: it never calls the network and never logs. Real credential
+values must never be committed to the repository.
 
 ### A note on the demo corpus
 

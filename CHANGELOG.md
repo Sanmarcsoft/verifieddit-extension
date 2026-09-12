@@ -1,5 +1,54 @@
 # CHANGELOG
 
+## v1.3.0
+
+- Added opt-in anonymous usage statistics via the Google Analytics 4 Measurement
+  Protocol (#182). Telemetry is disabled by default and sends data only after
+  the user explicitly grants consent. `src/analytics.ts` implements a typed,
+  fire-and-forget client sending HTTPS POST requests directly to
+  `https://www.google-analytics.com/mp/collect`. Events include
+  `extension_installed`, `extension_updated`, `verify_started`,
+  `verify_completed`, `badge_scan`, `options_opened`, and `consent_changed`.
+  Transmitted payloads include a locally generated pseudonymous installation
+  UUID (`crypto.randomUUID()`) stored in `chrome.storage.local` under
+  `ga4ClientId`, a timestamp-derived session ID in `chrome.storage.session`
+  (or in memory on Firefox) with a 30-minute inactivity expiration, the
+  extension version, engagement time, and typed event parameters such as verify
+  result (`valid`, `invalid`, `none`, `error`), media type (`image`, `video`,
+  `audio`, `pdf`), durable binding presence (`has_durable_binding`), previous
+  version on update, source on verification start (`context_menu`, `popup`,
+  `auto_scan`), and consent value (`granted`). No URLs, page content, media
+  bytes, media hashes, signer certificates, or personal identifiers are ever
+  collected or sent. Standard HTTPS transport discloses the user's IP address to
+  Google.
+
+- Consent UI added across both browser surfaces (#182). A first-run banner in
+  the popup (`src/popup.ts`) prompts users to allow or decline anonymous usage
+  statistics. A persistent toggle switch in both the popup Options tab and the
+  Firefox preferences page (`src/options.ts`) allows users to enable or disable
+  collection at any time, immediately starting or halting outbound telemetry.
+  Storage key `analyticsConsent` records the user's choice.
+
+- Auto-scan telemetry rate-limited (#182). Auto-scan events are throttled via
+  `shouldEmitScanEvent` in `src/analytics.ts` to at most one set of
+  `verify_started`, `verify_completed`, and `badge_scan` events per browser tab
+  per 60-second window, preventing page scanning from becoming a per-image
+  beacon.
+
+- Build-time credential injection with an inert default (#182). Endpoint
+  credentials `GA4_MEASUREMENT_ID` and `GA4_API_SECRET` (plus optional
+  `GA_DEBUG`) are inlined at build time by rollup via `@rollup/plugin-replace`
+  from the environment or `.env`. When built without credentials,
+  `isAnalyticsConfigured()` evaluates to `false` and the client operates as an
+  inert no-op that never calls `fetch` and never logs.
+
+- Privacy and store documentation updated (#182). Disclosures reflecting opt-in
+  telemetry and local storage keys (`analyticsConsent`, `ga4ClientId`,
+  `ga4SessionData`) updated across `PRIVACY_POLICY.md`,
+  `CHROME_WEB_STORE_LISTING.md`, `WEBSTORE_LISTING.md`,
+  `FIREFOX_ADDON_LISTING.md` (declaring optional `technicalAndInteraction`),
+  `AMO_REVIEWER_NOTES.md`, and `README.md`.
+
 ## v1.2.6
 
 - An expired signing certificate no longer reads as a broken file when a
