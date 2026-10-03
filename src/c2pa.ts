@@ -6,6 +6,7 @@
 import { createC2pa, type C2paSdk, type Manifest, type ManifestStore as C2paRsStore } from '@contentauth/c2pa-web'
 import { type CertificateInfoExtended } from './certs/certs.js'
 import { decode as coseDecode, type TSTInfo, type COSE_Sign1 } from './certs/cose.js'
+import { timestampTokensOf } from './certs/coseTimestamp.js'
 import { isContentBox, decode as jumbfDecode } from './certs/jumbf.js'
 import { getManifestFromMetadata } from './certs/metadata.js'
 import { AWAIT_ASYNC_RESPONSE, MSG_C2PA_VALIDATE_URL, type MSG_PAYLOAD } from './constants.js'
@@ -199,7 +200,7 @@ export async function validateUrl (url: string): Promise<C2paResult | C2paError>
     trustList: null,
     tsaTrustList: null,
     certChain: cose?.unprotected?.x5chain ?? cose?.protected.x5chain ?? null,
-    tstTokens: cose?.unprotected?.sigTst?.tstTokens ?? null,
+    tstTokens: timestampTokensOf<TSTInfo>(cose?.unprotected),
     editsAndActivity,
     assertionLabels,
     manifestStoreVerified,
