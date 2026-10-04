@@ -113,4 +113,64 @@ describe('ReplayCache', () => {
 
     expect(cache.size).toBe(5)
   })
+
+  it('normalizes malleable ECDSA signatures with (r, n - s) to the same key', () => {
+    const fixedNow = 1700000000000
+    const cache = new ReplayCache({ now: () => fixedNow })
+
+    const n = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551n
+    const rBytes = new Uint8Array(32).fill(0x01)
+    const sLow = 0x1234567890abcdefn
+    const sHigh = n - sLow
+
+    const sLowBytes = new Uint8Array(32)
+    const hexLow = sLow.toString(16).padStart(64, '0')
+    for (let i = 0; i < 32; i++) {
+      sLowBytes[i] = parseInt(hexLow.slice(i * 2, i * 2 + 2), 16)
+    }
+
+    const sHighBytes = new Uint8Array(32)
+    const hexHigh = sHigh.toString(16).padStart(64, '0')
+    for (let i = 0; i < 32; i++) {
+      sHighBytes[i] = parseInt(hexHigh.slice(i * 2, i * 2 + 2), 16)
+    }
+
+    const sigLow = new Uint8Array(64)
+    sigLow.set(rBytes, 0)
+    sigLow.set(sLowBytes, 32)
+    const sigLowB64 = Buffer.from(sigLow).toString('base64url')
+
+    const sigHigh = new Uint8Array(64)
+    sigHigh.set(rBytes, 0)
+    sigHigh.set(sHighBytes, 32)
+    const sigHighB64 = Buffer.from(sigHigh).toString('base64url')
+
+    expect(sigLowB64).not.toBe(sigHighB64)
+
+    // Store the first signature
+    expect(cache.remember(sigLowB64, fixedNow)).toBe(false)
+    expect(cache.has(sigLowB64)).toBe(true)
+
+    // The malleated signature must be recognised as a replay
+    expect(cache.has(sigHighB64)).toBe(true)
+    expect(cache.remember(sigHighB64, fixedNow)).toBe(true)
+    expect(cache.size).toBe(1)
+  })
+
+  it('sweeps at most once per second while lookups never treat expired entries as present', () => {
+    let currentTime = 1700000000000
+    const cache = new ReplayCache({
+      windowMs: 5000,
+      now: () => currentTime
+    })
+
+    cache.remember('sig1', currentTime)
+    expect(cache.has('sig1')).toBe(true)
+
+    // Advance past expiration (+5001ms)
+    currentTime += 5001
+
+    // Lookup never treats expired entry as present
+    expect(cache.has('sig1')).toBe(false)
+  })
 })
