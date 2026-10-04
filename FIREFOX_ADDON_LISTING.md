@@ -59,8 +59,9 @@
 > **v1.3.0 delta a reviewer will see.** The manifest adds an optional data
 > collection category (#182):
 > `"data_collection_permissions": { "required": ["none"], "optional": ["websiteContent", "technicalAndInteraction"] }`.
-> The new category covers anonymous, opt-in usage statistics via the Google
-> Analytics 4 Measurement Protocol (`src/analytics.ts`). It is declared under
+> The new category covers anonymous, opt-in usage statistics via a signed
+> telemetry relay operated by SanMarcSoft and stored in self-hosted Umami in
+> the EU (`src/analytics.ts`). No data is sent to Google. It is declared under
 > `optional` because it is strictly off by default and requires explicit user
 > consent, meeting Mozilla's data collection policy; `required` remains `["none"]`
 > because no data is collected without consent.
@@ -174,20 +175,30 @@ Both halves are load-bearing and both are truthful:
   still information about what they are viewing, so it is disclosed and it is a
   choice rather than a default.
 - **`optional: ["technicalAndInteraction"]`**: anonymous usage statistics via
-  the Google Analytics 4 Measurement Protocol (`src/analytics.ts`). This is
-  **off by default** and requires explicit user opt-in (via the initial popup
-  consent banner or the Preferences toggle). Mozilla's policy requires opt-in
-  telemetry to be declared as optional, so `technicalAndInteraction` is placed
-  in `optional`; `required` remains `["none"]` because nothing is sent without
-  consent. When enabled, it sends a random installation UUID (`ga4ClientId`),
-  ephemeral session ID (`ga4SessionData`), event name, extension version,
-  engagement time, and typed operational parameters (`source`, `result`,
-  `has_durable_binding`, `media_type`, `previous_version`, `value`). It never
-  sends URLs, page titles, page content, file names, media bytes, hashes of user
-  media, signer identities, certificate details, or account credentials. Google
-  receives the request's IP address per standard HTTPS transport. Auto-scan
-  telemetry is throttled to at most once per tab per minute. Turning it off in
-  Preferences stops all outbound analytics immediately.
+  a signed telemetry relay operated by SanMarcSoft and forwarded to self-hosted
+  Umami in the EU at `analytics.sanmarcsoft.com` (`src/analytics.ts`). No data
+  is sent to Google. This is **off by default** and requires explicit user
+  opt-in (via the initial popup consent banner or the Preferences toggle).
+  Mozilla's policy requires opt-in telemetry to be declared as optional, so
+  `technicalAndInteraction` is placed in `optional`; `required` remains `["none"]`
+  because nothing is sent without consent. When enabled, each event is signed by
+  a key generated on the device for that install (ECDSA P-256, private key
+  non-extractable, kept in the browser's IndexedDB); the install identifier is the
+  RFC 7638 thumbprint of the public key, not derived from the user or device.
+  IP addresses are not stored: the relay uses the client address only in memory,
+  as a salted hash with a daily rotating salt, for rate limiting, and never
+  forwards or logs it. The exact seven events and their parameters are:
+  `extension_installed`; `extension_updated` (`previous_version`); `verify_started`
+  (`source`); `verify_completed` (`result`, `has_durable_binding`, `media_type`);
+  `badge_scan`; `options_opened`; `consent_changed` (`value`). It never sends
+  URLs, page titles, page content, file names, or content of verified media
+  (no media bytes, no media hashes, no signer identities, no certificate details,
+  or account credentials). Auto-scan telemetry is throttled to at most once per
+  tab per minute. Turning it off in Preferences stops all outbound analytics
+  immediately, sends one signed erasure request to the relay, and deletes the
+  key, ticket, and identifier from the browser. Erasure of already stored
+  records in Umami is processed by SanMarcSoft from the relay's erasure queue (it
+  is not instantaneous or automatic inside Umami).
 
 The one remaining lint warning pair
 (`KEY_FIREFOX_UNSUPPORTED_BY_MIN_VERSION`) is expected: the key needs Firefox

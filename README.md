@@ -136,12 +136,13 @@ Always use **bun**, never npm/npx.
 
 ### Build environment variables
 
-A build reads `GA4_MEASUREMENT_ID`, `GA4_API_SECRET`, and optionally `GA_DEBUG`
-from the environment or a local `.env` file (`.env.example` lists them). Rollup
-inlines these variables as build-time constants via the `@rollup/plugin-replace`
-allowlist. Leaving them unset produces a build whose analytics client is
-completely inert: it never calls the network and never logs. Real credential
-values must never be committed to the repository.
+A build reads `TELEMETRY_RELAY_URL` from the environment or a local `.env` file
+(`.env.example` lists it). Rollup inlines this variable as a build-time constant
+via the `@rollup/plugin-replace` allowlist. Leaving it unset or empty produces a
+build whose analytics client is completely inert: it never calls the network and
+never logs. The companion telemetry relay service is located in `relay/`; see
+[`relay/README.md`](relay/README.md) for its architecture, configuration, and
+deployment.
 
 ### A note on the demo corpus
 

@@ -104,18 +104,28 @@ for no functional benefit.
   stripped from a file. Image bytes are never sent. We still disclose it,
   because a perceptual hash of a viewed image is information about what the user
   is viewing.
-- **Optional: technicalAndInteraction.** Anonymous usage statistics via the
-  Google Analytics 4 Measurement Protocol (`src/analytics.ts`). This is
-  **off by default** and sends nothing unless the user explicitly opts in. When
-  enabled, it sends a random installation UUID (`ga4ClientId`), ephemeral session
-  ID (`ga4SessionData`), event name, extension version, engagement time, and
-  typed operational parameters (`source`, `result`, `has_durable_binding`,
-  `media_type`, `previous_version`, `value`). It never sends URLs, page titles,
-  page content, file names, media bytes, hashes of user media, signer identities,
-  certificate details, or account credentials. Google receives the request's IP
-  address per standard HTTPS transport. Auto-scan telemetry is throttled to at
-  most once per tab per minute. Turning it off in Preferences stops all outbound
-  analytics immediately. There is no account or personal data collected.
+- **Optional: technicalAndInteraction.** Anonymous usage statistics via a signed
+  telemetry relay operated by SanMarcSoft and stored in self-hosted Umami in the
+  EU at `analytics.sanmarcsoft.com` (`src/analytics.ts`). No data is sent to
+  Google. This is **off by default** and sends nothing unless the user explicitly
+  opts in. When enabled, each event is signed by a key generated on the device
+  for that install (ECDSA P-256, private key non-extractable, kept in the browser's
+  IndexedDB); the install identifier is the RFC 7638 thumbprint of the public key,
+  not derived from the user or device. IP addresses are not stored: the relay uses
+  the client address only in memory, as a salted hash with a daily rotating salt,
+  for rate limiting, and never forwards or logs it. The exact seven events and
+  their parameters are: `extension_installed`; `extension_updated` (`previous_version`);
+  `verify_started` (`source`); `verify_completed` (`result`, `has_durable_binding`,
+  `media_type`); `badge_scan`; `options_opened`; `consent_changed` (`value`). It
+  never sends URLs, page titles, page content, file names, or content of verified
+  media (no media bytes, no media hashes, no signer identities, no certificate
+  details, or account credentials). Auto-scan telemetry is throttled to at most
+  once per tab per minute. Turning it off in Preferences stops all outbound
+  analytics immediately, sends one signed erasure request to the relay, and deletes
+  the key, ticket, and identifier from the browser. Erasure of already stored
+  records in Umami is processed by SanMarcSoft from the relay's erasure queue (it
+  is not instantaneous or automatic inside Umami). There is no account or personal
+  data collected.
 
 The gate for the manifest store is enforced at a single entry point in
 `manifestStore.ts` rather than at each call site, so no caller can reach the
@@ -127,24 +137,29 @@ with `getAnalyticsConsent() === 'granted'` and `isAnalyticsConfigured()`.
 1. Install the extension.
 2. Open the extension popup: observe the consent banner asking whether to share
    anonymous usage statistics.
-3. Choose "No" (or do nothing): observe zero network traffic to
-   `google-analytics.com`. The extension remains fully functional.
+3. Choose "No" (or do nothing): observe zero outbound telemetry traffic. No
+   data is sent to Google or any third-party analytics service. The extension
+   remains fully functional.
 4. Choose "Yes" (or toggle "Share anonymous usage statistics" on in
-   Preferences): observe outbound HTTPS POST requests to
-   `https://www.google-analytics.com/mp/collect` for extension events (e.g.
-   `consent_changed`, `verify_started`, `verify_completed`).
-5. Toggle the setting off in Preferences: observe that all outbound analytics
-   requests cease immediately.
+   Preferences): observe outbound HTTPS requests to the configured telemetry
+   relay (`POST /v1/installs` to acquire an install ticket, followed by signed
+   `POST /v1/events` for extension events such as `consent_changed`,
+   `verify_started`, `verify_completed`).
+5. Toggle the setting off in Preferences: observe an outbound signed erasure
+   request (`DELETE /v1/installs`) sent to the relay, local credentials and
+   tickets deleted, and all subsequent outbound analytics requests cease
+   immediately.
 
 ### Note on building from source
 
-The analytics endpoint credentials (`GA4_MEASUREMENT_ID` and `GA4_API_SECRET`)
-are build-time constants inlined by rollup via `@rollup/plugin-replace`. When
-building from the submitted source archive without these environment variables
-set, `isAnalyticsConfigured()` evaluates to `false` and the client is an inert
-no-op: it never initiates network requests and never logs. This is by design,
-and the absence of production analytics credentials in the source archive is
-intentional and not a missing-source finding.
+The telemetry relay endpoint URL (`TELEMETRY_RELAY_URL`) is a build-time
+constant inlined by rollup via `@rollup/plugin-replace`. When building from the
+source archive without this environment variable set, `isAnalyticsConfigured()`
+evaluates to `false` and the client is an inert no-op: it never initiates
+network requests and never logs. The companion relay service source is located in
+`relay/` (see `relay/README.md`). This is by design, and the absence of a
+production relay URL in the source archive is intentional and not a
+missing-source finding.
 
 Other network traffic, none of it user data:
 

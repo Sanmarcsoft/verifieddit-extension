@@ -95,7 +95,7 @@ https://www.verifieddit.com/privacy
 ## Permission Justifications
 
 ### storage
-Saves the user's auto-scan preference and a local cache of the loaded trust lists in the browser. Also stores the analytics opt-in consent state (`analyticsConsent`) and the local random client UUID (`ga4ClientId`). Ephemeral session state (`ga4SessionData`) is stored in `chrome.storage.session`. Nothing is synced to a server. No new permission is required for analytics.
+Saves the user's auto-scan preference and a local cache of the loaded trust lists in the browser. Also stores the analytics opt-in consent state (`analyticsConsent`). Ephemeral relay ticket data (`telemetryTicketData`) is stored in `chrome.storage.session`, while the non-extractable ECDSA signing key pair is stored in IndexedDB. Nothing is synced to a server. No new permission is required for analytics.
 
 ### activeTab
 Accesses the currently active tab when the user clicks the toolbar action or selects an item from the right-click context menu, scoped to that single interaction.
@@ -113,7 +113,7 @@ The opt-in for the manifest-store lookup is kept in `chrome.storage.local` under
 Hosts the C2PA WebAssembly verification engine in an offscreen document. A Manifest V3 service worker cannot run the WASM toolkit directly, so verification work is delegated to this document. It renders nothing to the user, performs no network calls of its own, and exists only for the duration of verification.
 
 ### Host Permissions: <all_urls>
-The extension needs access to all URLs because C2PA content credentials can appear on any website. The extension scans image, video, and audio elements on the current page to detect and verify cryptographic provenance data embedded in media files. Without broad host access, users would need to manually allowlist every website, defeating the purpose of automatic content credential detection. The existing `<all_urls>` host permission also covers outbound fetch requests to endpoints such as `https://www.google-analytics.com/mp/collect` when optional analytics is enabled, so no additional host permission is required.
+The extension needs access to all URLs because C2PA content credentials can appear on any website. The extension scans image, video, and audio elements on the current page to detect and verify cryptographic provenance data embedded in media files. Without broad host access, users would need to manually allowlist every website, defeating the purpose of automatic content credential detection. The existing `<all_urls>` host permission also covers outbound fetch requests to endpoints such as the telemetry relay when optional analytics is enabled (no data is sent to Google), so no additional host permission is required.
 
 ## Data Sent Off-Device
 
@@ -126,7 +126,7 @@ under the following categories and purposes:
 2. **User activity → Analytics**:
    - Opt-in interaction events (`extension_installed`, `extension_updated`, `verify_started`, `verify_completed`, `badge_scan`, `options_opened`, `consent_changed`)
 3. **Personally identifiable information: User identifiers → Analytics**:
-   - Opt-in random client UUID (`crypto.randomUUID()`) stored locally in `chrome.storage.local` (`ga4ClientId`)
+   - Opt-in per-install identifier (RFC 7638 thumbprint of an on-device ECDSA P-256 public key, generated locally and not derived from user or device identity)
 
 Outbound destinations:
 
@@ -135,7 +135,7 @@ Outbound destinations:
 | `www.verifieddit.com/?url=<media-url>` | User clicks "Inspect on Verifieddit" | The URL of the one media file they chose to inspect |
 | `www.trusteddit.com/?src=<surface>` | User clicks "Sign your own content with Trusteddit" | A constant naming which extension surface the link was clicked from. No user, device, asset or session identifier |
 | `manifests.sanmarcsoft.com/v1/matches/byBinding` | **Only after the user opts in** to "Check durable credentials online" (off by default), for images whose credential declares a durable binding | A perceptual hash of the image (pHash + dHash). Never the image, never a user, device or session identifier. `credentials: 'omit'` |
-| `www.google-analytics.com/mp/collect` | **Only after the user opts in** to "Share anonymous usage statistics" (off by default) | A random client UUID (`ga4ClientId`), session ID (`ga4SessionData`), event name, extension version, engagement time, and typed event parameters (`source`, `result`, `has_durable_binding`, `media_type`, `previous_version`, `value`). `fetch` POST. |
+| Telemetry relay (configured by `TELEMETRY_RELAY_URL`) | **Only after the user opts in** to "Share anonymous usage statistics" (off by default) | Signed event payload with install ID (public key thumbprint), ticket, timestamp, version, signature, JWK, and typed event parameters (`source`, `result`, `has_durable_binding`, `media_type`, `previous_version`, `value`). Forwarded to self-hosted Umami in the EU (`analytics.sanmarcsoft.com`). `fetch` POST / DELETE. |
 
 The `src` value is drawn from a fixed set (`extension-panel`, `extension-popup`,
 `extension-options`, `extension-context-menu`, `extension-release-notes`) and is
@@ -147,17 +147,30 @@ The manifest-store lookup is off by default and is granted in context: the
 is. Consent applies forward only; enabling it never re-checks media already on
 screen.
 
-The anonymous analytics collection uses the Google Analytics 4 Measurement
-Protocol (`src/analytics.ts`). It is strictly **off by default** and transmits
-nothing unless the user explicitly opts in via the initial popup consent banner
-or the Options tab toggle. It sends no URLs, page titles, page content, file
-names, media bytes, hashes of user media, signer identities, certificate
-details, or account credentials. Google receives the sender IP address as part
-of standard HTTPS transport. Auto-scan telemetry is throttled to at most one
-verify/scan event set per tab per minute. Users can turn off usage statistics at
-any time from the popup Options tab, immediately stopping all transmission. A
-build produced without `GA4_MEASUREMENT_ID` and `GA4_API_SECRET` contains no
-endpoint credentials and the analytics client is completely inert.
+Anonymous usage statistics are collected via a signed telemetry relay operated
+by SanMarcSoft (`src/analytics.ts`) and forwarded to self-hosted Umami in the
+EU (`https://analytics.sanmarcsoft.com`). No data is sent to Google. Collection
+is strictly **off by default** and transmits nothing unless the user explicitly
+opts in via the initial popup consent banner or the Options tab toggle. Each event
+is signed by an ECDSA P-256 key generated on the device for that install, with
+the private key held non-extractably in IndexedDB; the install identifier is the
+RFC 7638 thumbprint of the public key, not derived from user or device identity.
+IP addresses are not stored: the relay uses the client address only in memory,
+as a salted hash with a daily rotating salt, for rate limiting, and never
+forwards or logs it. The exact seven events sent are `extension_installed`,
+`extension_updated` (`previous_version`), `verify_started` (`source`),
+`verify_completed` (`result`, `has_durable_binding`, `media_type`),
+`badge_scan`, `options_opened`, and `consent_changed` (`value`). It sends no
+URLs, page titles, page content, file names, or content of verified media.
+Auto-scan telemetry is throttled to at most one verify/scan event set per tab
+per minute. Users can turn off usage statistics at any time from the popup
+Options tab: doing so immediately stops outbound telemetry, sends one signed
+erasure request (`DELETE /v1/installs`) to the relay, and deletes the key, ticket,
+and install identifier from the browser. Erasure of already stored records in
+Umami is processed by SanMarcSoft from the relay's erasure queue (it is not
+instantaneous or automatic inside Umami). A build produced with an empty
+`TELEMETRY_RELAY_URL` contains no endpoint credentials and the analytics client
+is completely inert.
 
 Beyond these, the extension collects nothing and sets no cookies. Verified
 against the source: zero analytics SDKs, and no `document.cookie`,

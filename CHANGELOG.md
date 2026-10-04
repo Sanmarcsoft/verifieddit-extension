@@ -2,51 +2,54 @@
 
 ## v1.3.0
 
-- Added opt-in anonymous usage statistics via the Google Analytics 4 Measurement
-  Protocol (#182). Telemetry is disabled by default and sends data only after
-  the user explicitly grants consent. `src/analytics.ts` implements a typed,
-  fire-and-forget client sending HTTPS POST requests directly to
-  `https://www.google-analytics.com/mp/collect`. Events include
-  `extension_installed`, `extension_updated`, `verify_started`,
-  `verify_completed`, `badge_scan`, `options_opened`, and `consent_changed`.
-  Transmitted payloads include a locally generated pseudonymous installation
-  UUID (`crypto.randomUUID()`) stored in `chrome.storage.local` under
-  `ga4ClientId`, a timestamp-derived session ID in `chrome.storage.session`
-  (or in memory on Firefox) with a 30-minute inactivity expiration, the
-  extension version, engagement time, and typed event parameters such as verify
-  result (`valid`, `invalid`, `none`, `error`), media type (`image`, `video`,
-  `audio`, `pdf`), durable binding presence (`has_durable_binding`), previous
-  version on update, source on verification start (`context_menu`, `popup`,
-  `auto_scan`), and consent value (`granted`). No URLs, page content, media
-  bytes, media hashes, signer certificates, or personal identifiers are ever
-  collected or sent. Standard HTTPS transport discloses the user's IP address to
-  Google.
+- Added opt-in anonymous usage statistics via a signed telemetry relay (#183).
+  Telemetry is disabled by default and sends data only after the user explicitly
+  grants consent. No data is sent to Google Analytics or any third-party
+  analytics service: events are sent to a telemetry relay operated by
+  SanMarcSoft and stored in self-hosted Umami in the EU at
+  `analytics.sanmarcsoft.com`. `src/analytics.ts` implements a typed,
+  fire-and-forget client. Each event is signed with an on-device ECDSA P-256
+  key whose private key is non-extractable and kept in IndexedDB; the install
+  identifier is the RFC 7638 public key thumbprint, not derived from the user
+  or device. Events are authenticated by short-lived tickets issued by the
+  relay. Transmitted events are strictly limited to seven:
+  `extension_installed`, `extension_updated` (`previous_version`),
+  `verify_started` (`source`), `verify_completed` (`result`,
+  `has_durable_binding`, `media_type`), `badge_scan`, `options_opened`, and
+  `consent_changed` (`value`). No URLs, page content, file names, or content of
+  verified media (no media bytes, no media hashes, no signer certificates, or
+  personal identifiers) are ever collected or sent. IP addresses are not stored:
+  the relay uses the client IP only in memory, as a salted hash with a daily
+  rotating salt, for rate limiting, and never forwards or logs it.
 
-- Consent UI added across both browser surfaces (#182). A first-run banner in
-  the popup (`src/popup.ts`) prompts users to allow or decline anonymous usage
+- Consent UI and signed erasure flow added (#183). A first-run banner in the
+  popup (`src/popup.ts`) prompts users to allow or decline anonymous usage
   statistics. A persistent toggle switch in both the popup Options tab and the
   Firefox preferences page (`src/options.ts`) allows users to enable or disable
-  collection at any time, immediately starting or halting outbound telemetry.
-  Storage key `analyticsConsent` records the user's choice.
+  collection at any time. Disabling the setting immediately halts outbound
+  telemetry, sends one signed erasure request (`DELETE /v1/installs`) to the
+  relay, and deletes the key pair, ticket, and install identifier from the
+  browser. Erasure of stored records in Umami is processed by SanMarcSoft from
+  the relay's erasure queue. Storage key `analyticsConsent` records consent
+  status.
 
-- Auto-scan telemetry rate-limited (#182). Auto-scan events are throttled via
+- Auto-scan telemetry rate-limited (#183). Auto-scan events are throttled via
   `shouldEmitScanEvent` in `src/analytics.ts` to at most one set of
   `verify_started`, `verify_completed`, and `badge_scan` events per browser tab
   per 60-second window, preventing page scanning from becoming a per-image
   beacon.
 
-- Build-time credential injection with an inert default (#182). Endpoint
-  credentials `GA4_MEASUREMENT_ID` and `GA4_API_SECRET` (plus optional
-  `GA_DEBUG`) are inlined at build time by rollup via `@rollup/plugin-replace`
-  from the environment or `.env`. When built without credentials,
-  `isAnalyticsConfigured()` evaluates to `false` and the client operates as an
-  inert no-op that never calls `fetch` and never logs.
+- Build-time relay configuration with an inert default (#183). The relay
+  endpoint `TELEMETRY_RELAY_URL` is inlined at build time by rollup via
+  `@rollup/plugin-replace` from the environment or `.env`. When built without a
+  relay URL or when empty, `isAnalyticsConfigured()` evaluates to `false` and the
+  client operates as an inert no-op that never calls `fetch` and never logs. The
+  stateless relay service is implemented in `relay/` (see `relay/README.md`).
 
-- Privacy and store documentation updated (#182). Disclosures reflecting opt-in
-  telemetry and local storage keys (`analyticsConsent`, `ga4ClientId`,
-  `ga4SessionData`) updated across `PRIVACY_POLICY.md`,
-  `CHROME_WEB_STORE_LISTING.md`, `WEBSTORE_LISTING.md`,
-  `FIREFOX_ADDON_LISTING.md` (declaring optional `technicalAndInteraction`),
+- Privacy and store documentation updated (#183). Disclosures reflecting opt-in
+  signed telemetry, IndexedDB key storage, salted hash rate limiting, and
+  relay architecture updated across `PRIVACY_POLICY.md`,
+  `CHROME_WEB_STORE_LISTING.md`, `FIREFOX_ADDON_LISTING.md`,
   `AMO_REVIEWER_NOTES.md`, and `README.md`.
 
 ## v1.2.6

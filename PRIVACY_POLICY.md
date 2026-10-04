@@ -67,7 +67,7 @@ This is the complete list. There is nothing else.
 | 3.4 | Two perceptual hashes of one image | Only if you switched the durable-credential check on | manifests.sanmarcsoft.com | A pHash and a dHash computed on your device, sent without cookies |
 | 3.5 | A request for an updated trust list | Only for a trust list you imported from a URL yourself | An allowlisted host | Nothing about you. Sent with credentials omitted. |
 | 3.6 | A request for a trust list you typed in | Only when you paste a URL into the trust-list importer and click Fetch | The host you typed | Nothing about you. Sent with credentials omitted. |
-| 3.7 | Anonymous usage statistics | Only if you opted in to share usage statistics (off by default) | google-analytics.com (`https://www.google-analytics.com/mp/collect`) | A random client UUID, session ID, event name, extension version, engagement time, and event parameters (e.g. verify result enum, media type). No URLs, media, or personal data. |
+| 3.7 | Anonymous usage statistics | Only if you opted in to share usage statistics (off by default) | Telemetry relay operated by SanMarcSoft, forwarded to self-hosted Umami in the EU (`analytics.sanmarcsoft.com`) | Signed event payload with install ID (public key thumbprint), ticket, timestamp, version, signature, JWK, and event parameters. No URLs, file names, media content, or personal data. |
 
 Notes on the ones that deserve detail:
 
@@ -99,54 +99,68 @@ lists bundled with the extension set no `download_url` and are never re-fetched.
 Refreshes are further restricted to an allowlist of four hosts:
 `contentcredentials.org`, `c2pa.org`, `trusteddit.com`, `verifieddit.com`.
 
-**3.7, anonymous usage statistics.** We use the Google Analytics 4 Measurement
-Protocol to collect aggregate, anonymous product metrics so we know whether the
-extension is working and which features are used.
+**3.7, anonymous usage statistics.** We collect aggregate, anonymous product
+metrics so we know whether the extension is working and which features are used.
+Events are sent to a telemetry relay operated by SanMarcSoft and stored in our
+self-hosted Umami instance in the EU (`https://analytics.sanmarcsoft.com`). No
+data is sent to Google Analytics or any other Google service.
 
 This is **off by default**. It sends nothing unless you explicitly opt in by
 clicking "Yes" on the first-run consent banner or by toggling "Share anonymous
 usage statistics" on in Options.
 
+How it works:
+- Each event is signed by a key generated on your device for that installation
+  (ECDSA P-256). The private key is non-extractable and kept securely in the
+  browser's IndexedDB database.
+- The installation identifier (`install_id`) is the RFC 7638 JWK thumbprint of
+  that public key, not derived from you, your account, or your device hardware.
+- The relay issues a short-lived ticket, which the extension includes with
+  subsequent signed event payloads.
+
 What IS sent:
-- A random identifier (`crypto.randomUUID()`) generated on your device and stored
-  in `chrome.storage.local` (`ga4ClientId`). It is not tied to your identity,
-  account, or hardware.
-- A session identifier derived from the current timestamp, stored in
-  `chrome.storage.session` (or in memory on Firefox) and discarded after
-  30 minutes of inactivity.
-- The event name, extension version, and elapsed `engagement_time_msec`.
-- Event-specific parameters: `previous_version` on an update
-  (`extension_updated`); `source` on verification start (`verify_started`:
-  `context_menu`, `popup`, or `auto_scan`); `result` (`valid`, `invalid`,
-  `none`, or `error`), `has_durable_binding` (boolean), and `media_type`
-  (`image`, `video`, `audio`, or `pdf`) on verification completion
-  (`verify_completed`); and `value` (`granted`) on consent change
-  (`consent_changed`).
-- The complete list of events is strictly: `extension_installed`,
-  `extension_updated`, `verify_started`, `verify_completed`, `badge_scan`,
-  `options_opened`, `consent_changed`.
+- The installation identifier (`install_id`), ticket, event timestamp (`ts`),
+  extension version, and an ECDSA P-256 signature (`sig`) over the canonical
+  JSON payload, accompanied by the public key (`jwk`) to verify the signature.
+- Event-specific parameters for one of the exact seven events:
+  - `extension_installed`: no parameters.
+  - `extension_updated`: `previous_version` (string, max 32 characters).
+  - `verify_started`: `source` (`context_menu`, `popup`, or `auto_scan`).
+  - `verify_completed`: `result` (`valid`, `invalid`, `none`, or `error`),
+    `has_durable_binding` (boolean), and `media_type` (`image`, `video`,
+    `audio`, or `pdf`).
+  - `badge_scan`: no parameters.
+  - `options_opened`: no parameters.
+  - `consent_changed`: `value` (`granted` or `denied`).
 
 What is NOT sent:
-No URLs, no page titles, no page content, no file names, no image, video, or
-audio data, no hashes of user media, no signer identities, no certificate
-details, no account or contact details, and nothing that identifies you or your
-device beyond the random identifier.
+No URLs, no page titles, no page content, no file names, no content of verified
+media (no image, video, audio, or PDF data), no hashes of user media, no signer
+identities, no certificate details, no account or contact details, and nothing
+that identifies you or your device beyond the installation public key thumbprint.
+No data is sent to Google.
 
-Google receives the request's IP address, as it does for any HTTPS network
-request.
+IP addresses are not stored: the relay uses the client IP address only in memory,
+as a salted hash with a daily rotating salt, for rate limiting, and never
+forwards or logs it.
 
 Auto-scan telemetry is throttled to at most one `verify_started`,
 `verify_completed`, and `badge_scan` set per browser tab per minute, ensuring
 page scanning does not become a per-image beacon.
 
-You can turn it off at any time in Options. Turning it off stops all outbound
-analytics traffic immediately. Because no accounts exist and data is pseudonymous
-under a random UUID, there is no separate deletion request flow.
+How to withdraw:
+You can turn the setting off at any time from the extension's options page
+(or Preferences on Firefox). Turning it off immediately stops all outbound
+telemetry. Doing so sends one signed erasure request (`DELETE /v1/installs`)
+to the relay and deletes the key pair, the ticket, and the identifier from the
+browser's IndexedDB and local storage. Erasure of already stored records in Umami
+is processed by SanMarcSoft from the relay's erasure queue (it is not
+instantaneous or automatic inside Umami).
 
 ## 4. What is stored, and where
 
-Only on your device, in `chrome.storage.local` and `chrome.storage.session`.
-Nothing is synced to a server or to your browser profile sync.
+Only on your device, in `chrome.storage.local`, `chrome.storage.session`, and
+IndexedDB. Nothing is synced to a server or to your browser profile sync.
 
 | Key | What it is |
 |---|---|
@@ -155,13 +169,13 @@ Nothing is synced to a server or to your browser profile sync.
 | `trustList` | The cached trust lists, bundled and imported |
 | `rc117AutoScanMigrationDone` | A one-time settings migration flag |
 | `analyticsConsent` | Consent status for usage statistics (`granted`, `denied`, or `unset`) |
-| `ga4ClientId` | Random UUID generated locally for anonymous analytics |
-| `ga4SessionData` | Ephemeral session ID and timestamp in `chrome.storage.session` (discarded after 30 minutes of inactivity) |
+| `telemetryTicketData` | Ephemeral relay ticket and install ID in `chrome.storage.session` (or memory on Firefox) |
 
-Transient C2PA engine startup errors and ephemeral GA4 session data
-(`ga4SessionData`) are held in `chrome.storage.session` (or in memory on Firefox).
-Your browser clears that automatically when it closes, and session data expires
-after 30 minutes of inactivity.
+The telemetry signing key pair is stored in IndexedDB (`verifieddit_telemetry`),
+with the private key set to non-extractable. Ephemeral relay tickets
+(`telemetryTicketData`) and transient C2PA engine startup errors are held in
+`chrome.storage.session` (or in memory on Firefox). Your browser clears session
+data automatically when it closes.
 
 No browsing history is stored. No media content is stored. No record of which
 media or URLs you inspected is stored. Uninstalling the extension removes all of
@@ -179,8 +193,8 @@ it.
   default.
 - No third-party advertising trackers or session replay tools (no Sentry,
   PostHog, Mixpanel, Segment, Datadog, or FullStory). Outbound analytics uses
-  only the minimal, typed GA4 Measurement Protocol endpoint when explicitly
-  enabled.
+  only minimal, signed requests to the SanMarcSoft telemetry relay when
+  explicitly enabled. No data is sent to Google Analytics or any third party.
 - No cookies. No advertising identifiers. No browser fingerprinting.
 - No sale or commercial brokering of data. We do not sell or monetize user data.
 - No account, no sign-in, no email address or contact information collected.
@@ -192,7 +206,7 @@ it.
 
 | Permission | Why it is needed |
 |---|---|
-| `storage` | The settings above, consent state, random client ID, and the local trust-list cache |
+| `storage` | The settings above, consent state, and the local trust-list cache (the telemetry signing key is kept in IndexedDB) |
 | `activeTab` | Limits the popup and the context menu to the one tab you are acting on, instead of standing access to every tab |
 | `contextMenus` | Adds the single item "Verify with Verifieddit." on images, video and audio |
 | `alarms` | The once-daily trust-list refresh described in 3.5 |
@@ -213,14 +227,16 @@ anything.
 - **Anonymous usage statistics:** off by default. You can enable or disable
   "Share anonymous usage statistics" at any time from the Options tab in the
   toolbar popup on Chrome, or under about:addons -> Verifieddit -> Preferences
-  on Firefox. When off, zero analytics requests are sent.
+  on Firefox. When turned off, the extension stops sending telemetry, sends a
+  signed erasure request to the relay, and deletes its local signing key, ticket,
+  and install identifier.
 - **Trust lists:** you can add and remove them, including your own.
 - **Everything else:** uninstalling removes all locally stored data.
 
 ## 8. Your rights
 
 Because the extension stores no identifying personal information on our servers
-and identifies analytics sessions only by a locally generated random UUID (if
+and identifies analytics only by a per-install public key thumbprint (if
 enabled), we hold no directly identifying personal data about you arising from
 its use, and so there is normally nothing to access, correct, port or erase.
 
@@ -260,7 +276,7 @@ and the source is public:
 | The complete set of network calls | `grep -rn "fetch(" src/` returns exactly six. Five reach external endpoints: rows 3.1, 3.4, 3.5, 3.6, and 3.7 (analytics, opt-in only); the sixth (`src/utils.ts`) is a `data:` URL that reaches no network. |
 | The trust-list host allowlist | `src/trustlist.ts`, `ALLOWED_REFRESH_HOSTS` |
 | The `?src=` values | `src/constants.ts`, the `ClickSource` type |
-| Anonymous analytics implementation | The source file is `src/analytics.ts`, with all events and parameters typed and declared there. A build without `GA4_MEASUREMENT_ID` and `GA4_API_SECRET` makes the client completely inert: it never calls `fetch` and never logs. |
+| Anonymous analytics implementation | The source file is `src/analytics.ts`, with all events and parameters typed and declared there. A build with an empty `TELEMETRY_RELAY_URL` makes the client completely inert: it never calls `fetch` and never logs. The companion relay service is in `relay/`. |
 
 ## 12. Contact
 
