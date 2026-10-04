@@ -135,7 +135,7 @@ Outbound destinations:
 | `www.verifieddit.com/?url=<media-url>` | User clicks "Inspect on Verifieddit" | The URL of the one media file they chose to inspect |
 | `www.trusteddit.com/?src=<surface>` | User clicks "Sign your own content with Trusteddit" | A constant naming which extension surface the link was clicked from. No user, device, asset or session identifier |
 | `manifests.sanmarcsoft.com/v1/matches/byBinding` | **Only after the user opts in** to "Check durable credentials online" (off by default), for images whose credential declares a durable binding | A perceptual hash of the image (pHash + dHash). Never the image, never a user, device or session identifier. `credentials: 'omit'` |
-| Telemetry relay (configured by `TELEMETRY_RELAY_URL`) | **Only after the user opts in** to "Share anonymous usage statistics" (off by default) | Signed event payload with install ID (public key thumbprint), ticket, timestamp, version, signature, JWK, and typed event parameters (`source`, `result`, `has_durable_binding`, `media_type`, `previous_version`, `value`). Forwarded to self-hosted Umami in the EU (`analytics.sanmarcsoft.com`). `fetch` POST / DELETE. |
+| Telemetry relay (configured by `TELEMETRY_RELAY_URL`) | **Only after the user opts in** to "Share anonymous usage statistics" (off by default) | Signed event payload with install ID (public key thumbprint), ticket, timestamp, extension version, browser family (Chrome or Firefox), signature, JWK, and typed event parameters (`source`, `result`, `has_durable_binding`, `media_type`, `previous_version`, `value`). Forwarded to self-hosted Umami in the EU (`analytics.sanmarcsoft.com`). `fetch` POST / DELETE. |
 
 The `src` value is drawn from a fixed set (`extension-panel`, `extension-popup`,
 `extension-options`, `extension-context-menu`, `extension-release-notes`) and is
@@ -157,11 +157,13 @@ the private key held non-extractably in IndexedDB; the install identifier is the
 RFC 7638 thumbprint of the public key, not derived from user or device identity.
 IP addresses are not stored: the relay uses the client address only in memory,
 as a salted hash with a daily rotating salt, for rate limiting, and never
-forwards or logs it. The exact seven events sent are `extension_installed`,
-`extension_updated` (`previous_version`), `verify_started` (`source`),
-`verify_completed` (`result`, `has_durable_binding`, `media_type`),
-`badge_scan`, `options_opened`, and `consent_changed` (`value`). It sends no
-URLs, page titles, page content, file names, or content of verified media.
+forwards or logs it. Events carry only the event name, its typed parameters, the
+extension version, and the browser family (Chrome or Firefox). The exact seven
+events sent are `extension_installed`, `extension_updated` (`previous_version`),
+`verify_started` (`source`), `verify_completed` (`result`,
+`has_durable_binding`, `media_type`), `badge_scan`, `options_opened`, and
+`consent_changed` (`value`). It sends no URLs, page titles, page content, file
+names, or content of verified media.
 Auto-scan telemetry is throttled to at most one verify/scan event set per tab
 per minute. Users can turn off usage statistics at any time from the popup
 Options tab: doing so immediately stops outbound telemetry, sends one signed

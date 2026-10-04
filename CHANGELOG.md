@@ -12,15 +12,18 @@
   key whose private key is non-extractable and kept in IndexedDB; the install
   identifier is the RFC 7638 public key thumbprint, not derived from the user
   or device. Events are authenticated by short-lived tickets issued by the
-  relay. Transmitted events are strictly limited to seven:
-  `extension_installed`, `extension_updated` (`previous_version`),
-  `verify_started` (`source`), `verify_completed` (`result`,
-  `has_durable_binding`, `media_type`), `badge_scan`, `options_opened`, and
-  `consent_changed` (`value`). No URLs, page content, file names, or content of
-  verified media (no media bytes, no media hashes, no signer certificates, or
-  personal identifiers) are ever collected or sent. IP addresses are not stored:
-  the relay uses the client IP only in memory, as a salted hash with a daily
-  rotating salt, for rate limiting, and never forwards or logs it.
+  relay. Events carry only the event name, its typed parameters, the extension
+  version, and the browser family (Chrome or Firefox). Transmitted events are
+  strictly limited to seven: `extension_installed`, `extension_updated`
+  (`previous_version`), `verify_started` (`source`), `verify_completed`
+  (`result`, `has_durable_binding`, `media_type`), `badge_scan`,
+  `options_opened`, and `consent_changed` (`value`). No URLs, page content,
+  file names, or content of verified media (no media bytes, no media hashes, no
+  signer certificates, or personal identifiers) are ever collected or sent. IP
+  addresses are not stored: the relay uses the client IP only in memory, as a
+  salted hash with a daily rotating salt, for rate limiting, and never forwards
+  or logs it. The relay rate-limits requests per install and per hashed address,
+  and rejects a replayed signed request.
 
 - Consent UI and signed erasure flow added (#183). A first-run banner in the
   popup (`src/popup.ts`) prompts users to allow or decline anonymous usage

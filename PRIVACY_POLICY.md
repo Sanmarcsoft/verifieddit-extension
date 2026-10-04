@@ -67,7 +67,7 @@ This is the complete list. There is nothing else.
 | 3.4 | Two perceptual hashes of one image | Only if you switched the durable-credential check on | manifests.sanmarcsoft.com | A pHash and a dHash computed on your device, sent without cookies |
 | 3.5 | A request for an updated trust list | Only for a trust list you imported from a URL yourself | An allowlisted host | Nothing about you. Sent with credentials omitted. |
 | 3.6 | A request for a trust list you typed in | Only when you paste a URL into the trust-list importer and click Fetch | The host you typed | Nothing about you. Sent with credentials omitted. |
-| 3.7 | Anonymous usage statistics | Only if you opted in to share usage statistics (off by default) | Telemetry relay operated by SanMarcSoft, forwarded to self-hosted Umami in the EU (`analytics.sanmarcsoft.com`) | Signed event payload with install ID (public key thumbprint), ticket, timestamp, version, signature, JWK, and event parameters. No URLs, file names, media content, or personal data. |
+| 3.7 | Anonymous usage statistics | Only if you opted in to share usage statistics (off by default) | Telemetry relay operated by SanMarcSoft, forwarded to self-hosted Umami in the EU (`analytics.sanmarcsoft.com`) | Signed event payload with install ID (public key thumbprint), ticket, timestamp, extension version, browser family (Chrome or Firefox), signature, JWK, and event parameters. No URLs, file names, media content, or personal data. |
 
 Notes on the ones that deserve detail:
 
@@ -120,8 +120,10 @@ How it works:
 
 What IS sent:
 - The installation identifier (`install_id`), ticket, event timestamp (`ts`),
-  extension version, and an ECDSA P-256 signature (`sig`) over the canonical
-  JSON payload, accompanied by the public key (`jwk`) to verify the signature.
+  extension version, browser family (Chrome or Firefox), and an ECDSA P-256
+  signature (`sig`) over the canonical JSON payload, accompanied by the public key
+  (`jwk`) to verify the signature. This is the build's browser family only, not
+  the user agent string, not the browser version, not the operating system.
 - Event-specific parameters for one of the exact seven events:
   - `extension_installed`: no parameters.
   - `extension_updated`: `previous_version` (string, max 32 characters).
@@ -142,7 +144,8 @@ No data is sent to Google.
 
 IP addresses are not stored: the relay uses the client IP address only in memory,
 as a salted hash with a daily rotating salt, for rate limiting, and never
-forwards or logs it.
+forwards or logs it. The relay rate-limits requests per install and per hashed
+address, and rejects a replayed signed request.
 
 Auto-scan telemetry is throttled to at most one `verify_started`,
 `verify_completed`, and `badge_scan` set per browser tab per minute, ensuring

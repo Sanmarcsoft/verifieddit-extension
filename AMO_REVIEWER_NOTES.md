@@ -113,10 +113,13 @@ for no functional benefit.
   IndexedDB); the install identifier is the RFC 7638 thumbprint of the public key,
   not derived from the user or device. IP addresses are not stored: the relay uses
   the client address only in memory, as a salted hash with a daily rotating salt,
-  for rate limiting, and never forwards or logs it. The exact seven events and
-  their parameters are: `extension_installed`; `extension_updated` (`previous_version`);
-  `verify_started` (`source`); `verify_completed` (`result`, `has_durable_binding`,
-  `media_type`); `badge_scan`; `options_opened`; `consent_changed` (`value`). It
+  for rate limiting, and never forwards or logs it. Events carry only the event
+  name, its typed parameters, the extension version, and the browser family
+  (Chrome or Firefox). The exact seven events and their parameters are:
+  `extension_installed`; `extension_updated` (`previous_version`);
+  `verify_started` (`source`); `verify_completed` (`result`,
+  `has_durable_binding`, `media_type`); `badge_scan`; `options_opened`;
+  `consent_changed` (`value`). It
   never sends URLs, page titles, page content, file names, or content of verified
   media (no media bytes, no media hashes, no signer identities, no certificate
   details, or account credentials). Auto-scan telemetry is throttled to at most
