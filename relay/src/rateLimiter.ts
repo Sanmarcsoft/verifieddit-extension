@@ -1,3 +1,5 @@
+import { INSTALLS_PER_ADDRESS_MAX, INSTALLS_PER_ADDRESS_WINDOW_MS } from './limits'
+
 export interface RateLimiterOptions {
   maxRequests?: number
   windowMs?: number
@@ -9,8 +11,8 @@ interface Bucket {
   resetAt: number
 }
 
-const DEFAULT_MAX_REQUESTS = 30
-const DEFAULT_WINDOW_MS = 60 * 1000 // 1 minute
+const FALLBACK_MAX_REQUESTS = INSTALLS_PER_ADDRESS_MAX
+const FALLBACK_WINDOW_MS = INSTALLS_PER_ADDRESS_WINDOW_MS
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 
 export class RateLimiter {
@@ -24,8 +26,8 @@ export class RateLimiter {
   private readonly buckets: Map<string, Bucket>
 
   constructor (options: RateLimiterOptions = {}) {
-    this.maxRequests = options.maxRequests ?? DEFAULT_MAX_REQUESTS
-    this.windowMs = options.windowMs ?? DEFAULT_WINDOW_MS
+    this.maxRequests = options.maxRequests ?? FALLBACK_MAX_REQUESTS
+    this.windowMs = options.windowMs ?? FALLBACK_WINDOW_MS
     this.now = options.now ?? Date.now
 
     this.currentDayIndex = Math.floor(this.now() / MS_PER_DAY)

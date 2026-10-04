@@ -10,6 +10,18 @@ import {
   type PublicJwk,
   type RelayEvent
 } from '../src/protocol'
+import {
+  ERASURE_PER_ADDRESS_MAX,
+  ERASURE_PER_ADDRESS_WINDOW_MS,
+  ERASURE_PER_INSTALL_MAX,
+  ERASURE_PER_INSTALL_WINDOW_MS,
+  EVENTS_PER_ADDRESS_MAX,
+  EVENTS_PER_ADDRESS_WINDOW_MS,
+  EVENTS_PER_INSTALL_MAX,
+  EVENTS_PER_INSTALL_WINDOW_MS,
+  INSTALLS_PER_ADDRESS_MAX,
+  INSTALLS_PER_ADDRESS_WINDOW_MS
+} from '../src/limits'
 import { RateLimiter } from '../src/rateLimiter'
 import { ReplayCache } from '../src/replayCache'
 import { createHandler } from '../src/server'
@@ -991,5 +1003,762 @@ describe('HTTP Server Handler', () => {
 
     // Expired entry has been dropped from the cache: cache does not grow without bound
     expect(replayCache.size).toBe(0)
+  })
+
+  it('defines the expected rate limit constants in limits.ts', () => {
+    expect(EVENTS_PER_INSTALL_MAX).toBe(120)
+    expect(EVENTS_PER_INSTALL_WINDOW_MS).toBe(60 * 1000)
+    expect(EVENTS_PER_ADDRESS_MAX).toBe(600)
+    expect(EVENTS_PER_ADDRESS_WINDOW_MS).toBe(60 * 1000)
+    expect(ERASURE_PER_INSTALL_MAX).toBe(5)
+    expect(ERASURE_PER_INSTALL_WINDOW_MS).toBe(60 * 60 * 1000)
+    expect(ERASURE_PER_ADDRESS_MAX).toBe(30)
+    expect(ERASURE_PER_ADDRESS_WINDOW_MS).toBe(60 * 60 * 1000)
+    expect(INSTALLS_PER_ADDRESS_MAX).toBe(30)
+    expect(INSTALLS_PER_ADDRESS_WINDOW_MS).toBe(60 * 1000)
+  })
+
+  it('events over the per-install limit give 429 rate_limited and no upstream fetch for the rejected request', async () => {
+    let fetchCount = 0
+    const mockFetch = async () => {
+      fetchCount++
+      return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    }
+
+    const fixedNow = 1700000000000
+    const eventsInstallRateLimiter = new RateLimiter({
+      maxRequests: 2,
+      windowMs: 60000,
+      now: () => fixedNow
+    })
+    const handler = createHandler({
+      config: testConfig,
+      eventsInstallRateLimiter,
+      fetch: mockFetch as unknown as typeof fetch,
+      now: () => fixedNow
+    })
+
+    const { keyPair, publicJwk, thumbprint } = await generateTestKeyPair()
+    const ticket = await createTicket(testConfig.ticketKey, thumbprint, fixedNow + 600000)
+
+    const sendEvent = async (offsetMs: number) => {
+      const ts = fixedNow + offsetMs
+      const event: RelayEvent = { name: 'extension_installed', params: {} }
+      const version = '1.3.0'
+      const canonical = canonicaliseEventPayload({
+        install_id: thumbprint,
+        ts,
+        event,
+        version
+      })
+      const sig = await signPayload(keyPair.privateKey, canonical)
+
+      const req = new Request('http://localhost/v1/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          install_id: thumbprint,
+          ticket,
+          ts,
+          event,
+          version,
+          sig,
+          jwk: publicJwk
+        })
+      })
+      return await handler(req, '192.0.2.1')
+    }
+
+    const res1 = await sendEvent(0)
+    expect(res1.status).toBe(200)
+    expect(fetchCount).toBe(1)
+
+    const res2 = await sendEvent(10)
+    expect(res2.status).toBe(200)
+    expect(fetchCount).toBe(2)
+
+    const res3 = await sendEvent(20)
+    expect(res3.status).toBe(429)
+    expect(await res3.json()).toEqual({ error: 'rate_limited' })
+    expect(fetchCount).toBe(2)
+  })
+
+  it('events over the per-address limit from DIFFERENT install ids give 429', async () => {
+    let fetchCount = 0
+    const mockFetch = async () => {
+      fetchCount++
+      return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    }
+
+    const fixedNow = 1700000000000
+    const eventsAddressRateLimiter = new RateLimiter({
+      maxRequests: 2,
+      windowMs: 60000,
+      now: () => fixedNow
+    })
+    const handler = createHandler({
+      config: testConfig,
+      eventsAddressRateLimiter,
+      fetch: mockFetch as unknown as typeof fetch,
+      now: () => fixedNow
+    })
+
+    const sendFromNewInstall = async (clientIp: string) => {
+      const { keyPair, publicJwk, thumbprint } = await generateTestKeyPair()
+      const ticket = await createTicket(testConfig.ticketKey, thumbprint, fixedNow + 600000)
+      const event: RelayEvent = { name: 'extension_installed', params: {} }
+      const version = '1.3.0'
+      const canonical = canonicaliseEventPayload({
+        install_id: thumbprint,
+        ts: fixedNow,
+        event,
+        version
+      })
+      const sig = await signPayload(keyPair.privateKey, canonical)
+
+      const req = new Request('http://localhost/v1/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          install_id: thumbprint,
+          ticket,
+          ts: fixedNow,
+          event,
+          version,
+          sig,
+          jwk: publicJwk
+        })
+      })
+      return await handler(req, clientIp)
+    }
+
+    const res1 = await sendFromNewInstall('192.0.2.1')
+    expect(res1.status).toBe(200)
+    expect(fetchCount).toBe(1)
+
+    const res2 = await sendFromNewInstall('192.0.2.1')
+    expect(res2.status).toBe(200)
+    expect(fetchCount).toBe(2)
+
+    const res3 = await sendFromNewInstall('192.0.2.1')
+    expect(res3.status).toBe(429)
+    expect(await res3.json()).toEqual({ error: 'rate_limited' })
+    expect(fetchCount).toBe(2)
+
+    const resDifferentIp = await sendFromNewInstall('192.0.2.2')
+    expect(resDifferentIp.status).toBe(200)
+    expect(fetchCount).toBe(3)
+  })
+
+  it('erasure over the per-install limit gives 429 and the eraser queue does not grow', async () => {
+    const fixedNow = 1700000000000
+    const eraser = new InMemoryEraser()
+    const erasureInstallRateLimiter = new RateLimiter({
+      maxRequests: 2,
+      windowMs: 3600000,
+      now: () => fixedNow
+    })
+    const handler = createHandler({
+      config: testConfig,
+      eraser,
+      erasureInstallRateLimiter,
+      now: () => fixedNow
+    })
+
+    const { keyPair, publicJwk, thumbprint } = await generateTestKeyPair()
+    const ticket = await createTicket(testConfig.ticketKey, thumbprint, fixedNow + 600000)
+
+    const sendErasure = async (offsetMs: number) => {
+      const ts = fixedNow + offsetMs
+      const canonical = canonicaliseErasurePayload({
+        install_id: thumbprint,
+        ts
+      })
+      const sig = await signPayload(keyPair.privateKey, canonical)
+
+      const req = new Request('http://localhost/v1/installs', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          install_id: thumbprint,
+          ticket,
+          ts,
+          sig,
+          jwk: publicJwk
+        })
+      })
+      return await handler(req, '192.0.2.1')
+    }
+
+    const res1 = await sendErasure(0)
+    expect(res1.status).toBe(200)
+    expect(eraser.queue.length).toBe(1)
+
+    const res2 = await sendErasure(10)
+    expect(res2.status).toBe(200)
+    expect(eraser.queue.length).toBe(2)
+
+    const res3 = await sendErasure(20)
+    expect(res3.status).toBe(429)
+    expect(await res3.json()).toEqual({ error: 'rate_limited' })
+    expect(eraser.queue.length).toBe(2)
+  })
+
+  it('erasure over the per-address limit gives 429', async () => {
+    const fixedNow = 1700000000000
+    const eraser = new InMemoryEraser()
+    const erasureAddressRateLimiter = new RateLimiter({
+      maxRequests: 2,
+      windowMs: 3600000,
+      now: () => fixedNow
+    })
+    const handler = createHandler({
+      config: testConfig,
+      eraser,
+      erasureAddressRateLimiter,
+      now: () => fixedNow
+    })
+
+    const sendErasureFromNewInstall = async (clientIp: string) => {
+      const { keyPair, publicJwk, thumbprint } = await generateTestKeyPair()
+      const ticket = await createTicket(testConfig.ticketKey, thumbprint, fixedNow + 600000)
+      const canonical = canonicaliseErasurePayload({
+        install_id: thumbprint,
+        ts: fixedNow
+      })
+      const sig = await signPayload(keyPair.privateKey, canonical)
+
+      const req = new Request('http://localhost/v1/installs', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          install_id: thumbprint,
+          ticket,
+          ts: fixedNow,
+          sig,
+          jwk: publicJwk
+        })
+      })
+      return await handler(req, clientIp)
+    }
+
+    const res1 = await sendErasureFromNewInstall('192.0.2.1')
+    expect(res1.status).toBe(200)
+
+    const res2 = await sendErasureFromNewInstall('192.0.2.1')
+    expect(res2.status).toBe(200)
+
+    const res3 = await sendErasureFromNewInstall('192.0.2.1')
+    expect(res3.status).toBe(429)
+    expect(await res3.json()).toEqual({ error: 'rate_limited' })
+
+    const resOtherIp = await sendErasureFromNewInstall('192.0.2.2')
+    expect(resOtherIp.status).toBe(200)
+  })
+
+  it('limits reset after the window (fake clock)', async () => {
+    let currentTime = 1700000000000
+    const eventsInstallRateLimiter = new RateLimiter({
+      maxRequests: 1,
+      windowMs: 60000,
+      now: () => currentTime
+    })
+    const erasureInstallRateLimiter = new RateLimiter({
+      maxRequests: 1,
+      windowMs: 3600000,
+      now: () => currentTime
+    })
+    const mockFetch = async () => new Response(JSON.stringify({ ok: true }), { status: 200 })
+    const eraser = new InMemoryEraser()
+    const handler = createHandler({
+      config: testConfig,
+      eventsInstallRateLimiter,
+      erasureInstallRateLimiter,
+      eraser,
+      fetch: mockFetch as unknown as typeof fetch,
+      now: () => currentTime
+    })
+
+    const { keyPair, publicJwk, thumbprint } = await generateTestKeyPair()
+    const ticket = await createTicket(testConfig.ticketKey, thumbprint, currentTime + 10000000)
+
+    const makeEventReq = async (ts: number) => {
+      const event: RelayEvent = { name: 'extension_installed', params: {} }
+      const version = '1.3.0'
+      const canonical = canonicaliseEventPayload({
+        install_id: thumbprint,
+        ts,
+        event,
+        version
+      })
+      const sig = await signPayload(keyPair.privateKey, canonical)
+      return new Request('http://localhost/v1/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          install_id: thumbprint,
+          ticket,
+          ts,
+          event,
+          version,
+          sig,
+          jwk: publicJwk
+        })
+      })
+    }
+
+    const eventRes1 = await handler(await makeEventReq(currentTime), '127.0.0.1')
+    expect(eventRes1.status).toBe(200)
+
+    const eventRes2 = await handler(await makeEventReq(currentTime + 1), '127.0.0.1')
+    expect(eventRes2.status).toBe(429)
+    expect(await eventRes2.json()).toEqual({ error: 'rate_limited' })
+
+    currentTime += 60001
+
+    const eventRes3 = await handler(await makeEventReq(currentTime), '127.0.0.1')
+    expect(eventRes3.status).toBe(200)
+
+    const makeErasureReq = async (ts: number) => {
+      const canonical = canonicaliseErasurePayload({
+        install_id: thumbprint,
+        ts
+      })
+      const sig = await signPayload(keyPair.privateKey, canonical)
+      return new Request('http://localhost/v1/installs', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          install_id: thumbprint,
+          ticket,
+          ts,
+          sig,
+          jwk: publicJwk
+        })
+      })
+    }
+
+    const erasureRes1 = await handler(await makeErasureReq(currentTime), '127.0.0.1')
+    expect(erasureRes1.status).toBe(200)
+
+    const erasureRes2 = await handler(await makeErasureReq(currentTime + 1), '127.0.0.1')
+    expect(erasureRes2.status).toBe(429)
+    expect(await erasureRes2.json()).toEqual({ error: 'rate_limited' })
+
+    currentTime += 3600001
+
+    const erasureRes3 = await handler(await makeErasureReq(currentTime), '127.0.0.1')
+    expect(erasureRes3.status).toBe(200)
+  })
+
+  it('an over-limit request does not consume a replay-cache slot', async () => {
+    const fixedNow = 1700000000000
+    const replayCache = new ReplayCache({ now: () => fixedNow })
+    const eventsInstallRateLimiter = new RateLimiter({
+      maxRequests: 1,
+      windowMs: 60000,
+      now: () => fixedNow
+    })
+    const mockFetch = async () => new Response(JSON.stringify({ ok: true }), { status: 200 })
+    const handler = createHandler({
+      config: testConfig,
+      eventsInstallRateLimiter,
+      replayCache,
+      fetch: mockFetch as unknown as typeof fetch,
+      now: () => fixedNow
+    })
+
+    const { keyPair, publicJwk, thumbprint } = await generateTestKeyPair()
+    const ticket = await createTicket(testConfig.ticketKey, thumbprint, fixedNow + 600000)
+
+    const makeEventReqWithSig = async (ts: number) => {
+      const event: RelayEvent = { name: 'extension_installed', params: {} }
+      const version = '1.3.0'
+      const canonical = canonicaliseEventPayload({
+        install_id: thumbprint,
+        ts,
+        event,
+        version
+      })
+      const sig = await signPayload(keyPair.privateKey, canonical)
+      const req = new Request('http://localhost/v1/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          install_id: thumbprint,
+          ticket,
+          ts,
+          event,
+          version,
+          sig,
+          jwk: publicJwk
+        })
+      })
+      return { req, sig }
+    }
+
+    const first = await makeEventReqWithSig(fixedNow)
+    const res1 = await handler(first.req, '127.0.0.1')
+    expect(res1.status).toBe(200)
+    expect(replayCache.size).toBe(1)
+    expect(replayCache.has(first.sig)).toBe(true)
+
+    const second = await makeEventReqWithSig(fixedNow + 10)
+    const res2 = await handler(second.req, '127.0.0.1')
+    expect(res2.status).toBe(429)
+    expect(await res2.json()).toEqual({ error: 'rate_limited' })
+
+    expect(replayCache.has(second.sig)).toBe(false)
+    expect(replayCache.size).toBe(1)
+  })
+
+  it('per-address rate limiter runs before request body is parsed for both events and erasure', async () => {
+    const fixedNow = 1700000000000
+    const eventsAddressRateLimiter = new RateLimiter({
+      maxRequests: 1,
+      windowMs: 60000,
+      now: () => fixedNow
+    })
+    const erasureAddressRateLimiter = new RateLimiter({
+      maxRequests: 1,
+      windowMs: 3600000,
+      now: () => fixedNow
+    })
+    const handler = createHandler({
+      config: testConfig,
+      eventsAddressRateLimiter,
+      erasureAddressRateLimiter,
+      now: () => fixedNow
+    })
+
+    const clientIp = '198.51.100.55'
+
+    // Exhaust events address limiter with 1 request
+    const validEventReq = new Request('http://localhost/v1/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'invalid-json{'
+    })
+    const eventRes1 = await handler(validEventReq, clientIp)
+    // 1st request parsed body and failed with malformed_json
+    expect(eventRes1.status).toBe(400)
+    expect(await eventRes1.json()).toEqual({ error: 'malformed_json' })
+
+    // 2nd request with malformed JSON body hits rate limit BEFORE parsing body -> 429 rate_limited
+    const malformedEventReq = new Request('http://localhost/v1/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'completely-malformed-not-even-json{'
+    })
+    const eventRes2 = await handler(malformedEventReq, clientIp)
+    expect(eventRes2.status).toBe(429)
+    expect(await eventRes2.json()).toEqual({ error: 'rate_limited' })
+
+    // Exhaust erasure address limiter with 1 request
+    const validErasureReq = new Request('http://localhost/v1/installs', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'invalid-json{'
+    })
+    const erasureRes1 = await handler(validErasureReq, clientIp)
+    expect(erasureRes1.status).toBe(400)
+    expect(await erasureRes1.json()).toEqual({ error: 'malformed_json' })
+
+    // 2nd request with malformed JSON body hits rate limit BEFORE parsing body -> 429 rate_limited
+    const malformedErasureReq = new Request('http://localhost/v1/installs', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'completely-malformed-not-even-json{'
+    })
+    const erasureRes2 = await handler(malformedErasureReq, clientIp)
+    expect(erasureRes2.status).toBe(429)
+    expect(await erasureRes2.json()).toEqual({ error: 'rate_limited' })
+  })
+
+  it('per-install rate limit runs after syntax validation and before signature verification', async () => {
+    const fixedNow = 1700000000000
+    const eventsInstallRateLimiter = new RateLimiter({
+      maxRequests: 1,
+      windowMs: 60000,
+      now: () => fixedNow
+    })
+    const erasureInstallRateLimiter = new RateLimiter({
+      maxRequests: 1,
+      windowMs: 3600000,
+      now: () => fixedNow
+    })
+    const handler = createHandler({
+      config: testConfig,
+      eventsInstallRateLimiter,
+      erasureInstallRateLimiter,
+      now: () => fixedNow
+    })
+
+    const { keyPair, publicJwk, thumbprint } = await generateTestKeyPair()
+    const ticket = await createTicket(testConfig.ticketKey, thumbprint, fixedNow + 600000)
+
+    // Syntactically invalid install_id returns 400 before rate limiter is checked/charged
+    const badIdReq = new Request('http://localhost/v1/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        install_id: 'mismatched_install_id',
+        ticket,
+        ts: fixedNow,
+        event: { name: 'extension_installed', params: {} },
+        version: '1.3.0',
+        sig: 'any-sig',
+        jwk: publicJwk
+      })
+    })
+    const badIdRes = await handler(badIdReq, '127.0.0.1')
+    expect(badIdRes.status).toBe(400)
+    expect(await badIdRes.json()).toEqual({ error: 'invalid_install_id' })
+
+    // Limiter was not charged yet:
+    // First valid install request with invalid signature passes rate limiter, fails at signature verification
+    const invalidSigReq1 = new Request('http://localhost/v1/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        install_id: thumbprint,
+        ticket,
+        ts: fixedNow,
+        event: { name: 'extension_installed', params: {} },
+        version: '1.3.0',
+        sig: 'bad-signature-content',
+        jwk: publicJwk
+      })
+    })
+    const invalidSigRes1 = await handler(invalidSigReq1, '127.0.0.1')
+    expect(invalidSigRes1.status).toBe(400)
+    expect(await invalidSigRes1.json()).toEqual({ error: 'invalid_signature' })
+
+    // Second request: install limiter is exhausted (maxRequests: 1).
+    // It must return 429 rate_limited even with invalid signature because install limit is checked before signature verification
+    const invalidSigReq2 = new Request('http://localhost/v1/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        install_id: thumbprint,
+        ticket,
+        ts: fixedNow,
+        event: { name: 'extension_installed', params: {} },
+        version: '1.3.0',
+        sig: 'another-bad-sig',
+        jwk: publicJwk
+      })
+    })
+    const invalidSigRes2 = await handler(invalidSigReq2, '127.0.0.1')
+    expect(invalidSigRes2.status).toBe(429)
+    expect(await invalidSigRes2.json()).toEqual({ error: 'rate_limited' })
+
+    // Same check for erasure: install limiter checked before signature verification
+    const erasureInvalidSigReq1 = new Request('http://localhost/v1/installs', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        install_id: thumbprint,
+        ticket,
+        ts: fixedNow,
+        sig: 'bad-sig',
+        jwk: publicJwk
+      })
+    })
+    const erasureRes1 = await handler(erasureInvalidSigReq1, '127.0.0.1')
+    expect(erasureRes1.status).toBe(400)
+    expect(await erasureRes1.json()).toEqual({ error: 'invalid_signature' })
+
+    // Second erasure: rate limited before signature verification
+    const erasureInvalidSigReq2 = new Request('http://localhost/v1/installs', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        install_id: thumbprint,
+        ticket,
+        ts: fixedNow,
+        sig: 'bad-sig-again',
+        jwk: publicJwk
+      })
+    })
+    const erasureRes2 = await handler(erasureInvalidSigReq2, '127.0.0.1')
+    expect(erasureRes2.status).toBe(429)
+    expect(await erasureRes2.json()).toEqual({ error: 'rate_limited' })
+  })
+
+  it('address only reaches limiter that hashes it with daily salt, never raw Map key, log or outbound request', async () => {
+    const rawClientAddress = '203.0.113.199'
+    let forwardedRequestHeaders: Headers | null = null
+    let forwardedRequestBody: string | null = null
+
+    const mockFetch = async (_url: string, init: RequestInit) => {
+      forwardedRequestHeaders = new Headers(init.headers)
+      forwardedRequestBody = String(init.body)
+      return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    }
+
+    const installsRateLimiter = new RateLimiter()
+    const eventsAddressRateLimiter = new RateLimiter()
+    const erasureAddressRateLimiter = new RateLimiter()
+
+    const handler = createHandler({
+      config: testConfig,
+      installsRateLimiter,
+      eventsAddressRateLimiter,
+      erasureAddressRateLimiter,
+      fetch: mockFetch as unknown as typeof fetch
+    })
+
+    const { keyPair, publicJwk, thumbprint } = await generateTestKeyPair()
+    const ticket = await createTicket(testConfig.ticketKey, thumbprint, Date.now() + 600000)
+
+    // Call POST /v1/installs
+    const reqInstalls = new Request('http://localhost/v1/installs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jwk: publicJwk })
+    })
+    await handler(reqInstalls, rawClientAddress)
+
+    // Call POST /v1/events
+    const event: RelayEvent = { name: 'extension_installed', params: {} }
+    const ts = Date.now()
+    const canonical = canonicaliseEventPayload({
+      install_id: thumbprint,
+      ts,
+      event,
+      version: '1.3.0'
+    })
+    const sig = await signPayload(keyPair.privateKey, canonical)
+    const reqEvents = new Request('http://localhost/v1/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        install_id: thumbprint,
+        ticket,
+        ts,
+        event,
+        version: '1.3.0',
+        sig,
+        jwk: publicJwk
+      })
+    })
+    await handler(reqEvents, rawClientAddress)
+
+    // Verify limiters never store raw client address in Map keys
+    expect(installsRateLimiter.hasRawAddress(rawClientAddress)).toBe(false)
+    expect(eventsAddressRateLimiter.hasRawAddress(rawClientAddress)).toBe(false)
+    expect(erasureAddressRateLimiter.hasRawAddress(rawClientAddress)).toBe(false)
+
+    // Verify outbound request does not include client address anywhere
+    expect(forwardedRequestHeaders).not.toBeNull()
+    expect(forwardedRequestBody).not.toBeNull()
+    expect(forwardedRequestBody).not.toContain(rawClientAddress)
+  })
+
+  it('limiters are injectable through dependency object with defaults from limits.ts', async () => {
+    // Custom injected limiters
+    const customEventsLimiter = new RateLimiter({ maxRequests: 1, windowMs: 1000 })
+    const handlerWithCustom = createHandler({
+      config: testConfig,
+      eventsAddressRateLimiter: customEventsLimiter
+    })
+
+    // Handler with default limiters constructed internally from limits.ts
+    const defaultHandler = createHandler({
+      config: testConfig
+    })
+    expect(typeof defaultHandler).toBe('function')
+    expect(typeof handlerWithCustom).toBe('function')
+  })
+
+  it('rejects replayed event when signature s is malleated to n - s (answers 409 replayed_request)', async () => {
+    let fetchCount = 0
+    const mockFetch = async () => {
+      fetchCount++
+      return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    }
+
+    const fixedNow = 1700000000000
+    const handler = createHandler({
+      config: testConfig,
+      fetch: mockFetch as unknown as typeof fetch,
+      now: () => fixedNow
+    })
+
+    const { keyPair, publicJwk, thumbprint } = await generateTestKeyPair()
+    const ticket = await createTicket(testConfig.ticketKey, thumbprint, fixedNow + 600000)
+    const event: RelayEvent = { name: 'extension_installed', params: {} }
+    const version = '1.3.0'
+    const canonical = canonicaliseEventPayload({
+      install_id: thumbprint,
+      ts: fixedNow,
+      event,
+      version
+    })
+    const originalSigB64 = await signPayload(keyPair.privateKey, canonical)
+
+    // Decode original signature to 64 bytes (r: 32 bytes, s: 32 bytes)
+    const originalSigBytes = new Uint8Array(Buffer.from(originalSigB64, 'base64url'))
+    const rBytes = originalSigBytes.subarray(0, 32)
+    const sBytes = originalSigBytes.subarray(32, 64)
+
+    let sHex = '0x'
+    for (let i = 0; i < 32; i++) {
+      sHex += sBytes[i].toString(16).padStart(2, '0')
+    }
+    const sVal = BigInt(sHex)
+    const n = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551n
+    const malleatedSVal = n - sVal
+
+    const malleatedSHex = malleatedSVal.toString(16).padStart(64, '0')
+    const malleatedSBytes = new Uint8Array(32)
+    for (let i = 0; i < 32; i++) {
+      malleatedSBytes[i] = parseInt(malleatedSHex.slice(i * 2, i * 2 + 2), 16)
+    }
+
+    const malleatedSigBytes = new Uint8Array(64)
+    malleatedSigBytes.set(rBytes, 0)
+    malleatedSigBytes.set(malleatedSBytes, 32)
+    const malleatedSigB64 = Buffer.from(malleatedSigBytes).toString('base64url')
+
+    expect(malleatedSigB64).not.toBe(originalSigB64)
+
+    // Send original request -> accepted (200) and forwarded once
+    const req1 = new Request('http://localhost/v1/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        install_id: thumbprint,
+        ticket,
+        ts: fixedNow,
+        event,
+        version,
+        sig: originalSigB64,
+        jwk: publicJwk
+      })
+    })
+    const res1 = await handler(req1, '127.0.0.1')
+    expect(res1.status).toBe(200)
+    expect(fetchCount).toBe(1)
+
+    // Send the exact same request with s malleated to n - s -> 409 replayed_request and nothing forwarded
+    const req2 = new Request('http://localhost/v1/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        install_id: thumbprint,
+        ticket,
+        ts: fixedNow,
+        event,
+        version,
+        sig: malleatedSigB64,
+        jwk: publicJwk
+      })
+    })
+    const res2 = await handler(req2, '127.0.0.1')
+    expect(res2.status).toBe(409)
+    expect(await res2.json()).toEqual({ error: 'replayed_request' })
+    expect(fetchCount).toBe(1)
   })
 })

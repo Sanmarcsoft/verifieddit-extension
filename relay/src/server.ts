@@ -12,12 +12,33 @@ import {
   verifyEcdsaSignature,
   verifyTicket
 } from './protocol'
+import {
+  ERASURE_PER_ADDRESS_MAX,
+  ERASURE_PER_ADDRESS_WINDOW_MS,
+  ERASURE_PER_INSTALL_MAX,
+  ERASURE_PER_INSTALL_WINDOW_MS,
+  EVENTS_PER_ADDRESS_MAX,
+  EVENTS_PER_ADDRESS_WINDOW_MS,
+  EVENTS_PER_INSTALL_MAX,
+  EVENTS_PER_INSTALL_WINDOW_MS,
+  INSTALLS_PER_ADDRESS_MAX,
+  INSTALLS_PER_ADDRESS_WINDOW_MS
+} from './limits'
 import { RateLimiter } from './rateLimiter'
 import { ReplayCache } from './replayCache'
 
 export interface HandlerDependencies {
   config: RelayConfig
   rateLimiter?: RateLimiter
+  installsRateLimiter?: RateLimiter
+  eventsAddressRateLimiter?: RateLimiter
+  eventsInstallRateLimiter?: RateLimiter
+  erasureAddressRateLimiter?: RateLimiter
+  erasureInstallRateLimiter?: RateLimiter
+  eventsAddressLimiter?: RateLimiter
+  eventsInstallLimiter?: RateLimiter
+  erasureAddressLimiter?: RateLimiter
+  erasureInstallLimiter?: RateLimiter
   eraser?: Eraser
   fetch?: typeof fetch
   now?: () => number
@@ -90,10 +111,34 @@ async function parseJsonBody (
 
 export function createHandler (deps: HandlerDependencies) {
   const config = deps.config
-  const rateLimiter = deps.rateLimiter ?? new RateLimiter()
+  const now = deps.now ?? Date.now
+  const installsRateLimiter = deps.installsRateLimiter ?? deps.rateLimiter ?? new RateLimiter({
+    maxRequests: INSTALLS_PER_ADDRESS_MAX,
+    windowMs: INSTALLS_PER_ADDRESS_WINDOW_MS,
+    now
+  })
+  const eventsAddressRateLimiter = deps.eventsAddressRateLimiter ?? deps.eventsAddressLimiter ?? new RateLimiter({
+    maxRequests: EVENTS_PER_ADDRESS_MAX,
+    windowMs: EVENTS_PER_ADDRESS_WINDOW_MS,
+    now
+  })
+  const eventsInstallRateLimiter = deps.eventsInstallRateLimiter ?? deps.eventsInstallLimiter ?? new RateLimiter({
+    maxRequests: EVENTS_PER_INSTALL_MAX,
+    windowMs: EVENTS_PER_INSTALL_WINDOW_MS,
+    now
+  })
+  const erasureAddressRateLimiter = deps.erasureAddressRateLimiter ?? deps.erasureAddressLimiter ?? new RateLimiter({
+    maxRequests: ERASURE_PER_ADDRESS_MAX,
+    windowMs: ERASURE_PER_ADDRESS_WINDOW_MS,
+    now
+  })
+  const erasureInstallRateLimiter = deps.erasureInstallRateLimiter ?? deps.erasureInstallLimiter ?? new RateLimiter({
+    maxRequests: ERASURE_PER_INSTALL_MAX,
+    windowMs: ERASURE_PER_INSTALL_WINDOW_MS,
+    now
+  })
   const eraser = deps.eraser ?? new InMemoryEraser()
   const fetchImpl = deps.fetch ?? globalThis.fetch
-  const now = deps.now ?? Date.now
   const replayCache = deps.replayCache ?? new ReplayCache({ now })
 
   return async function handleRequest (req: Request, clientAddress: string): Promise<Response> {
@@ -120,7 +165,7 @@ export function createHandler (deps: HandlerDependencies) {
 
     if (path === '/v1/installs') {
       if (req.method === 'POST') {
-        const allowed = await rateLimiter.isAllowed(clientAddress)
+        const allowed = await installsRateLimiter.isAllowed(clientAddress)
         if (!allowed) {
           return createJsonResponse({ error: 'rate_limited' }, 429, origin)
         }
@@ -158,6 +203,11 @@ export function createHandler (deps: HandlerDependencies) {
       }
 
       if (req.method === 'DELETE') {
+        const addressAllowed = await erasureAddressRateLimiter.isAllowed(clientAddress)
+        if (!addressAllowed) {
+          return createJsonResponse({ error: 'rate_limited' }, 429, origin)
+        }
+
         const bodyResult = await parseJsonBody(req)
         if (!bodyResult.ok) {
           return createJsonResponse({ error: bodyResult.error }, bodyResult.status, origin)
@@ -198,6 +248,11 @@ export function createHandler (deps: HandlerDependencies) {
           return createJsonResponse({ error: 'invalid_timestamp' }, 400, origin)
         }
 
+        const installAllowed = await erasureInstallRateLimiter.isAllowed(installId)
+        if (!installAllowed) {
+          return createJsonResponse({ error: 'rate_limited' }, 429, origin)
+        }
+
         const canonical = canonicaliseErasurePayload({ install_id: installId, ts })
         const isSigValid = await verifyEcdsaSignature(
           publicJwk,
@@ -222,6 +277,11 @@ export function createHandler (deps: HandlerDependencies) {
     if (path === '/v1/events') {
       if (req.method !== 'POST') {
         return createJsonResponse({ error: 'method_not_allowed' }, 405, origin)
+      }
+
+      const addressAllowed = await eventsAddressRateLimiter.isAllowed(clientAddress)
+      if (!addressAllowed) {
+        return createJsonResponse({ error: 'rate_limited' }, 429, origin)
       }
 
       const bodyResult = await parseJsonBody(req)
@@ -278,6 +338,11 @@ export function createHandler (deps: HandlerDependencies) {
         validatedEvent = validateEvent(event)
       } catch {
         return createJsonResponse({ error: 'invalid_event' }, 400, origin)
+      }
+
+      const installAllowed = await eventsInstallRateLimiter.isAllowed(installId)
+      if (!installAllowed) {
+        return createJsonResponse({ error: 'rate_limited' }, 429, origin)
       }
 
       const canonical = canonicaliseEventPayload({
