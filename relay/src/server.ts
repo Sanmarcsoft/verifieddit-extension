@@ -111,6 +111,45 @@ async function parseJsonBody (
   }
 }
 
+export function resolveClientAddress (
+  headers: Headers | Record<string, string | undefined>,
+  socketAddress: string,
+  headerName?: string
+): string {
+  if (headerName == null || headerName === '') {
+    return socketAddress
+  }
+
+  let rawValue: string | null | undefined
+  if (typeof (headers as Headers).get === 'function') {
+    rawValue = (headers as Headers).get(headerName)
+  } else {
+    const target = headerName.toLowerCase()
+    for (const [k, v] of Object.entries(headers)) {
+      if (k.toLowerCase() === target) {
+        rawValue = v
+        break
+      }
+    }
+  }
+
+  if (rawValue == null) {
+    return socketAddress
+  }
+
+  const trimmed = rawValue.trim()
+  if (trimmed.length === 0) {
+    return socketAddress
+  }
+
+  if (trimmed.includes(',')) {
+    const first = trimmed.split(',')[0].trim()
+    return first.length > 0 ? first : socketAddress
+  }
+
+  return trimmed
+}
+
 export function createHandler (deps: HandlerDependencies) {
   const config = deps.config
   const now = deps.now ?? Date.now

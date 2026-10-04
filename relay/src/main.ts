@@ -1,5 +1,5 @@
 import { loadConfig } from './config'
-import { createHandler } from './server'
+import { createHandler, resolveClientAddress } from './server'
 
 const config = loadConfig(process.env)
 const handler = createHandler({ config })
@@ -7,7 +7,8 @@ const handler = createHandler({ config })
 const server = Bun.serve({
   port: config.port,
   async fetch (req, server) {
-    const clientAddress = server.requestIP(req)?.address ?? '127.0.0.1'
+    const socketAddress = server.requestIP(req)?.address ?? '127.0.0.1'
+    const clientAddress = resolveClientAddress(req.headers, socketAddress, config.clientIpHeader)
     return await handler(req, clientAddress)
   }
 })

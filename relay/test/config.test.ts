@@ -98,4 +98,72 @@ describe('loadConfig', () => {
 
     expect(() => loadConfig(env)).toThrow('PORT must be a valid integer')
   })
+
+  it('accepts unset RELAY_CLIENT_IP_HEADER and returns undefined', () => {
+    const env = {
+      RELAY_TICKET_KEY: validKey,
+      UMAMI_URL: 'https://umami.example.com',
+      UMAMI_WEBSITE_ID: '00000000-0000-0000-0000-000000000000'
+    }
+
+    const config = loadConfig(env)
+    expect(config.clientIpHeader).toBeUndefined()
+  })
+
+  it('accepts empty RELAY_CLIENT_IP_HEADER and returns undefined', () => {
+    const env = {
+      RELAY_TICKET_KEY: validKey,
+      UMAMI_URL: 'https://umami.example.com',
+      UMAMI_WEBSITE_ID: '00000000-0000-0000-0000-000000000000',
+      RELAY_CLIENT_IP_HEADER: ''
+    }
+
+    const config = loadConfig(env)
+    expect(config.clientIpHeader).toBeUndefined()
+  })
+
+  it('accepts CF-Connecting-IP as RELAY_CLIENT_IP_HEADER', () => {
+    const env = {
+      RELAY_TICKET_KEY: validKey,
+      UMAMI_URL: 'https://umami.example.com',
+      UMAMI_WEBSITE_ID: '00000000-0000-0000-0000-000000000000',
+      RELAY_CLIENT_IP_HEADER: 'CF-Connecting-IP'
+    }
+
+    const config = loadConfig(env)
+    expect(config.clientIpHeader).toBe('CF-Connecting-IP')
+  })
+
+  it('rejects RELAY_CLIENT_IP_HEADER containing spaces', () => {
+    const env = {
+      RELAY_TICKET_KEY: validKey,
+      UMAMI_URL: 'https://umami.example.com',
+      UMAMI_WEBSITE_ID: '00000000-0000-0000-0000-000000000000',
+      RELAY_CLIENT_IP_HEADER: 'bad header'
+    }
+
+    expect(() => loadConfig(env)).toThrow('RELAY_CLIENT_IP_HEADER must be a valid HTTP header name')
+  })
+
+  it('rejects RELAY_CLIENT_IP_HEADER containing a colon', () => {
+    const env = {
+      RELAY_TICKET_KEY: validKey,
+      UMAMI_URL: 'https://umami.example.com',
+      UMAMI_WEBSITE_ID: '00000000-0000-0000-0000-000000000000',
+      RELAY_CLIENT_IP_HEADER: 'a:b'
+    }
+
+    expect(() => loadConfig(env)).toThrow('RELAY_CLIENT_IP_HEADER must be a valid HTTP header name')
+  })
+
+  it('rejects RELAY_CLIENT_IP_HEADER containing a comma', () => {
+    const env = {
+      RELAY_TICKET_KEY: validKey,
+      UMAMI_URL: 'https://umami.example.com',
+      UMAMI_WEBSITE_ID: '00000000-0000-0000-0000-000000000000',
+      RELAY_CLIENT_IP_HEADER: 'a,b'
+    }
+
+    expect(() => loadConfig(env)).toThrow('RELAY_CLIENT_IP_HEADER must be a valid HTTP header name')
+  })
 })

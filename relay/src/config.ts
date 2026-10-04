@@ -3,10 +3,12 @@ export interface RelayConfig {
   umamiUrl: string
   umamiWebsiteId: string
   port: number
+  clientIpHeader?: string
 }
 
 const MIN_KEY_BYTES = 32
 const DEFAULT_PORT = 3000
+const HEADER_NAME_REGEX = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
 
 export function loadConfig (env: Record<string, string | undefined>): RelayConfig {
   const ticketKey = env.RELAY_TICKET_KEY
@@ -45,10 +47,20 @@ export function loadConfig (env: Record<string, string | undefined>): RelayConfi
     port = parsedPort
   }
 
+  const rawClientIpHeader = env.RELAY_CLIENT_IP_HEADER
+  let clientIpHeader: string | undefined
+  if (rawClientIpHeader !== undefined && rawClientIpHeader !== '') {
+    if (!HEADER_NAME_REGEX.test(rawClientIpHeader)) {
+      throw new Error('RELAY_CLIENT_IP_HEADER must be a valid HTTP header name')
+    }
+    clientIpHeader = rawClientIpHeader
+  }
+
   return {
     ticketKey,
     umamiUrl,
     umamiWebsiteId,
-    port
+    port,
+    clientIpHeader
   }
 }
