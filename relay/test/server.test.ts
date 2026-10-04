@@ -174,8 +174,8 @@ describe('HTTP Server Handler', () => {
   })
 
   it('POST /v1/installs rate limits excessive requests from the same address', async () => {
-    const rateLimiter = new RateLimiter({ maxRequests: 2, windowMs: 60000 })
-    const handler = createHandler({ config: testConfig, rateLimiter })
+    const installsRateLimiter = new RateLimiter({ maxRequests: 2, windowMs: 60000 })
+    const handler = createHandler({ config: testConfig, installsRateLimiter })
     const { publicJwk } = await generateTestKeyPair()
 
     const makeReq = () => new Request('http://localhost/v1/installs', {
@@ -1730,7 +1730,11 @@ describe('HTTP Server Handler', () => {
       windowMs: 60000,
       now: () => fixedNow
     })
-    const mockFetch = async () => new Response(JSON.stringify({ ok: true }), { status: 200 })
+    let fetchCount = 0
+    const mockFetch = async () => {
+      fetchCount++
+      return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    }
     const handler = createHandler({
       config: testConfig,
       eventsInstallRateLimiter,
@@ -1783,6 +1787,7 @@ describe('HTTP Server Handler', () => {
 
     expect(replayCache.has(second.sig)).toBe(false)
     expect(replayCache.size).toBe(1)
+    expect(fetchCount).toBe(1)
   })
 
   it('per-address rate limiter runs before request body is parsed for both events and erasure', async () => {
@@ -1848,15 +1853,22 @@ describe('HTTP Server Handler', () => {
     expect(await erasureRes2.json()).toEqual({ error: 'rate_limited' })
   })
 
-  it('per-install rate limit runs after syntax validation and before signature verification', async () => {
+  it('per-install rate limit runs after signature verification and before replay cache', async () => {
     const fixedNow = 1700000000000
+    let fetchCount = 0
+    const mockFetch = async () => {
+      fetchCount++
+      return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    }
+    const eraser = new InMemoryEraser()
+    const replayCache = new ReplayCache({ now: () => fixedNow })
     const eventsInstallRateLimiter = new RateLimiter({
-      maxRequests: 1,
+      maxRequests: 2,
       windowMs: 60000,
       now: () => fixedNow
     })
     const erasureInstallRateLimiter = new RateLimiter({
-      maxRequests: 1,
+      maxRequests: 2,
       windowMs: 3600000,
       now: () => fixedNow
     })
@@ -1864,54 +1876,50 @@ describe('HTTP Server Handler', () => {
       config: testConfig,
       eventsInstallRateLimiter,
       erasureInstallRateLimiter,
+      eraser,
+      replayCache,
+      fetch: mockFetch as unknown as typeof fetch,
       now: () => fixedNow
     })
 
     const { keyPair, publicJwk, thumbprint } = await generateTestKeyPair()
     const ticket = await createTicket(testConfig.ticketKey, thumbprint, fixedNow + 600000)
 
-    // Syntactically invalid install_id returns 400 before rate limiter is checked/charged
-    const badIdReq = new Request('http://localhost/v1/events', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        install_id: 'mismatched_install_id',
-        ticket,
-        ts: fixedNow,
-        event: { name: 'extension_installed', params: {} },
-        version: '1.3.0',
-        browser: 'chrome',
-        sig: 'any-sig',
-        jwk: publicJwk
+    // Events endpoint:
+    // N requests (N = 4 > maxRequests: 2) with valid ticket and victim's install_id and jwk
+    // but INVALID signature are each rejected with signature error (400), not rate limited
+    for (let i = 0; i < 4; i++) {
+      const invalidSigReq = new Request('http://localhost/v1/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          install_id: thumbprint,
+          ticket,
+          ts: fixedNow + i,
+          event: { name: 'extension_installed', params: {} },
+          version: '1.3.0',
+          browser: 'chrome',
+          sig: `bad-sig-${i}`,
+          jwk: publicJwk
+        })
       })
-    })
-    const badIdRes = await handler(badIdReq, '127.0.0.1')
-    expect(badIdRes.status).toBe(400)
-    expect(await badIdRes.json()).toEqual({ error: 'invalid_install_id' })
+      const res = await handler(invalidSigReq, '127.0.0.1')
+      expect(res.status).toBe(400)
+      expect(await res.json()).toEqual({ error: 'invalid_signature' })
+    }
+    expect(fetchCount).toBe(0)
+    expect(replayCache.size).toBe(0)
 
-    // Limiter was not charged yet:
-    // First valid install request with invalid signature passes rate limiter, fails at signature verification
-    const invalidSigReq1 = new Request('http://localhost/v1/events', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        install_id: thumbprint,
-        ticket,
-        ts: fixedNow,
-        event: { name: 'extension_installed', params: {} },
-        version: '1.3.0',
-        browser: 'chrome',
-        sig: 'bad-signature-content',
-        jwk: publicJwk
-      })
+    // Afterwards, a correctly signed request from that install is still accepted (2xx) and forwarded
+    const validCanonical = canonicaliseEventPayload({
+      install_id: thumbprint,
+      ts: fixedNow,
+      event: { name: 'extension_installed', params: {} },
+      version: '1.3.0',
+      browser: 'chrome'
     })
-    const invalidSigRes1 = await handler(invalidSigReq1, '127.0.0.1')
-    expect(invalidSigRes1.status).toBe(400)
-    expect(await invalidSigRes1.json()).toEqual({ error: 'invalid_signature' })
-
-    // Second request: install limiter is exhausted (maxRequests: 1).
-    // It must return 429 rate_limited even with invalid signature because install limit is checked before signature verification
-    const invalidSigReq2 = new Request('http://localhost/v1/events', {
+    const validSig = await signPayload(keyPair.privateKey, validCanonical)
+    const validReq = new Request('http://localhost/v1/events', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1921,16 +1929,46 @@ describe('HTTP Server Handler', () => {
         event: { name: 'extension_installed', params: {} },
         version: '1.3.0',
         browser: 'chrome',
-        sig: 'another-bad-sig',
+        sig: validSig,
         jwk: publicJwk
       })
     })
-    const invalidSigRes2 = await handler(invalidSigReq2, '127.0.0.1')
-    expect(invalidSigRes2.status).toBe(429)
-    expect(await invalidSigRes2.json()).toEqual({ error: 'rate_limited' })
+    const validRes = await handler(validReq, '127.0.0.1')
+    expect(validRes.status).toBe(200)
+    expect(await validRes.json()).toEqual({ ok: true })
+    expect(fetchCount).toBe(1)
+    expect(replayCache.size).toBe(1)
 
-    // Same check for erasure: install limiter checked before signature verification
-    const erasureInvalidSigReq1 = new Request('http://localhost/v1/installs', {
+    // Erasure endpoint:
+    // N requests (N = 4 > maxRequests: 2) with valid ticket and victim's install_id and jwk
+    // but INVALID signature are each rejected with signature error (400), not rate limited
+    for (let i = 0; i < 4; i++) {
+      const invalidErasureReq = new Request('http://localhost/v1/installs', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          install_id: thumbprint,
+          ticket,
+          ts: fixedNow + i,
+          browser: 'chrome',
+          sig: `bad-sig-${i}`,
+          jwk: publicJwk
+        })
+      })
+      const res = await handler(invalidErasureReq, '127.0.0.1')
+      expect(res.status).toBe(400)
+      expect(await res.json()).toEqual({ error: 'invalid_signature' })
+    }
+    expect(eraser.queue.length).toBe(0)
+
+    // Afterwards, a correctly signed erasure request from that install is still accepted (2xx) and queued
+    const validErasureCanonical = canonicaliseErasurePayload({
+      install_id: thumbprint,
+      ts: fixedNow,
+      browser: 'chrome'
+    })
+    const validErasureSig = await signPayload(keyPair.privateKey, validErasureCanonical)
+    const validErasureReq = new Request('http://localhost/v1/installs', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1938,30 +1976,15 @@ describe('HTTP Server Handler', () => {
         ticket,
         ts: fixedNow,
         browser: 'chrome',
-        sig: 'bad-sig',
+        sig: validErasureSig,
         jwk: publicJwk
       })
     })
-    const erasureRes1 = await handler(erasureInvalidSigReq1, '127.0.0.1')
-    expect(erasureRes1.status).toBe(400)
-    expect(await erasureRes1.json()).toEqual({ error: 'invalid_signature' })
-
-    // Second erasure: rate limited before signature verification
-    const erasureInvalidSigReq2 = new Request('http://localhost/v1/installs', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        install_id: thumbprint,
-        ticket,
-        ts: fixedNow,
-        browser: 'chrome',
-        sig: 'bad-sig-again',
-        jwk: publicJwk
-      })
-    })
-    const erasureRes2 = await handler(erasureInvalidSigReq2, '127.0.0.1')
-    expect(erasureRes2.status).toBe(429)
-    expect(await erasureRes2.json()).toEqual({ error: 'rate_limited' })
+    const validErasureRes = await handler(validErasureReq, '127.0.0.1')
+    expect(validErasureRes.status).toBe(200)
+    expect(await validErasureRes.json()).toEqual({ ok: true })
+    expect(eraser.queue.length).toBe(1)
+    expect(eraser.queue[0].install_id).toBe(thumbprint)
   })
 
   it('address only reaches limiter that hashes it with daily salt, never raw Map key, log or outbound request', async () => {

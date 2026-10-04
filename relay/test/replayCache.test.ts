@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { MAX_REPLAY_CACHE_ENTRIES, ReplayCache } from '../src/replayCache'
+import { canonicalizeSignatureKey, MAX_REPLAY_CACHE_ENTRIES, ReplayCache } from '../src/replayCache'
 
 describe('ReplayCache', () => {
   it('detects duplicate signatures and records new ones', () => {
@@ -172,5 +172,64 @@ describe('ReplayCache', () => {
 
     // Lookup never treats expired entry as present
     expect(cache.has('sig1')).toBe(false)
+  })
+
+  it('canonicalizeSignatureKey does not throw and returns a stable key for a signature whose s is zero', () => {
+    const rBytes = new Uint8Array(32).fill(0x02)
+    const sBytes = new Uint8Array(32).fill(0x00)
+    const sigBytes = new Uint8Array(64)
+    sigBytes.set(rBytes, 0)
+    sigBytes.set(sBytes, 32)
+    const sigB64 = Buffer.from(sigBytes).toString('base64url')
+
+    let key1 = ''
+    let key2 = ''
+    expect(() => {
+      key1 = canonicalizeSignatureKey(sigB64)
+      key2 = canonicalizeSignatureKey(sigB64)
+    }).not.toThrow()
+
+    expect(key1).toBeDefined()
+    expect(key1.length).toBeGreaterThan(0)
+    expect(key1).toBe(key2)
+  })
+
+  it('canonicalizeSignatureKey returns non-64-byte value unchanged without throwing', () => {
+    expect(canonicalizeSignatureKey('')).toBe('')
+    expect(canonicalizeSignatureKey('short')).toBe('short')
+    const non64 = Buffer.from(new Uint8Array(32).fill(0x42)).toString('base64url')
+    expect(canonicalizeSignatureKey(non64)).toBe(non64)
+  })
+
+  it('canonicalizeSignatureKey maps two base64url strings differing only in non-canonical trailing bits to the same key', () => {
+    const bytes = new Uint8Array(64).fill(0x01)
+    bytes[63] = 0
+    const sigA = Buffer.from(bytes).toString('base64url')
+    const sigB = sigA.slice(0, -1) + 'B'
+
+    expect(sigA).not.toBe(sigB)
+    expect(canonicalizeSignatureKey(sigA)).toBe(canonicalizeSignatureKey(sigB))
+  })
+
+  it('documents cap eviction: with maxEntries 2, after a third signature is remembered the first is no longer reported as seen', () => {
+    let currentTime = 1700000000000
+    const cache = new ReplayCache({
+      maxEntries: 2,
+      now: () => currentTime
+    })
+
+    expect(cache.remember('sig1', currentTime)).toBe(false)
+    expect(cache.has('sig1')).toBe(true)
+
+    currentTime += 10
+    expect(cache.remember('sig2', currentTime)).toBe(false)
+    expect(cache.has('sig1')).toBe(true)
+    expect(cache.has('sig2')).toBe(true)
+
+    currentTime += 10
+    expect(cache.remember('sig3', currentTime)).toBe(false)
+    expect(cache.has('sig1')).toBe(false)
+    expect(cache.has('sig2')).toBe(true)
+    expect(cache.has('sig3')).toBe(true)
   })
 })

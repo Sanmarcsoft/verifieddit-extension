@@ -31,16 +31,11 @@ import { ReplayCache } from './replayCache'
 
 export interface HandlerDependencies {
   config: RelayConfig
-  rateLimiter?: RateLimiter
   installsRateLimiter?: RateLimiter
   eventsAddressRateLimiter?: RateLimiter
   eventsInstallRateLimiter?: RateLimiter
   erasureAddressRateLimiter?: RateLimiter
   erasureInstallRateLimiter?: RateLimiter
-  eventsAddressLimiter?: RateLimiter
-  eventsInstallLimiter?: RateLimiter
-  erasureAddressLimiter?: RateLimiter
-  erasureInstallLimiter?: RateLimiter
   eraser?: Eraser
   fetch?: typeof fetch
   now?: () => number
@@ -153,27 +148,27 @@ export function resolveClientAddress (
 export function createHandler (deps: HandlerDependencies) {
   const config = deps.config
   const now = deps.now ?? Date.now
-  const installsRateLimiter = deps.installsRateLimiter ?? deps.rateLimiter ?? new RateLimiter({
+  const installsRateLimiter = deps.installsRateLimiter ?? new RateLimiter({
     maxRequests: INSTALLS_PER_ADDRESS_MAX,
     windowMs: INSTALLS_PER_ADDRESS_WINDOW_MS,
     now
   })
-  const eventsAddressRateLimiter = deps.eventsAddressRateLimiter ?? deps.eventsAddressLimiter ?? new RateLimiter({
+  const eventsAddressRateLimiter = deps.eventsAddressRateLimiter ?? new RateLimiter({
     maxRequests: EVENTS_PER_ADDRESS_MAX,
     windowMs: EVENTS_PER_ADDRESS_WINDOW_MS,
     now
   })
-  const eventsInstallRateLimiter = deps.eventsInstallRateLimiter ?? deps.eventsInstallLimiter ?? new RateLimiter({
+  const eventsInstallRateLimiter = deps.eventsInstallRateLimiter ?? new RateLimiter({
     maxRequests: EVENTS_PER_INSTALL_MAX,
     windowMs: EVENTS_PER_INSTALL_WINDOW_MS,
     now
   })
-  const erasureAddressRateLimiter = deps.erasureAddressRateLimiter ?? deps.erasureAddressLimiter ?? new RateLimiter({
+  const erasureAddressRateLimiter = deps.erasureAddressRateLimiter ?? new RateLimiter({
     maxRequests: ERASURE_PER_ADDRESS_MAX,
     windowMs: ERASURE_PER_ADDRESS_WINDOW_MS,
     now
   })
-  const erasureInstallRateLimiter = deps.erasureInstallRateLimiter ?? deps.erasureInstallLimiter ?? new RateLimiter({
+  const erasureInstallRateLimiter = deps.erasureInstallRateLimiter ?? new RateLimiter({
     maxRequests: ERASURE_PER_INSTALL_MAX,
     windowMs: ERASURE_PER_INSTALL_WINDOW_MS,
     now
@@ -296,11 +291,6 @@ export function createHandler (deps: HandlerDependencies) {
           return createJsonResponse({ error: 'invalid_timestamp' }, 400, origin)
         }
 
-        const installAllowed = await erasureInstallRateLimiter.isAllowed(installId)
-        if (!installAllowed) {
-          return createJsonResponse({ error: 'rate_limited' }, 429, origin)
-        }
-
         const canonical = canonicaliseErasurePayload({
           install_id: installId,
           ts,
@@ -313,6 +303,11 @@ export function createHandler (deps: HandlerDependencies) {
         )
         if (!isSigValid) {
           return createJsonResponse({ error: 'invalid_signature' }, 400, origin)
+        }
+
+        const installAllowed = await erasureInstallRateLimiter.isAllowed(installId)
+        if (!installAllowed) {
+          return createJsonResponse({ error: 'rate_limited' }, 429, origin)
         }
 
         if (replayCache.remember(sig, ts)) {
@@ -399,11 +394,6 @@ export function createHandler (deps: HandlerDependencies) {
         return createJsonResponse({ error: 'invalid_browser' }, 400, origin)
       }
 
-      const installAllowed = await eventsInstallRateLimiter.isAllowed(installId)
-      if (!installAllowed) {
-        return createJsonResponse({ error: 'rate_limited' }, 429, origin)
-      }
-
       const canonical = canonicaliseEventPayload({
         install_id: installId,
         ts,
@@ -419,6 +409,11 @@ export function createHandler (deps: HandlerDependencies) {
       )
       if (!isSigValid) {
         return createJsonResponse({ error: 'invalid_signature' }, 400, origin)
+      }
+
+      const installAllowed = await eventsInstallRateLimiter.isAllowed(installId)
+      if (!installAllowed) {
+        return createJsonResponse({ error: 'rate_limited' }, 429, origin)
       }
 
       if (replayCache.remember(sig, ts)) {
