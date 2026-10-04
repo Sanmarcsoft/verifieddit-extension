@@ -13,6 +13,7 @@ import {
   verifyTicket
 } from './protocol'
 import { RateLimiter } from './rateLimiter'
+import { ReplayCache } from './replayCache'
 
 export interface HandlerDependencies {
   config: RelayConfig
@@ -20,6 +21,7 @@ export interface HandlerDependencies {
   eraser?: Eraser
   fetch?: typeof fetch
   now?: () => number
+  replayCache?: ReplayCache
 }
 
 const MAX_BODY_BYTES = 8192
@@ -92,6 +94,7 @@ export function createHandler (deps: HandlerDependencies) {
   const eraser = deps.eraser ?? new InMemoryEraser()
   const fetchImpl = deps.fetch ?? globalThis.fetch
   const now = deps.now ?? Date.now
+  const replayCache = deps.replayCache ?? new ReplayCache({ now })
 
   return async function handleRequest (req: Request, clientAddress: string): Promise<Response> {
     const origin = req.headers.get('Origin')
@@ -205,6 +208,10 @@ export function createHandler (deps: HandlerDependencies) {
           return createJsonResponse({ error: 'invalid_signature' }, 400, origin)
         }
 
+        if (replayCache.remember(sig, ts)) {
+          return createJsonResponse({ error: 'replayed_request' }, 409, origin)
+        }
+
         await eraser.erase(installId, ts)
         return createJsonResponse({ ok: true }, 200, origin)
       }
@@ -287,6 +294,10 @@ export function createHandler (deps: HandlerDependencies) {
       )
       if (!isSigValid) {
         return createJsonResponse({ error: 'invalid_signature' }, 400, origin)
+      }
+
+      if (replayCache.remember(sig, ts)) {
+        return createJsonResponse({ error: 'replayed_request' }, 409, origin)
       }
 
       const forwardUrl = `${config.umamiUrl}/api/send`

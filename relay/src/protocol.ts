@@ -244,9 +244,10 @@ export async function verifyEcdsaSignature (
   }
 }
 
-const FIVE_MINUTES_MS = 5 * 60 * 1000
+export const TIMESTAMP_WINDOW_MS = 5 * 60 * 1000
+export const FIVE_MINUTES_MS = TIMESTAMP_WINDOW_MS
 
-export function validateTimestamp (ts: unknown, now: number, maxSkewMs = FIVE_MINUTES_MS): boolean {
+export function validateTimestamp (ts: unknown, now: number, maxSkewMs = TIMESTAMP_WINDOW_MS): boolean {
   return typeof ts === 'number' && Number.isFinite(ts) && Math.abs(now - ts) <= maxSkewMs
 }
 

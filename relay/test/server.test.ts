@@ -11,6 +11,7 @@ import {
   type RelayEvent
 } from '../src/protocol'
 import { RateLimiter } from '../src/rateLimiter'
+import { ReplayCache } from '../src/replayCache'
 import { createHandler } from '../src/server'
 
 describe('HTTP Server Handler', () => {
@@ -775,5 +776,220 @@ describe('HTTP Server Handler', () => {
 
     const rawForwardedBody = String(capturedInit?.body)
     expect(rawForwardedBody).not.toContain(incomingClientIp)
+  })
+
+  it('POST /v1/events with same event twice gives 2xx then 409 replayed_request and exactly one upstream fetch', async () => {
+    let fetchCount = 0
+    const mockFetch = async () => {
+      fetchCount++
+      return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    }
+
+    const fixedNow = 1700000000000
+    const handler = createHandler({
+      config: testConfig,
+      fetch: mockFetch as unknown as typeof fetch,
+      now: () => fixedNow
+    })
+
+    const { keyPair, publicJwk, thumbprint } = await generateTestKeyPair()
+    const ticket = await createTicket(testConfig.ticketKey, thumbprint, fixedNow + 600000)
+    const event: RelayEvent = { name: 'options_opened', params: {} }
+    const version = '1.3.0'
+    const canonical = canonicaliseEventPayload({
+      install_id: thumbprint,
+      ts: fixedNow,
+      event,
+      version
+    })
+    const sig = await signPayload(keyPair.privateKey, canonical)
+
+    const payload = JSON.stringify({
+      install_id: thumbprint,
+      ticket,
+      ts: fixedNow,
+      event,
+      version,
+      sig,
+      jwk: publicJwk
+    })
+
+    const req1 = new Request('http://localhost/v1/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload
+    })
+    const res1 = await handler(req1, '127.0.0.1')
+    expect(res1.status).toBe(200)
+    expect(await res1.json()).toEqual({ ok: true })
+    expect(fetchCount).toBe(1)
+
+    const req2 = new Request('http://localhost/v1/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload
+    })
+    const res2 = await handler(req2, '127.0.0.1')
+    expect(res2.status).toBe(409)
+    expect(await res2.json()).toEqual({ error: 'replayed_request' })
+    expect(fetchCount).toBe(1)
+  })
+
+  it('DELETE /v1/installs with same erasure twice gives 2xx then 409 and exactly one eraser queue entry', async () => {
+    const fixedNow = 1700000000000
+    const eraser = new InMemoryEraser()
+    const handler = createHandler({
+      config: testConfig,
+      eraser,
+      now: () => fixedNow
+    })
+
+    const { keyPair, publicJwk, thumbprint } = await generateTestKeyPair()
+    const ticket = await createTicket(testConfig.ticketKey, thumbprint, fixedNow + 600000)
+    const canonical = canonicaliseErasurePayload({
+      install_id: thumbprint,
+      ts: fixedNow
+    })
+    const sig = await signPayload(keyPair.privateKey, canonical)
+
+    const payload = JSON.stringify({
+      install_id: thumbprint,
+      ticket,
+      ts: fixedNow,
+      sig,
+      jwk: publicJwk
+    })
+
+    const req1 = new Request('http://localhost/v1/installs', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload
+    })
+    const res1 = await handler(req1, '127.0.0.1')
+    expect(res1.status).toBe(200)
+    expect(await res1.json()).toEqual({ ok: true })
+    expect(eraser.queue.length).toBe(1)
+
+    const req2 = new Request('http://localhost/v1/installs', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload
+    })
+    const res2 = await handler(req2, '127.0.0.1')
+    expect(res2.status).toBe(409)
+    expect(await res2.json()).toEqual({ error: 'replayed_request' })
+    expect(eraser.queue.length).toBe(1)
+  })
+
+  it('a request with an INVALID signature sent twice is rejected with the signature error both times and does not occupy the cache', async () => {
+    const fixedNow = 1700000000000
+    const replayCache = new ReplayCache({ now: () => fixedNow })
+    const handler = createHandler({
+      config: testConfig,
+      replayCache,
+      now: () => fixedNow
+    })
+
+    const { publicJwk, thumbprint } = await generateTestKeyPair()
+    const ticket = await createTicket(testConfig.ticketKey, thumbprint, fixedNow + 600000)
+    const event: RelayEvent = { name: 'badge_scan', params: {} }
+    const badSig = 'invalid-signature-value-that-fails-verification'
+
+    const payload = JSON.stringify({
+      install_id: thumbprint,
+      ticket,
+      ts: fixedNow,
+      event,
+      version: '1.3.0',
+      sig: badSig,
+      jwk: publicJwk
+    })
+
+    const req1 = new Request('http://localhost/v1/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload
+    })
+    const res1 = await handler(req1, '127.0.0.1')
+    expect(res1.status).toBe(400)
+    expect(await res1.json()).toEqual({ error: 'invalid_signature' })
+    expect(replayCache.size).toBe(0)
+
+    const req2 = new Request('http://localhost/v1/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload
+    })
+    const res2 = await handler(req2, '127.0.0.1')
+    expect(res2.status).toBe(400)
+    expect(await res2.json()).toEqual({ error: 'invalid_signature' })
+    expect(replayCache.size).toBe(0)
+  })
+
+  it('the same event resent after the timestamp window is rejected for its timestamp (not as a replay) and the cache does not grow without bound', async () => {
+    let fetchCount = 0
+    const mockFetch = async () => {
+      fetchCount++
+      return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    }
+
+    let currentTime = 1700000000000
+    const replayCache = new ReplayCache({ now: () => currentTime })
+    const handler = createHandler({
+      config: testConfig,
+      fetch: mockFetch as unknown as typeof fetch,
+      replayCache,
+      now: () => currentTime
+    })
+
+    const { keyPair, publicJwk, thumbprint } = await generateTestKeyPair()
+    const ticket = await createTicket(testConfig.ticketKey, thumbprint, currentTime + 1000000)
+    const event: RelayEvent = { name: 'extension_installed', params: {} }
+    const version = '1.3.0'
+    const eventTs = currentTime
+    const canonical = canonicaliseEventPayload({
+      install_id: thumbprint,
+      ts: eventTs,
+      event,
+      version
+    })
+    const sig = await signPayload(keyPair.privateKey, canonical)
+
+    const payload = JSON.stringify({
+      install_id: thumbprint,
+      ticket,
+      ts: eventTs,
+      event,
+      version,
+      sig,
+      jwk: publicJwk
+    })
+
+    const req1 = new Request('http://localhost/v1/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload
+    })
+    const res1 = await handler(req1, '127.0.0.1')
+    expect(res1.status).toBe(200)
+    expect(fetchCount).toBe(1)
+    expect(replayCache.size).toBe(1)
+
+    // Advance clock past the 5-minute timestamp window (e.g. 5 minutes + 1 ms = 300,001 ms)
+    currentTime = eventTs + 300001
+
+    // Same event resent now: rejected as invalid_timestamp, not as replayed_request
+    const req2 = new Request('http://localhost/v1/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload
+    })
+    const res2 = await handler(req2, '127.0.0.1')
+    expect(res2.status).toBe(400)
+    expect(await res2.json()).toEqual({ error: 'invalid_timestamp' })
+    expect(fetchCount).toBe(1)
+
+    // Expired entry has been dropped from the cache: cache does not grow without bound
+    expect(replayCache.size).toBe(0)
   })
 })
