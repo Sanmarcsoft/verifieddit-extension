@@ -1,10 +1,12 @@
 # Build context: repository root (e.g. docker build -f relay/Dockerfile .)
 FROM oven/bun:1.4.0-alpine
 
-USER bun
 WORKDIR /app
 
 COPY --chown=bun:bun relay/src ./src
+RUN chown bun:bun /app
+
+USER bun
 
 ENV PORT=3000
 EXPOSE 3000

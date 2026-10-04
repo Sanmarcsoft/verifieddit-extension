@@ -13,13 +13,20 @@ describe('relay/Dockerfile', () => {
     expect(fromLine).toMatch(/^FROM\s+oven\/bun:\d+\.\d+\.\d+/)
   })
 
-  it('runs as a non-root USER', () => {
-    const userLine = lines.find(line => line.trim().startsWith('USER '))
-    expect(userLine).toBeDefined()
-    const user = userLine?.trim().split(/\s+/)[1]
+  it('runs as a non-root USER with the last USER not root and WORKDIR appearing before that USER', () => {
+    const userLines = lines
+      .map((line, index) => ({ line: line.trim(), index }))
+      .filter(item => item.line.startsWith('USER '))
+    expect(userLines.length).toBeGreaterThan(0)
+    const lastUser = userLines[userLines.length - 1]
+    const user = lastUser.line.split(/\s+/)[1]
     expect(user).toBeDefined()
     expect(user).not.toBe('root')
     expect(user).not.toBe('0')
+
+    const workdirIndex = lines.findIndex(line => line.trim().startsWith('WORKDIR '))
+    expect(workdirIndex).toBeGreaterThanOrEqual(0)
+    expect(workdirIndex).toBeLessThan(lastUser.index)
   })
 
   it('contains an EXPOSE instruction', () => {
