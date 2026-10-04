@@ -65,4 +65,26 @@ describe('RateLimiter', () => {
     // Requests allowed again after rotation
     expect(await limiter.isAllowed(ip)).toBe(true)
   })
+
+  it('evicts expired buckets when a later call arrives from a distinct address', async () => {
+    let currentTime = 1700000000000
+    const limiter = new RateLimiter({
+      maxRequests: 5,
+      windowMs: 60000,
+      now: () => currentTime
+    })
+
+    const ipX = '192.0.2.1'
+    const ipY = '192.0.2.2'
+
+    expect(await limiter.isAllowed(ipX)).toBe(true)
+    expect(limiter.getBucketCount()).toBe(1)
+
+    // Advance clock past the window
+    currentTime += 60001
+
+    // Call from distinct address Y triggers eviction of expired bucket X
+    expect(await limiter.isAllowed(ipY)).toBe(true)
+    expect(limiter.getBucketCount()).toBe(1)
+  })
 })

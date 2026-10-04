@@ -20,6 +20,7 @@ export class RateLimiter {
 
   private currentDayIndex: number
   private currentSalt: string
+  private lastSweepTime: number
   private readonly buckets: Map<string, Bucket>
 
   constructor (options: RateLimiterOptions = {}) {
@@ -29,6 +30,7 @@ export class RateLimiter {
 
     this.currentDayIndex = Math.floor(this.now() / MS_PER_DAY)
     this.currentSalt = this.generateSalt()
+    this.lastSweepTime = this.now()
     this.buckets = new Map()
   }
 
@@ -44,6 +46,19 @@ export class RateLimiter {
       this.currentDayIndex = dayIndex
       this.currentSalt = this.generateSalt()
       this.buckets.clear()
+      this.lastSweepTime = currentTime
+    }
+  }
+
+  private evictExpiredBuckets (currentTime: number): void {
+    if (currentTime - this.lastSweepTime < this.windowMs) {
+      return
+    }
+    this.lastSweepTime = currentTime
+    for (const [key, bucket] of this.buckets.entries()) {
+      if (currentTime >= bucket.resetAt) {
+        this.buckets.delete(key)
+      }
     }
   }
 
@@ -51,6 +66,10 @@ export class RateLimiter {
     const data = new TextEncoder().encode(`${this.currentSalt}:${address}`)
     const digest = await crypto.subtle.digest('SHA-256', data)
     return Buffer.from(digest).toString('hex')
+  }
+
+  public getBucketCount (): number {
+    return this.buckets.size
   }
 
   public getSalt (): string {
@@ -74,6 +93,7 @@ export class RateLimiter {
   public async isAllowed (clientAddress: string): Promise<boolean> {
     const currentTime = this.now()
     this.rotateIfNeeded(currentTime)
+    this.evictExpiredBuckets(currentTime)
 
     const key = await this.hashAddress(clientAddress)
     const existing = this.buckets.get(key)
