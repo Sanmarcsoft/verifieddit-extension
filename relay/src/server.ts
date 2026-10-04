@@ -5,12 +5,14 @@ import {
   canonicaliseEventPayload,
   computeJwkThumbprint,
   createTicket,
+  validateBrowser,
   validateEvent,
   validatePublicJwk,
   validateTimestamp,
   validateVersion,
   verifyEcdsaSignature,
-  verifyTicket
+  verifyTicket,
+  type Browser
 } from './protocol'
 import {
   ERASURE_PER_ADDRESS_MAX,
@@ -214,7 +216,7 @@ export function createHandler (deps: HandlerDependencies) {
         }
 
         const body = bodyResult.data
-        const { install_id: installId, ticket, ts, sig, jwk } = body
+        const { install_id: installId, ticket, ts, browser, sig, jwk } = body
 
         if (
           typeof installId !== 'string' ||
@@ -224,6 +226,13 @@ export function createHandler (deps: HandlerDependencies) {
           jwk == null
         ) {
           return createJsonResponse({ error: 'invalid_signature' }, 400, origin)
+        }
+
+        let validBrowser: Browser
+        try {
+          validBrowser = validateBrowser(browser)
+        } catch {
+          return createJsonResponse({ error: 'invalid_browser' }, 400, origin)
         }
 
         let publicJwk
@@ -253,7 +262,11 @@ export function createHandler (deps: HandlerDependencies) {
           return createJsonResponse({ error: 'rate_limited' }, 429, origin)
         }
 
-        const canonical = canonicaliseErasurePayload({ install_id: installId, ts })
+        const canonical = canonicaliseErasurePayload({
+          install_id: installId,
+          ts,
+          browser: validBrowser
+        })
         const isSigValid = await verifyEcdsaSignature(
           publicJwk,
           sig,
@@ -290,7 +303,7 @@ export function createHandler (deps: HandlerDependencies) {
       }
 
       const body = bodyResult.data
-      const { install_id: installId, ticket, ts, event, version, sig, jwk } = body
+      const { install_id: installId, ticket, ts, event, version, browser, sig, jwk } = body
 
       if (
         typeof installId !== 'string' ||
@@ -340,6 +353,13 @@ export function createHandler (deps: HandlerDependencies) {
         return createJsonResponse({ error: 'invalid_event' }, 400, origin)
       }
 
+      let validBrowser: Browser
+      try {
+        validBrowser = validateBrowser(browser)
+      } catch {
+        return createJsonResponse({ error: 'invalid_browser' }, 400, origin)
+      }
+
       const installAllowed = await eventsInstallRateLimiter.isAllowed(installId)
       if (!installAllowed) {
         return createJsonResponse({ error: 'rate_limited' }, 429, origin)
@@ -349,7 +369,8 @@ export function createHandler (deps: HandlerDependencies) {
         install_id: installId,
         ts,
         event: validatedEvent,
-        version: validVersion
+        version: validVersion,
+        browser: validBrowser
       })
 
       const isSigValid = await verifyEcdsaSignature(
@@ -375,7 +396,8 @@ export function createHandler (deps: HandlerDependencies) {
           name: validatedEvent.name,
           data: {
             ...validatedEvent.params,
-            extension_version: validVersion
+            extension_version: validVersion,
+            browser: validBrowser
           },
           id: installId
         }

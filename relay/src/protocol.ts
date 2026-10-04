@@ -16,6 +16,7 @@ export interface PublicJwk {
 export type VerifySource = 'context_menu' | 'popup' | 'auto_scan'
 export type VerifyResult = 'valid' | 'invalid' | 'none' | 'error'
 export type MediaType = 'image' | 'video' | 'audio' | 'pdf'
+export type Browser = 'chrome' | 'firefox'
 
 export type RelayEvent =
   | { name: 'extension_installed', params: Record<string, never> }
@@ -124,8 +125,10 @@ export function canonicaliseEventPayload (payload: {
   ts: number
   event: RelayEvent
   version: string
+  browser: Browser
 }): string {
   return canonicalise({
+    browser: payload.browser,
     event: payload.event,
     install_id: payload.install_id,
     ts: payload.ts,
@@ -136,9 +139,11 @@ export function canonicaliseEventPayload (payload: {
 export function canonicaliseErasurePayload (payload: {
   install_id: string
   ts: number
+  browser: Browser
 }): string {
   return canonicalise({
     action: 'erase',
+    browser: payload.browser,
     install_id: payload.install_id,
     ts: payload.ts
   })
@@ -256,6 +261,13 @@ export function validateVersion (version: unknown): string {
     throw new ProtocolError('invalid_version', 'Version must be a non-empty string up to 32 characters')
   }
   return version
+}
+
+export function validateBrowser (browser: unknown): Browser {
+  if (browser === 'chrome' || browser === 'firefox') {
+    return browser
+  }
+  throw new ProtocolError('invalid_browser', 'Browser must be either "chrome" or "firefox"')
 }
 
 function hasExactKeys (obj: Record<string, unknown>, allowedKeys: string[]): boolean {

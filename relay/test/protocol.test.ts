@@ -7,12 +7,14 @@ import {
   canonicaliseEventPayload,
   computeJwkThumbprint,
   createTicket,
+  validateBrowser,
   validateEvent,
   validatePublicJwk,
   validateTimestamp,
   validateVersion,
   verifyEcdsaSignature,
   verifyTicket,
+  type Browser,
   type PublicJwk,
   type RelayEvent
 } from '../src/protocol'
@@ -96,22 +98,77 @@ describe('canonicalise', () => {
       install_id: 'inst_123',
       ts: 1700000000000,
       event,
-      version: '1.3.0'
+      version: '1.3.0',
+      browser: 'chrome' as const
     }
 
     const canonical = canonicaliseEventPayload(payload)
     expect(canonical).toBe(
-      '{"event":{"name":"verify_completed","params":{"has_durable_binding":true,"media_type":"image","result":"valid"}},"install_id":"inst_123","ts":1700000000000,"version":"1.3.0"}'
+      '{"browser":"chrome","event":{"name":"verify_completed","params":{"has_durable_binding":true,"media_type":"image","result":"valid"}},"install_id":"inst_123","ts":1700000000000,"version":"1.3.0"}'
+    )
+
+    const payloadFirefox = {
+      ...payload,
+      browser: 'firefox' as const
+    }
+    expect(canonicaliseEventPayload(payloadFirefox)).toBe(
+      '{"browser":"firefox","event":{"name":"verify_completed","params":{"has_durable_binding":true,"media_type":"image","result":"valid"}},"install_id":"inst_123","ts":1700000000000,"version":"1.3.0"}'
     )
   })
 
   it('creates deterministic erasure payload with action discriminator', () => {
     const canonical = canonicaliseErasurePayload({
       install_id: 'inst_123',
-      ts: 1700000000000
+      ts: 1700000000000,
+      browser: 'chrome'
     })
 
-    expect(canonical).toBe('{"action":"erase","install_id":"inst_123","ts":1700000000000}')
+    expect(canonical).toBe('{"action":"erase","browser":"chrome","install_id":"inst_123","ts":1700000000000}')
+
+    const canonicalFirefox = canonicaliseErasurePayload({
+      install_id: 'inst_123',
+      ts: 1700000000000,
+      browser: 'firefox'
+    })
+    expect(canonicalFirefox).toBe('{"action":"erase","browser":"firefox","install_id":"inst_123","ts":1700000000000}')
+  })
+})
+
+describe('validateBrowser', () => {
+  it('accepts exact strings "chrome" and "firefox"', () => {
+    expect(validateBrowser('chrome')).toBe('chrome')
+    expect(validateBrowser('firefox')).toBe('firefox')
+  })
+
+  it('rejects missing, non-string, casing differences, or invalid values with invalid_browser', () => {
+    const invalidValues = [
+      undefined,
+      null,
+      123,
+      true,
+      {},
+      [],
+      '',
+      'Chrome',
+      'Firefox',
+      'CHROME',
+      'edge',
+      'safari',
+      'opera',
+      'chrome ',
+      ' chrome',
+      'firefox ',
+      ' firefox'
+    ]
+
+    for (const val of invalidValues) {
+      expect(() => validateBrowser(val)).toThrow()
+      try {
+        validateBrowser(val)
+      } catch (err: any) {
+        expect(err.code).toBe('invalid_browser')
+      }
+    }
   })
 })
 

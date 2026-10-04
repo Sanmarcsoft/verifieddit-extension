@@ -7,6 +7,7 @@ import {
   canonicaliseEventPayload,
   computeJwkThumbprint,
   createTicket,
+  type Browser,
   type PublicJwk,
   type RelayEvent
 } from '../src/protocol'
@@ -225,7 +226,8 @@ describe('HTTP Server Handler', () => {
       install_id: thumbprint,
       ts: fixedNow,
       event,
-      version
+      version,
+      browser: 'chrome'
     })
     const sig = await signPayload(keyPair.privateKey, canonical)
 
@@ -235,6 +237,7 @@ describe('HTTP Server Handler', () => {
       ts: fixedNow,
       event,
       version,
+      browser: 'chrome' as const,
       sig,
       jwk: publicJwk
     }
@@ -268,7 +271,8 @@ describe('HTTP Server Handler', () => {
           result: 'valid',
           has_durable_binding: true,
           media_type: 'image',
-          extension_version: '1.3.0'
+          extension_version: '1.3.0',
+          browser: 'chrome'
         },
         id: thumbprint
       }
@@ -292,7 +296,8 @@ describe('HTTP Server Handler', () => {
       install_id: thumbprint,
       ts: fixedNow,
       event,
-      version
+      version,
+      browser: 'chrome'
     })
     const sig = await signPayload(keyPair.privateKey, canonical)
 
@@ -305,6 +310,7 @@ describe('HTTP Server Handler', () => {
         ts: fixedNow,
         event,
         version,
+        browser: 'chrome',
         sig,
         jwk: publicJwk
       })
@@ -326,7 +332,8 @@ describe('HTTP Server Handler', () => {
       install_id: thumbprint,
       ts: fixedNow,
       event,
-      version
+      version,
+      browser: 'chrome'
     })
     const sig = await signPayload(keyPair.privateKey, canonical)
 
@@ -340,6 +347,7 @@ describe('HTTP Server Handler', () => {
         ts: fixedNow,
         event,
         version,
+        browser: 'chrome',
         sig: 'bad-sig'.repeat(10),
         jwk: publicJwk
       })
@@ -358,6 +366,7 @@ describe('HTTP Server Handler', () => {
         ts: fixedNow - 300001,
         event,
         version,
+        browser: 'chrome',
         sig,
         jwk: publicJwk
       })
@@ -377,6 +386,7 @@ describe('HTTP Server Handler', () => {
         ts: fixedNow,
         event,
         version,
+        browser: 'chrome',
         sig,
         jwk: publicJwk
       })
@@ -395,6 +405,7 @@ describe('HTTP Server Handler', () => {
         ts: fixedNow,
         event,
         version,
+        browser: 'chrome',
         sig,
         jwk: publicJwk
       })
@@ -414,7 +425,8 @@ describe('HTTP Server Handler', () => {
 
     const erasureCanonical = canonicaliseErasurePayload({
       install_id: thumbprint,
-      ts: fixedNow
+      ts: fixedNow,
+      browser: 'chrome'
     })
     const sig = await signPayload(keyPair.privateKey, erasureCanonical)
 
@@ -425,6 +437,7 @@ describe('HTTP Server Handler', () => {
         install_id: thumbprint,
         ticket,
         ts: fixedNow,
+        browser: 'chrome',
         sig,
         jwk: publicJwk
       })
@@ -454,7 +467,8 @@ describe('HTTP Server Handler', () => {
       install_id: thumbprint,
       ts: fixedNow,
       event: { name: 'extension_installed', params: {} },
-      version: '1.3.0'
+      version: '1.3.0',
+      browser: 'chrome'
     })
     const eventSig = await signPayload(keyPair.privateKey, eventCanonical)
 
@@ -465,6 +479,7 @@ describe('HTTP Server Handler', () => {
         install_id: thumbprint,
         ticket,
         ts: fixedNow,
+        browser: 'chrome',
         sig: eventSig,
         jwk: publicJwk
       })
@@ -513,7 +528,8 @@ describe('HTTP Server Handler', () => {
         install_id: thumbprint,
         ts: fixedNow,
         event,
-        version: badVersion
+        version: badVersion,
+        browser: 'chrome'
       })
       const sig = await signPayload(keyPair.privateKey, canonical)
 
@@ -526,6 +542,7 @@ describe('HTTP Server Handler', () => {
           ts: fixedNow,
           event,
           version: badVersion,
+          browser: 'chrome',
           sig,
           jwk: publicJwk
         })
@@ -562,7 +579,8 @@ describe('HTTP Server Handler', () => {
       install_id: thumbprint,
       ts: fixedNow,
       event: unknownEvent,
-      version
+      version,
+      browser: 'chrome'
     })
     const sigUnknown = await signPayload(keyPair.privateKey, canonicalUnknown)
 
@@ -575,6 +593,7 @@ describe('HTTP Server Handler', () => {
         ts: fixedNow,
         event: unknownEvent,
         version,
+        browser: 'chrome',
         sig: sigUnknown,
         jwk: publicJwk
       })
@@ -595,7 +614,8 @@ describe('HTTP Server Handler', () => {
       install_id: thumbprint,
       ts: fixedNow,
       event: extraParamsEvent,
-      version
+      version,
+      browser: 'chrome'
     })
     const sigExtra = await signPayload(keyPair.privateKey, canonicalExtra)
 
@@ -608,6 +628,7 @@ describe('HTTP Server Handler', () => {
         ts: fixedNow,
         event: extraParamsEvent,
         version,
+        browser: 'chrome',
         sig: sigExtra,
         jwk: publicJwk
       })
@@ -618,6 +639,329 @@ describe('HTTP Server Handler', () => {
     expect(resExtra.status).toBeLessThan(500)
     expect(await resExtra.json()).toEqual({ error: 'invalid_event' })
     expect(forwarded).toBe(false)
+  })
+
+  it('POST /v1/events accepts both chrome and firefox and forwards browser in data payload', async () => {
+    for (const browser of ['chrome', 'firefox'] as const) {
+      let capturedBody: any = null
+      const mockFetch = async (_url: string | URL | Request, init?: RequestInit) => {
+        capturedBody = JSON.parse(String(init?.body))
+        return new Response(JSON.stringify({ ok: true }), { status: 200 })
+      }
+      const fixedNow = 1700000000000
+      const handler = createHandler({
+        config: testConfig,
+        fetch: mockFetch as unknown as typeof fetch,
+        now: () => fixedNow
+      })
+
+      const { keyPair, publicJwk, thumbprint } = await generateTestKeyPair()
+      const ticket = await createTicket(testConfig.ticketKey, thumbprint, fixedNow + 600000)
+      const event: RelayEvent = {
+        name: 'verify_started',
+        params: { source: 'popup' }
+      }
+      const version = '1.3.0'
+      const canonical = canonicaliseEventPayload({
+        install_id: thumbprint,
+        ts: fixedNow,
+        event,
+        version,
+        browser
+      })
+      const sig = await signPayload(keyPair.privateKey, canonical)
+
+      const req = new Request('http://localhost/v1/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          install_id: thumbprint,
+          ticket,
+          ts: fixedNow,
+          event,
+          version,
+          browser,
+          sig,
+          jwk: publicJwk
+        })
+      })
+
+      const res = await handler(req, '127.0.0.1')
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ ok: true })
+      expect(capturedBody).toEqual({
+        type: 'event',
+        payload: {
+          website: testConfig.umamiWebsiteId,
+          hostname: 'extension.verifieddit.com',
+          url: '/verify_started',
+          name: 'verify_started',
+          data: {
+            source: 'popup',
+            extension_version: '1.3.0',
+            browser
+          },
+          id: thumbprint
+        }
+      })
+    }
+  })
+
+  it('POST /v1/events rejects missing, non-string, casing differences, or invalid browser values with 400 invalid_browser', async () => {
+    let forwarded = false
+    const mockFetch = async () => {
+      forwarded = true
+      return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    }
+    const fixedNow = 1700000000000
+    const replayCache = new ReplayCache({ now: () => fixedNow })
+    const handler = createHandler({
+      config: testConfig,
+      fetch: mockFetch as unknown as typeof fetch,
+      now: () => fixedNow,
+      replayCache
+    })
+
+    const { keyPair, publicJwk, thumbprint } = await generateTestKeyPair()
+    const ticket = await createTicket(testConfig.ticketKey, thumbprint, fixedNow + 600000)
+    const event: RelayEvent = { name: 'extension_installed', params: {} }
+    const version = '1.3.0'
+
+    const invalidBrowsers = [
+      undefined,
+      null,
+      123,
+      true,
+      {},
+      [],
+      '',
+      'Chrome',
+      'Firefox',
+      'CHROME',
+      'edge',
+      'safari',
+      'chrome ',
+      ' chrome',
+      'firefox '
+    ]
+
+    for (const badBrowser of invalidBrowsers) {
+      forwarded = false
+      const body: Record<string, unknown> = {
+        install_id: thumbprint,
+        ticket,
+        ts: fixedNow,
+        event,
+        version,
+        sig: 'dummy-sig',
+        jwk: publicJwk
+      }
+      if (badBrowser !== undefined) {
+        body.browser = badBrowser
+      }
+
+      const req = new Request('http://localhost/v1/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+
+      const res = await handler(req, '127.0.0.1')
+      expect(res.status).toBe(400)
+      expect(await res.json()).toEqual({ error: 'invalid_browser' })
+      expect(forwarded).toBe(false)
+      expect(replayCache.size).toBe(0)
+    }
+  })
+
+  it('POST /v1/events fails signature verification if browser value is changed in transit', async () => {
+    let forwarded = false
+    const mockFetch = async () => {
+      forwarded = true
+      return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    }
+    const fixedNow = 1700000000000
+    const replayCache = new ReplayCache({ now: () => fixedNow })
+    const handler = createHandler({
+      config: testConfig,
+      fetch: mockFetch as unknown as typeof fetch,
+      now: () => fixedNow,
+      replayCache
+    })
+
+    const { keyPair, publicJwk, thumbprint } = await generateTestKeyPair()
+    const ticket = await createTicket(testConfig.ticketKey, thumbprint, fixedNow + 600000)
+    const event: RelayEvent = { name: 'extension_installed', params: {} }
+    const version = '1.3.0'
+
+    // Signed with chrome
+    const canonical = canonicaliseEventPayload({
+      install_id: thumbprint,
+      ts: fixedNow,
+      event,
+      version,
+      browser: 'chrome'
+    })
+    const sig = await signPayload(keyPair.privateKey, canonical)
+
+    // Sent with firefox
+    const req = new Request('http://localhost/v1/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        install_id: thumbprint,
+        ticket,
+        ts: fixedNow,
+        event,
+        version,
+        browser: 'firefox',
+        sig,
+        jwk: publicJwk
+      })
+    })
+
+    const res = await handler(req, '127.0.0.1')
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: 'invalid_signature' })
+    expect(forwarded).toBe(false)
+    expect(replayCache.size).toBe(0)
+  })
+
+  it('DELETE /v1/installs accepts both chrome and firefox browser values', async () => {
+    for (const browser of ['chrome', 'firefox'] as const) {
+      const fixedNow = 1700000000000
+      const eraser = new InMemoryEraser()
+      const handler = createHandler({ config: testConfig, eraser, now: () => fixedNow })
+
+      const { keyPair, publicJwk, thumbprint } = await generateTestKeyPair()
+      const ticket = await createTicket(testConfig.ticketKey, thumbprint, fixedNow + 600000)
+
+      const canonical = canonicaliseErasurePayload({
+        install_id: thumbprint,
+        ts: fixedNow,
+        browser
+      })
+      const sig = await signPayload(keyPair.privateKey, canonical)
+
+      const req = new Request('http://localhost/v1/installs', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          install_id: thumbprint,
+          ticket,
+          ts: fixedNow,
+          browser,
+          sig,
+          jwk: publicJwk
+        })
+      })
+
+      const res = await handler(req, '127.0.0.1')
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ ok: true })
+      expect(eraser.queue).toEqual([{ install_id: thumbprint, requested_at: fixedNow }])
+    }
+  })
+
+  it('DELETE /v1/installs rejects missing, non-string, casing differences, or invalid browser values with 400 invalid_browser', async () => {
+    const fixedNow = 1700000000000
+    const eraser = new InMemoryEraser()
+    const replayCache = new ReplayCache({ now: () => fixedNow })
+    const handler = createHandler({
+      config: testConfig,
+      eraser,
+      now: () => fixedNow,
+      replayCache
+    })
+
+    const { keyPair, publicJwk, thumbprint } = await generateTestKeyPair()
+    const ticket = await createTicket(testConfig.ticketKey, thumbprint, fixedNow + 600000)
+
+    const invalidBrowsers = [
+      undefined,
+      null,
+      123,
+      true,
+      {},
+      [],
+      '',
+      'Chrome',
+      'Firefox',
+      'CHROME',
+      'edge',
+      'safari',
+      'chrome ',
+      ' chrome',
+      'firefox '
+    ]
+
+    for (const badBrowser of invalidBrowsers) {
+      const body: Record<string, unknown> = {
+        install_id: thumbprint,
+        ticket,
+        ts: fixedNow,
+        sig: 'dummy-sig',
+        jwk: publicJwk
+      }
+      if (badBrowser !== undefined) {
+        body.browser = badBrowser
+      }
+
+      const req = new Request('http://localhost/v1/installs', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+
+      const res = await handler(req, '127.0.0.1')
+      expect(res.status).toBe(400)
+      expect(await res.json()).toEqual({ error: 'invalid_browser' })
+      expect(eraser.queue.length).toBe(0)
+      expect(replayCache.size).toBe(0)
+    }
+  })
+
+  it('DELETE /v1/installs fails signature verification if browser value is changed in transit', async () => {
+    const fixedNow = 1700000000000
+    const eraser = new InMemoryEraser()
+    const replayCache = new ReplayCache({ now: () => fixedNow })
+    const handler = createHandler({
+      config: testConfig,
+      eraser,
+      now: () => fixedNow,
+      replayCache
+    })
+
+    const { keyPair, publicJwk, thumbprint } = await generateTestKeyPair()
+    const ticket = await createTicket(testConfig.ticketKey, thumbprint, fixedNow + 600000)
+
+    // Signed with chrome
+    const canonical = canonicaliseErasurePayload({
+      install_id: thumbprint,
+      ts: fixedNow,
+      browser: 'chrome'
+    })
+    const sig = await signPayload(keyPair.privateKey, canonical)
+
+    // Sent with firefox
+    const req = new Request('http://localhost/v1/installs', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        install_id: thumbprint,
+        ticket,
+        ts: fixedNow,
+        browser: 'firefox',
+        sig,
+        jwk: publicJwk
+      })
+    })
+
+    const res = await handler(req, '127.0.0.1')
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: 'invalid_signature' })
+    expect(eraser.queue.length).toBe(0)
+    expect(replayCache.size).toBe(0)
   })
 
   it('DELETE /v1/installs with expired ticket or skewed ts returns 4xx and eraser queue stays empty', async () => {
@@ -631,7 +975,8 @@ describe('HTTP Server Handler', () => {
     const expiredTicket = await createTicket(testConfig.ticketKey, thumbprint, fixedNow - 1000)
     const erasureCanonical = canonicaliseErasurePayload({
       install_id: thumbprint,
-      ts: fixedNow
+      ts: fixedNow,
+      browser: 'chrome'
     })
     const sig = await signPayload(keyPair.privateKey, erasureCanonical)
 
@@ -642,6 +987,7 @@ describe('HTTP Server Handler', () => {
         install_id: thumbprint,
         ticket: expiredTicket,
         ts: fixedNow,
+        browser: 'chrome',
         sig,
         jwk: publicJwk
       })
@@ -657,7 +1003,8 @@ describe('HTTP Server Handler', () => {
     const skewedTs = fixedNow - 300001
     const skewedCanonical = canonicaliseErasurePayload({
       install_id: thumbprint,
-      ts: skewedTs
+      ts: skewedTs,
+      browser: 'chrome'
     })
     const skewedSig = await signPayload(keyPair.privateKey, skewedCanonical)
 
@@ -668,6 +1015,7 @@ describe('HTTP Server Handler', () => {
         install_id: thumbprint,
         ticket: validTicket,
         ts: skewedTs,
+        browser: 'chrome',
         sig: skewedSig,
         jwk: publicJwk
       })
@@ -698,7 +1046,8 @@ describe('HTTP Server Handler', () => {
       install_id: thumbprint,
       ts: fixedNow,
       event,
-      version
+      version,
+      browser: 'chrome'
     })
     const sig = await signPayload(keyPair.privateKey, canonical)
 
@@ -711,6 +1060,7 @@ describe('HTTP Server Handler', () => {
         ts: fixedNow,
         event,
         version,
+        browser: 'chrome',
         sig,
         jwk: publicJwk
       })
@@ -752,7 +1102,8 @@ describe('HTTP Server Handler', () => {
       install_id: thumbprint,
       ts: fixedNow,
       event,
-      version
+      version,
+      browser: 'chrome'
     })
     const sig = await signPayload(keyPair.privateKey, canonical)
 
@@ -772,6 +1123,7 @@ describe('HTTP Server Handler', () => {
         ts: fixedNow,
         event,
         version,
+        browser: 'chrome',
         sig,
         jwk: publicJwk
       })
@@ -812,7 +1164,8 @@ describe('HTTP Server Handler', () => {
       install_id: thumbprint,
       ts: fixedNow,
       event,
-      version
+      version,
+      browser: 'chrome'
     })
     const sig = await signPayload(keyPair.privateKey, canonical)
 
@@ -822,6 +1175,7 @@ describe('HTTP Server Handler', () => {
       ts: fixedNow,
       event,
       version,
+      browser: 'chrome',
       sig,
       jwk: publicJwk
     })
@@ -860,7 +1214,8 @@ describe('HTTP Server Handler', () => {
     const ticket = await createTicket(testConfig.ticketKey, thumbprint, fixedNow + 600000)
     const canonical = canonicaliseErasurePayload({
       install_id: thumbprint,
-      ts: fixedNow
+      ts: fixedNow,
+      browser: 'chrome'
     })
     const sig = await signPayload(keyPair.privateKey, canonical)
 
@@ -868,6 +1223,7 @@ describe('HTTP Server Handler', () => {
       install_id: thumbprint,
       ticket,
       ts: fixedNow,
+      browser: 'chrome',
       sig,
       jwk: publicJwk
     })
@@ -913,6 +1269,7 @@ describe('HTTP Server Handler', () => {
       ts: fixedNow,
       event,
       version: '1.3.0',
+      browser: 'chrome',
       sig: badSig,
       jwk: publicJwk
     })
@@ -963,7 +1320,8 @@ describe('HTTP Server Handler', () => {
       install_id: thumbprint,
       ts: eventTs,
       event,
-      version
+      version,
+      browser: 'chrome'
     })
     const sig = await signPayload(keyPair.privateKey, canonical)
 
@@ -973,6 +1331,7 @@ describe('HTTP Server Handler', () => {
       ts: eventTs,
       event,
       version,
+      browser: 'chrome',
       sig,
       jwk: publicJwk
     })
@@ -1049,7 +1408,8 @@ describe('HTTP Server Handler', () => {
         install_id: thumbprint,
         ts,
         event,
-        version
+        version,
+        browser: 'chrome'
       })
       const sig = await signPayload(keyPair.privateKey, canonical)
 
@@ -1062,6 +1422,7 @@ describe('HTTP Server Handler', () => {
           ts,
           event,
           version,
+          browser: 'chrome',
           sig,
           jwk: publicJwk
         })
@@ -1112,7 +1473,8 @@ describe('HTTP Server Handler', () => {
         install_id: thumbprint,
         ts: fixedNow,
         event,
-        version
+        version,
+        browser: 'chrome'
       })
       const sig = await signPayload(keyPair.privateKey, canonical)
 
@@ -1125,6 +1487,7 @@ describe('HTTP Server Handler', () => {
           ts: fixedNow,
           event,
           version,
+          browser: 'chrome',
           sig,
           jwk: publicJwk
         })
@@ -1172,7 +1535,8 @@ describe('HTTP Server Handler', () => {
       const ts = fixedNow + offsetMs
       const canonical = canonicaliseErasurePayload({
         install_id: thumbprint,
-        ts
+        ts,
+        browser: 'chrome'
       })
       const sig = await signPayload(keyPair.privateKey, canonical)
 
@@ -1183,6 +1547,7 @@ describe('HTTP Server Handler', () => {
           install_id: thumbprint,
           ticket,
           ts,
+          browser: 'chrome',
           sig,
           jwk: publicJwk
         })
@@ -1224,7 +1589,8 @@ describe('HTTP Server Handler', () => {
       const ticket = await createTicket(testConfig.ticketKey, thumbprint, fixedNow + 600000)
       const canonical = canonicaliseErasurePayload({
         install_id: thumbprint,
-        ts: fixedNow
+        ts: fixedNow,
+        browser: 'chrome'
       })
       const sig = await signPayload(keyPair.privateKey, canonical)
 
@@ -1235,6 +1601,7 @@ describe('HTTP Server Handler', () => {
           install_id: thumbprint,
           ticket,
           ts: fixedNow,
+          browser: 'chrome',
           sig,
           jwk: publicJwk
         })
@@ -1289,7 +1656,8 @@ describe('HTTP Server Handler', () => {
         install_id: thumbprint,
         ts,
         event,
-        version
+        version,
+        browser: 'chrome'
       })
       const sig = await signPayload(keyPair.privateKey, canonical)
       return new Request('http://localhost/v1/events', {
@@ -1301,6 +1669,7 @@ describe('HTTP Server Handler', () => {
           ts,
           event,
           version,
+          browser: 'chrome',
           sig,
           jwk: publicJwk
         })
@@ -1322,7 +1691,8 @@ describe('HTTP Server Handler', () => {
     const makeErasureReq = async (ts: number) => {
       const canonical = canonicaliseErasurePayload({
         install_id: thumbprint,
-        ts
+        ts,
+        browser: 'chrome'
       })
       const sig = await signPayload(keyPair.privateKey, canonical)
       return new Request('http://localhost/v1/installs', {
@@ -1332,6 +1702,7 @@ describe('HTTP Server Handler', () => {
           install_id: thumbprint,
           ticket,
           ts,
+          browser: 'chrome',
           sig,
           jwk: publicJwk
         })
@@ -1378,7 +1749,8 @@ describe('HTTP Server Handler', () => {
         install_id: thumbprint,
         ts,
         event,
-        version
+        version,
+        browser: 'chrome'
       })
       const sig = await signPayload(keyPair.privateKey, canonical)
       const req = new Request('http://localhost/v1/events', {
@@ -1390,6 +1762,7 @@ describe('HTTP Server Handler', () => {
           ts,
           event,
           version,
+          browser: 'chrome',
           sig,
           jwk: publicJwk
         })
@@ -1507,6 +1880,7 @@ describe('HTTP Server Handler', () => {
         ts: fixedNow,
         event: { name: 'extension_installed', params: {} },
         version: '1.3.0',
+        browser: 'chrome',
         sig: 'any-sig',
         jwk: publicJwk
       })
@@ -1526,6 +1900,7 @@ describe('HTTP Server Handler', () => {
         ts: fixedNow,
         event: { name: 'extension_installed', params: {} },
         version: '1.3.0',
+        browser: 'chrome',
         sig: 'bad-signature-content',
         jwk: publicJwk
       })
@@ -1545,6 +1920,7 @@ describe('HTTP Server Handler', () => {
         ts: fixedNow,
         event: { name: 'extension_installed', params: {} },
         version: '1.3.0',
+        browser: 'chrome',
         sig: 'another-bad-sig',
         jwk: publicJwk
       })
@@ -1561,6 +1937,7 @@ describe('HTTP Server Handler', () => {
         install_id: thumbprint,
         ticket,
         ts: fixedNow,
+        browser: 'chrome',
         sig: 'bad-sig',
         jwk: publicJwk
       })
@@ -1577,6 +1954,7 @@ describe('HTTP Server Handler', () => {
         install_id: thumbprint,
         ticket,
         ts: fixedNow,
+        browser: 'chrome',
         sig: 'bad-sig-again',
         jwk: publicJwk
       })
@@ -1627,7 +2005,8 @@ describe('HTTP Server Handler', () => {
       install_id: thumbprint,
       ts,
       event,
-      version: '1.3.0'
+      version: '1.3.0',
+      browser: 'chrome'
     })
     const sig = await signPayload(keyPair.privateKey, canonical)
     const reqEvents = new Request('http://localhost/v1/events', {
@@ -1639,6 +2018,7 @@ describe('HTTP Server Handler', () => {
         ts,
         event,
         version: '1.3.0',
+        browser: 'chrome',
         sig,
         jwk: publicJwk
       })
@@ -1694,7 +2074,8 @@ describe('HTTP Server Handler', () => {
       install_id: thumbprint,
       ts: fixedNow,
       event,
-      version
+      version,
+      browser: 'chrome'
     })
     const originalSigB64 = await signPayload(keyPair.privateKey, canonical)
 
@@ -1734,6 +2115,7 @@ describe('HTTP Server Handler', () => {
         ts: fixedNow,
         event,
         version,
+        browser: 'chrome',
         sig: originalSigB64,
         jwk: publicJwk
       })
@@ -1752,6 +2134,7 @@ describe('HTTP Server Handler', () => {
         ts: fixedNow,
         event,
         version,
+        browser: 'chrome',
         sig: malleatedSigB64,
         jwk: publicJwk
       })
