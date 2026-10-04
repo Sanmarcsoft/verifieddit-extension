@@ -18,6 +18,7 @@ export type AnalyticsConsent = 'granted' | 'denied' | 'unset'
 export type VerifySource = 'context_menu' | 'popup' | 'auto_scan'
 export type VerifyResult = 'valid' | 'invalid' | 'none' | 'error'
 export type MediaType = 'image' | 'video' | 'audio' | 'pdf'
+export type Browser = 'chrome' | 'firefox'
 
 export interface VerifyCompletedParams {
   result: VerifyResult
@@ -57,11 +58,13 @@ const DB_KEY_PAIR = 'client_key_pair'
 const TICKET_SAFETY_MARGIN_MS = 30_000
 const ANALYTICS_TIMEOUT_MSEC = 5000
 
-// Injected at build time by rollup. Never read from runtime storage.
+// Injected at build time by rollup. Never read from runtime storage or user agent.
 const BUILD_RELAY_URL = process.env.TELEMETRY_RELAY_URL ?? ''
+const BUILD_BROWSER_TARGET: string | undefined = process.env.BROWSER_TARGET
 
 // Mutable test overrides
 let testRelayUrl: string | null = null
+let testBrowserTarget: string | null = null
 
 export class IndexedDbKeyStore implements KeyStore {
   private async openDb (): Promise<IDBDatabase> {
@@ -198,13 +201,22 @@ function getRelayUrl (): string {
   return testRelayUrl ?? BUILD_RELAY_URL
 }
 
+function getBrowserTarget (): Browser | null {
+  const target = testBrowserTarget ?? BUILD_BROWSER_TARGET
+  if (target === 'chrome' || target === 'firefox') {
+    return target
+  }
+  return null
+}
+
 /**
- * Check if the telemetry client has a relay URL configured.
+ * Check if the telemetry client has a relay URL and a valid browser target configured.
  * When false, all telemetry operations silently no-op.
  */
 export function isAnalyticsConfigured (): boolean {
   const url = getRelayUrl()
-  return url.trim().length > 0
+  const browser = getBrowserTarget()
+  return url.trim().length > 0 && browser !== null
 }
 
 /**
@@ -321,8 +333,10 @@ export function canonicaliseEventPayload (payload: {
     params: Record<string, unknown>
   }
   version: string
+  browser: Browser
 }): string {
   return canonicalise({
+    browser: payload.browser,
     event: payload.event,
     install_id: payload.install_id,
     ts: payload.ts,
@@ -333,9 +347,11 @@ export function canonicaliseEventPayload (payload: {
 export function canonicaliseErasurePayload (payload: {
   install_id: string
   ts: number
+  browser: Browser
 }): string {
   return canonicalise({
     action: 'erase',
+    browser: payload.browser,
     install_id: payload.install_id,
     ts: payload.ts
   })
@@ -569,12 +585,14 @@ async function handleConsentDenied (): Promise<void> {
         const existingKeyPair = await getOrCreateKeyPair(false)
         if (existingKeyPair != null) {
           const ticketData = await getOrFetchTicket(existingKeyPair)
-          if (ticketData != null) {
+          const browser = getBrowserTarget()
+          if (ticketData != null && browser != null) {
             const jwk = await exportCleanJwk(existingKeyPair.publicKey)
             const ts = Date.now()
             const canonical = canonicaliseErasurePayload({
               install_id: ticketData.install_id,
-              ts
+              ts,
+              browser
             })
             const sigBytes = await crypto.subtle.sign(
               { name: 'ECDSA', hash: 'SHA-256' },
@@ -599,6 +617,7 @@ async function handleConsentDenied (): Promise<void> {
                   install_id: ticketData.install_id,
                   ticket: ticketData.ticket,
                   ts,
+                  browser,
                   sig,
                   jwk
                 }),
@@ -658,7 +677,8 @@ async function sendEvent (eventName: string, eventParams: Record<string, unknown
     }
 
     const ticketData = await getOrFetchTicket(keyPair)
-    if (ticketData == null) {
+    const browser = getBrowserTarget()
+    if (ticketData == null || browser == null) {
       return
     }
 
@@ -675,7 +695,8 @@ async function sendEvent (eventName: string, eventParams: Record<string, unknown
       install_id: ticketData.install_id,
       ts,
       event: relayEvent,
-      version
+      version,
+      browser
     })
 
     const sigBytes = await crypto.subtle.sign(
@@ -691,6 +712,7 @@ async function sendEvent (eventName: string, eventParams: Record<string, unknown
       ts,
       event: relayEvent,
       version,
+      browser,
       sig,
       jwk
     }
@@ -738,7 +760,8 @@ async function sendEvent (eventName: string, eventParams: Record<string, unknown
             install_id: freshTicket.install_id,
             ts: retryTs,
             event: relayEvent,
-            version
+            version,
+            browser
           })
           const retrySigBytes = await crypto.subtle.sign(
             { name: 'ECDSA', hash: 'SHA-256' },
@@ -753,6 +776,7 @@ async function sendEvent (eventName: string, eventParams: Record<string, unknown
             ts: retryTs,
             event: relayEvent,
             version,
+            browser,
             sig: retrySig,
             jwk
           }
@@ -916,12 +940,17 @@ export function _resetStateForTesting (): void {
   isStorageListenerRegistered = false
   consentChangeListeners.clear()
   testRelayUrl = null
+  testBrowserTarget = null
   activeKeyStore = defaultKeyStore
   lastScanEmissionByTab.clear()
 }
 
 export function _setRelayUrlForTesting (url: string | null): void {
   testRelayUrl = url
+}
+
+export function _setBrowserTargetForTesting (target: string | null): void {
+  testBrowserTarget = target
 }
 
 export function _setKeyStoreForTesting (store: KeyStore | null): void {

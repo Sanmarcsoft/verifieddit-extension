@@ -18,18 +18,23 @@ import {
   options_opened,
   consent_changed,
   canonicaliseEventPayload as clientCanonicaliseEventPayload,
+  canonicaliseErasurePayload as clientCanonicaliseErasurePayload,
   _resetStateForTesting,
   _setRelayUrlForTesting,
+  _setBrowserTargetForTesting,
   _setKeyStoreForTesting,
   _getOrCreateKeyPairForTesting,
   _getCachedTicketForTesting,
   IndexedDbKeyStore,
   type AnalyticsConsent,
-  type KeyStore
+  type KeyStore,
+  type Browser
 } from '../src/analytics'
 import {
   canonicaliseEventPayload as relayCanonicaliseEventPayload,
+  canonicaliseErasurePayload as relayCanonicaliseErasurePayload,
   verifyEcdsaSignature,
+  validateBrowser,
   validateEvent
 } from '../relay/src/protocol'
 import { createHandler } from '../relay/src/server'
@@ -125,6 +130,7 @@ beforeEach(() => {
 
   _resetStateForTesting()
   _setRelayUrlForTesting(TEST_RELAY_URL)
+  _setBrowserTargetForTesting('chrome')
   _setKeyStoreForTesting(inMemoryKeyStore)
 
   const mockFetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -339,7 +345,7 @@ describe('Telemetry relay client', () => {
     expect(fetchCalls[3].url).toBe(`${TEST_RELAY_URL}/v1/events`)
   })
 
-  it('9. Event POST body contains install_id, ticket, ts, event, version, sig, jwk and no GA4 fields', async () => {
+  it('9. Event POST body contains install_id, ticket, ts, event, version, browser, sig, jwk and no GA4 fields', async () => {
     await setAnalyticsConsent('granted')
     fetchCalls = []
 
@@ -354,6 +360,8 @@ describe('Telemetry relay client', () => {
     expect(body.ticket).toBe(TEST_TICKET)
     expect(typeof body.ts).toBe('number')
     expect(body.version).toBe('1.3.0')
+    expect(body.browser).toBe('chrome')
+    expect(validateBrowser(body.browser)).toBe('chrome')
     expect(typeof body.sig).toBe('string')
     expect(body.jwk).toBeDefined()
 
@@ -363,7 +371,8 @@ describe('Telemetry relay client', () => {
       install_id: body.install_id as string,
       ts: body.ts as number,
       event: eventObj,
-      version: body.version as string
+      version: body.version as string,
+      browser: body.browser as Browser
     })
     const isSigValid = await verifyEcdsaSignature(
       body.jwk as any,
@@ -379,7 +388,7 @@ describe('Telemetry relay client', () => {
     expect(body.debug_mode).toBeUndefined()
   })
 
-  it('10. Canonicalisation produces byte-identical results between client and relay for all seven events', () => {
+  it('10. Canonicalisation produces byte-identical results between client and relay for all seven events and erasure on both chrome and firefox', () => {
     const testCases = [
       { name: 'extension_installed' as const, params: {} },
       { name: 'extension_updated' as const, params: { previous_version: '1.2.9' } },
@@ -397,17 +406,31 @@ describe('Telemetry relay client', () => {
       { name: 'consent_changed' as const, params: { value: 'granted' as const } }
     ]
 
-    for (const event of testCases) {
-      const payload = {
-        install_id: 'thumbprint-xyz-123',
-        ts: 1700000000000,
-        event,
-        version: '1.3.0'
+    const targets: Browser[] = ['chrome', 'firefox']
+
+    for (const browser of targets) {
+      for (const event of testCases) {
+        const payload = {
+          install_id: 'thumbprint-xyz-123',
+          ts: 1700000000000,
+          event,
+          version: '1.3.0',
+          browser
+        }
+
+        const clientStr = clientCanonicaliseEventPayload(payload)
+        const relayStr = relayCanonicaliseEventPayload(payload)
+        expect(clientStr).toBe(relayStr)
       }
 
-      const clientStr = clientCanonicaliseEventPayload(payload)
-      const relayStr = relayCanonicaliseEventPayload(payload)
-      expect(clientStr).toBe(relayStr)
+      const erasurePayload = {
+        install_id: 'thumbprint-xyz-123',
+        ts: 1700000000000,
+        browser
+      }
+      const clientErasureStr = clientCanonicaliseErasurePayload(erasurePayload)
+      const relayErasureStr = relayCanonicaliseErasurePayload(erasurePayload)
+      expect(clientErasureStr).toBe(relayErasureStr)
     }
   })
 
@@ -545,7 +568,21 @@ describe('Telemetry relay client', () => {
     const deleteBody = deleteCalls[0].bodyJson as Record<string, unknown>
     expect(deleteBody.install_id).toBe(TEST_INSTALL_ID)
     expect(deleteBody.ticket).toBe(TEST_TICKET)
+    expect(deleteBody.browser).toBe('chrome')
+    expect(validateBrowser(deleteBody.browser)).toBe('chrome')
     expect(typeof deleteBody.sig).toBe('string')
+
+    const erasureCanonical = clientCanonicaliseErasurePayload({
+      install_id: deleteBody.install_id as string,
+      ts: deleteBody.ts as number,
+      browser: deleteBody.browser as Browser
+    })
+    const isErasureSigValid = await verifyEcdsaSignature(
+      deleteBody.jwk as any,
+      deleteBody.sig as string,
+      new TextEncoder().encode(erasureCanonical)
+    )
+    expect(isErasureSigValid).toBe(true)
 
     // Local key store must be cleared
     expect(inMemoryKeyStore.clearCalls).toBeGreaterThanOrEqual(1)
@@ -1083,5 +1120,180 @@ describe('Telemetry relay client', () => {
     expect(inMemoryKeyStore.keyPair).toBeNull()
     expect(await _getOrCreateKeyPairForTesting(false)).toBeNull()
     expect(await _getCachedTicketForTesting()).toBeNull()
+  })
+
+  it('33. Wire format for both chrome and firefox: validates with relay functions and signatures verify', async () => {
+    const targets: Browser[] = ['chrome', 'firefox']
+
+    for (const browser of targets) {
+      _resetStateForTesting()
+      _setRelayUrlForTesting(TEST_RELAY_URL)
+      _setBrowserTargetForTesting(browser)
+      _setKeyStoreForTesting(inMemoryKeyStore)
+      fetchCalls = []
+
+      await setAnalyticsConsent('granted')
+
+      // Emit an event
+      await verify_completed({
+        result: 'valid',
+        has_durable_binding: true,
+        media_type: 'image'
+      })
+
+      const eventCalls = fetchCalls.filter(c => c.url.endsWith('/v1/events'))
+      expect(eventCalls.length).toBe(1)
+      const eventBody = eventCalls[0].bodyJson as Record<string, unknown>
+
+      expect(eventBody.browser).toBe(browser)
+      expect(validateBrowser(eventBody.browser)).toBe(browser)
+
+      const eventObj = eventBody.event as { name: string, params: Record<string, unknown> }
+      const validatedRelayEvent = validateEvent(eventObj)
+      const relayCanonical = relayCanonicaliseEventPayload({
+        install_id: eventBody.install_id as string,
+        ts: eventBody.ts as number,
+        event: validatedRelayEvent,
+        version: eventBody.version as string,
+        browser: eventBody.browser as Browser
+      })
+      const clientCanonical = clientCanonicaliseEventPayload({
+        install_id: eventBody.install_id as string,
+        ts: eventBody.ts as number,
+        event: eventObj,
+        version: eventBody.version as string,
+        browser: eventBody.browser as Browser
+      })
+      expect(clientCanonical).toBe(relayCanonical)
+
+      const isSigValid = await verifyEcdsaSignature(
+        eventBody.jwk as any,
+        eventBody.sig as string,
+        new TextEncoder().encode(relayCanonical)
+      )
+      expect(isSigValid).toBe(true)
+
+      // Test signed erasure request for this browser
+      fetchCalls = []
+      await setAnalyticsConsent('denied')
+
+      const deleteCalls = fetchCalls.filter(c => c.url.endsWith('/v1/installs') && c.init?.method === 'DELETE')
+      expect(deleteCalls.length).toBe(1)
+      const deleteBody = deleteCalls[0].bodyJson as Record<string, unknown>
+
+      expect(deleteBody.browser).toBe(browser)
+      expect(validateBrowser(deleteBody.browser)).toBe(browser)
+
+      const relayErasureCanonical = relayCanonicaliseErasurePayload({
+        install_id: deleteBody.install_id as string,
+        ts: deleteBody.ts as number,
+        browser: deleteBody.browser as Browser
+      })
+      const clientErasureCanonical = clientCanonicaliseErasurePayload({
+        install_id: deleteBody.install_id as string,
+        ts: deleteBody.ts as number,
+        browser: deleteBody.browser as Browser
+      })
+      expect(clientErasureCanonical).toBe(relayErasureCanonical)
+
+      const isErasureSigValid = await verifyEcdsaSignature(
+        deleteBody.jwk as any,
+        deleteBody.sig as string,
+        new TextEncoder().encode(relayErasureCanonical)
+      )
+      expect(isErasureSigValid).toBe(true)
+    }
+  })
+
+  it('34. Changing browser after signing makes the relay signature verification fail', async () => {
+    _resetStateForTesting()
+    _setRelayUrlForTesting(TEST_RELAY_URL)
+    _setBrowserTargetForTesting('chrome')
+    _setKeyStoreForTesting(inMemoryKeyStore)
+    fetchCalls = []
+
+    await setAnalyticsConsent('granted')
+    await options_opened()
+
+    const eventCalls = fetchCalls.filter(c => c.url.endsWith('/v1/events'))
+    expect(eventCalls.length).toBe(1)
+    const eventBody = eventCalls[0].bodyJson as Record<string, unknown>
+    expect(eventBody.browser).toBe('chrome')
+
+    // Tamper: simulate browser field being altered to firefox after client signed
+    const tamperedCanonical = relayCanonicaliseEventPayload({
+      install_id: eventBody.install_id as string,
+      ts: eventBody.ts as number,
+      event: validateEvent(eventBody.event),
+      version: eventBody.version as string,
+      browser: 'firefox'
+    })
+    const isTamperedSigValid = await verifyEcdsaSignature(
+      eventBody.jwk as any,
+      eventBody.sig as string,
+      new TextEncoder().encode(tamperedCanonical)
+    )
+    expect(isTamperedSigValid).toBe(false)
+
+    // Test tampering on erasure
+    fetchCalls = []
+    await setAnalyticsConsent('denied')
+
+    const deleteCalls = fetchCalls.filter(c => c.url.endsWith('/v1/installs') && c.init?.method === 'DELETE')
+    expect(deleteCalls.length).toBe(1)
+    const deleteBody = deleteCalls[0].bodyJson as Record<string, unknown>
+    expect(deleteBody.browser).toBe('chrome')
+
+    const tamperedErasureCanonical = relayCanonicaliseErasurePayload({
+      install_id: deleteBody.install_id as string,
+      ts: deleteBody.ts as number,
+      browser: 'firefox'
+    })
+    const isTamperedErasureSigValid = await verifyEcdsaSignature(
+      deleteBody.jwk as any,
+      deleteBody.sig as string,
+      new TextEncoder().encode(tamperedErasureCanonical)
+    )
+    expect(isTamperedErasureSigValid).toBe(false)
+  })
+
+  it('35. Client is completely inert when browser target is edge, empty string, or unset', async () => {
+    const invalidTargets = ['edge', '', null]
+
+    for (const target of invalidTargets) {
+      _resetStateForTesting()
+      _setRelayUrlForTesting(TEST_RELAY_URL)
+      _setBrowserTargetForTesting(target)
+      _setKeyStoreForTesting(inMemoryKeyStore)
+      fetchCalls = []
+
+      expect(isAnalyticsConfigured()).toBe(false)
+
+      await setAnalyticsConsent('granted')
+
+      // Call all seven event helpers
+      await extension_installed()
+      await extension_updated('1.2.3')
+      await verify_started('popup')
+      await verify_completed({
+        result: 'valid',
+        has_durable_binding: false,
+        media_type: 'video'
+      })
+      await badge_scan()
+      await options_opened()
+      await consent_changed('granted')
+
+      // Zero fetch calls and no key created
+      expect(fetchCalls.length).toBe(0)
+      expect(inMemoryKeyStore.saveCalls).toBe(0)
+      expect(inMemoryKeyStore.keyPair).toBeNull()
+
+      // Calling setAnalyticsConsent('denied') also makes zero fetch calls and creates no key
+      await setAnalyticsConsent('denied')
+      expect(fetchCalls.length).toBe(0)
+      expect(inMemoryKeyStore.saveCalls).toBe(0)
+      expect(inMemoryKeyStore.keyPair).toBeNull()
+    }
   })
 })
