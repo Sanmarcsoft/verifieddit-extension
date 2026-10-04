@@ -92,7 +92,7 @@ const makePlugins = (target) => [
     // #121: only inline an explicit allowlist of env vars. Spreading the whole
     // process.env would bake the build machine's secrets (tokens, paths) into
     // the public CRX. Never add a secret-bearing var here.
-    ...['NODE_ENV', 'AUTO_SCAN', 'TRUST_DEV_FIXTURES', 'GA4_MEASUREMENT_ID', 'GA4_API_SECRET', 'GA_DEBUG'].reduce((acc, key) => {
+    ...['NODE_ENV', 'AUTO_SCAN', 'TRUST_DEV_FIXTURES', 'TELEMETRY_RELAY_URL'].reduce((acc, key) => {
       acc[`process.env.${key}`] = JSON.stringify(process.env[key] ?? '')
       return acc
     }, {}),
