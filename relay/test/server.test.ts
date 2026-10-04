@@ -462,4 +462,318 @@ describe('HTTP Server Handler', () => {
     expect(await res.json()).toEqual({ error: 'invalid_signature' })
     expect(eraser.queue.length).toBe(0)
   })
+
+  it('OPTIONS preflight with Origin: https://evil.example gets no Access-Control-Allow-Origin and no Access-Control-Allow-Methods', async () => {
+    const handler = createHandler({ config: testConfig })
+    const req = new Request('http://localhost/v1/events', {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'https://evil.example',
+        'Access-Control-Request-Method': 'POST'
+      }
+    })
+    const res = await handler(req, '127.0.0.1')
+    expect(res.status).toBe(204)
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull()
+    expect(res.headers.get('Access-Control-Allow-Methods')).toBeNull()
+  })
+
+  it('POST /v1/events with over-long or empty version returns 4xx invalid_version and forwards nothing', async () => {
+    let forwarded = false
+    const mockFetch = async () => {
+      forwarded = true
+      return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    }
+    const fixedNow = 1700000000000
+    const handler = createHandler({
+      config: testConfig,
+      fetch: mockFetch as unknown as typeof fetch,
+      now: () => fixedNow
+    })
+
+    const { keyPair, publicJwk, thumbprint } = await generateTestKeyPair()
+    const ticket = await createTicket(testConfig.ticketKey, thumbprint, fixedNow + 600000)
+    const event: RelayEvent = { name: 'extension_installed', params: {} }
+
+    for (const badVersion of ['', 'a'.repeat(33)]) {
+      const canonical = canonicaliseEventPayload({
+        install_id: thumbprint,
+        ts: fixedNow,
+        event,
+        version: badVersion
+      })
+      const sig = await signPayload(keyPair.privateKey, canonical)
+
+      const req = new Request('http://localhost/v1/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          install_id: thumbprint,
+          ticket,
+          ts: fixedNow,
+          event,
+          version: badVersion,
+          sig,
+          jwk: publicJwk
+        })
+      })
+
+      const res = await handler(req, '127.0.0.1')
+      expect(res.status).toBeGreaterThanOrEqual(400)
+      expect(res.status).toBeLessThan(500)
+      expect(await res.json()).toEqual({ error: 'invalid_version' })
+      expect(forwarded).toBe(false)
+    }
+  })
+
+  it('POST /v1/events with unknown event name or extra key in params returns 4xx invalid_event and forwards nothing', async () => {
+    let forwarded = false
+    const mockFetch = async () => {
+      forwarded = true
+      return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    }
+    const fixedNow = 1700000000000
+    const handler = createHandler({
+      config: testConfig,
+      fetch: mockFetch as unknown as typeof fetch,
+      now: () => fixedNow
+    })
+
+    const { keyPair, publicJwk, thumbprint } = await generateTestKeyPair()
+    const ticket = await createTicket(testConfig.ticketKey, thumbprint, fixedNow + 600000)
+    const version = '1.3.0'
+
+    // Unknown event name
+    const unknownEvent = { name: 'unknown_event_name', params: {} } as unknown as RelayEvent
+    const canonicalUnknown = canonicaliseEventPayload({
+      install_id: thumbprint,
+      ts: fixedNow,
+      event: unknownEvent,
+      version
+    })
+    const sigUnknown = await signPayload(keyPair.privateKey, canonicalUnknown)
+
+    const reqUnknown = new Request('http://localhost/v1/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        install_id: thumbprint,
+        ticket,
+        ts: fixedNow,
+        event: unknownEvent,
+        version,
+        sig: sigUnknown,
+        jwk: publicJwk
+      })
+    })
+
+    const resUnknown = await handler(reqUnknown, '127.0.0.1')
+    expect(resUnknown.status).toBeGreaterThanOrEqual(400)
+    expect(resUnknown.status).toBeLessThan(500)
+    expect(await resUnknown.json()).toEqual({ error: 'invalid_event' })
+    expect(forwarded).toBe(false)
+
+    // Extra key in event.params
+    const extraParamsEvent = {
+      name: 'extension_installed',
+      params: { extra_field: 'disallowed' }
+    } as unknown as RelayEvent
+    const canonicalExtra = canonicaliseEventPayload({
+      install_id: thumbprint,
+      ts: fixedNow,
+      event: extraParamsEvent,
+      version
+    })
+    const sigExtra = await signPayload(keyPair.privateKey, canonicalExtra)
+
+    const reqExtra = new Request('http://localhost/v1/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        install_id: thumbprint,
+        ticket,
+        ts: fixedNow,
+        event: extraParamsEvent,
+        version,
+        sig: sigExtra,
+        jwk: publicJwk
+      })
+    })
+
+    const resExtra = await handler(reqExtra, '127.0.0.1')
+    expect(resExtra.status).toBeGreaterThanOrEqual(400)
+    expect(resExtra.status).toBeLessThan(500)
+    expect(await resExtra.json()).toEqual({ error: 'invalid_event' })
+    expect(forwarded).toBe(false)
+  })
+
+  it('DELETE /v1/installs with expired ticket or skewed ts returns 4xx and eraser queue stays empty', async () => {
+    const fixedNow = 1700000000000
+    const eraser = new InMemoryEraser()
+    const handler = createHandler({ config: testConfig, eraser, now: () => fixedNow })
+
+    const { keyPair, publicJwk, thumbprint } = await generateTestKeyPair()
+
+    // Expired ticket
+    const expiredTicket = await createTicket(testConfig.ticketKey, thumbprint, fixedNow - 1000)
+    const erasureCanonical = canonicaliseErasurePayload({
+      install_id: thumbprint,
+      ts: fixedNow
+    })
+    const sig = await signPayload(keyPair.privateKey, erasureCanonical)
+
+    const reqExpiredTicket = new Request('http://localhost/v1/installs', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        install_id: thumbprint,
+        ticket: expiredTicket,
+        ts: fixedNow,
+        sig,
+        jwk: publicJwk
+      })
+    })
+    const resExpiredTicket = await handler(reqExpiredTicket, '127.0.0.1')
+    expect(resExpiredTicket.status).toBeGreaterThanOrEqual(400)
+    expect(resExpiredTicket.status).toBeLessThan(500)
+    expect(await resExpiredTicket.json()).toEqual({ error: 'invalid_ticket' })
+    expect(eraser.queue.length).toBe(0)
+
+    // Valid ticket, but ts skewed more than 5 minutes (300,001 ms)
+    const validTicket = await createTicket(testConfig.ticketKey, thumbprint, fixedNow + 600000)
+    const skewedTs = fixedNow - 300001
+    const skewedCanonical = canonicaliseErasurePayload({
+      install_id: thumbprint,
+      ts: skewedTs
+    })
+    const skewedSig = await signPayload(keyPair.privateKey, skewedCanonical)
+
+    const reqSkewed = new Request('http://localhost/v1/installs', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        install_id: thumbprint,
+        ticket: validTicket,
+        ts: skewedTs,
+        sig: skewedSig,
+        jwk: publicJwk
+      })
+    })
+    const resSkewed = await handler(reqSkewed, '127.0.0.1')
+    expect(resSkewed.status).toBeGreaterThanOrEqual(400)
+    expect(resSkewed.status).toBeLessThan(500)
+    expect(await resSkewed.json()).toEqual({ error: 'invalid_timestamp' })
+    expect(eraser.queue.length).toBe(0)
+  })
+
+  it('upstream Umami fetch rejecting yields 502 with machine-readable reason and does not throw', async () => {
+    const mockRejectingFetch = async () => {
+      throw new Error('Network timeout or connection refused')
+    }
+    const fixedNow = 1700000000000
+    const handler = createHandler({
+      config: testConfig,
+      fetch: mockRejectingFetch as unknown as typeof fetch,
+      now: () => fixedNow
+    })
+
+    const { keyPair, publicJwk, thumbprint } = await generateTestKeyPair()
+    const ticket = await createTicket(testConfig.ticketKey, thumbprint, fixedNow + 600000)
+    const event: RelayEvent = { name: 'extension_installed', params: {} }
+    const version = '1.3.0'
+    const canonical = canonicaliseEventPayload({
+      install_id: thumbprint,
+      ts: fixedNow,
+      event,
+      version
+    })
+    const sig = await signPayload(keyPair.privateKey, canonical)
+
+    const req = new Request('http://localhost/v1/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        install_id: thumbprint,
+        ticket,
+        ts: fixedNow,
+        event,
+        version,
+        sig,
+        jwk: publicJwk
+      })
+    })
+
+    let res: Response | undefined
+    let didThrow = false
+    try {
+      res = await handler(req, '127.0.0.1')
+    } catch {
+      didThrow = true
+    }
+
+    expect(didThrow).toBe(false)
+    expect(res).toBeDefined()
+    expect(res?.status).toBe(502)
+    expect(await res?.json()).toEqual({ error: 'upstream_failed' })
+  })
+
+  it('forwards no client address headers or body address even when present on incoming request', async () => {
+    let capturedInit: RequestInit | undefined
+    const mockFetch = async (_url: string | URL | Request, init?: RequestInit) => {
+      capturedInit = init
+      return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    }
+
+    const fixedNow = 1700000000000
+    const handler = createHandler({
+      config: testConfig,
+      fetch: mockFetch as unknown as typeof fetch,
+      now: () => fixedNow
+    })
+
+    const { keyPair, publicJwk, thumbprint } = await generateTestKeyPair()
+    const ticket = await createTicket(testConfig.ticketKey, thumbprint, fixedNow + 600000)
+    const event: RelayEvent = { name: 'options_opened', params: {} }
+    const version = '1.3.0'
+    const canonical = canonicaliseEventPayload({
+      install_id: thumbprint,
+      ts: fixedNow,
+      event,
+      version
+    })
+    const sig = await signPayload(keyPair.privateKey, canonical)
+
+    const incomingClientIp = '203.0.113.195'
+    const req = new Request('http://localhost/v1/events', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Forwarded-For': incomingClientIp,
+        'X-Real-IP': incomingClientIp,
+        'CF-Connecting-IP': incomingClientIp,
+        Forwarded: `for=${incomingClientIp};proto=https`
+      },
+      body: JSON.stringify({
+        install_id: thumbprint,
+        ticket,
+        ts: fixedNow,
+        event,
+        version,
+        sig,
+        jwk: publicJwk
+      })
+    })
+
+    const res = await handler(req, incomingClientIp)
+    expect(res.status).toBe(200)
+
+    const forwardedHeaders = capturedInit?.headers as Record<string, string>
+    expect(forwardedHeaders['X-Forwarded-For']).toBeUndefined()
+    expect(forwardedHeaders['X-Real-IP']).toBeUndefined()
+    expect(forwardedHeaders['CF-Connecting-IP']).toBeUndefined()
+    expect(forwardedHeaders.Forwarded).toBeUndefined()
+
+    const rawForwardedBody = String(capturedInit?.body)
+    expect(rawForwardedBody).not.toContain(incomingClientIp)
+  })
 })
