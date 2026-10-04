@@ -12,7 +12,9 @@ import {
   validateVersion,
   verifyEcdsaSignature,
   verifyTicket,
-  type Browser
+  type Browser,
+  FORWARD_USER_AGENTS,
+  umamiAccepted
 } from './protocol'
 import {
   ERASURE_PER_ADDRESS_MAX,
@@ -442,7 +444,7 @@ export function createHandler (deps: HandlerDependencies) {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'User-Agent': 'verifieddit-telemetry-relay/1'
+            'User-Agent': FORWARD_USER_AGENTS[validBrowser]
           },
           body: JSON.stringify(forwardBody),
           signal: AbortSignal.timeout(FORWARD_TIMEOUT_MS)
@@ -450,6 +452,10 @@ export function createHandler (deps: HandlerDependencies) {
 
         if (!response.ok) {
           return createJsonResponse({ error: 'upstream_failed' }, 502, origin)
+        }
+        // A 200 is not proof: Umami also answers 200 when it discards the event.
+        if (!umamiAccepted(await response.text())) {
+          return createJsonResponse({ error: 'upstream_ignored' }, 502, origin)
         }
       } catch {
         return createJsonResponse({ error: 'upstream_failed' }, 502, origin)

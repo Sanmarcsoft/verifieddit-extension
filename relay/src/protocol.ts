@@ -376,3 +376,24 @@ export function validateEvent (raw: unknown): RelayEvent {
       throw new ProtocolError('invalid_event', `Unknown event name: ${name}`)
   }
 }
+
+/**
+ * The user agent the relay presents to Umami for each browser family. Umami answers 200
+ * {"beep":"boop"} to a sender it takes for a bot and records nothing, so a tool name here loses
+ * every event. These are fixed strings chosen by the relay: the client's own user agent is never
+ * forwarded, so nothing about the user's device reaches Umami beyond the browser family.
+ */
+export const FORWARD_USER_AGENTS: Record<Browser, string> = {
+  chrome: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+  firefox: 'Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0'
+}
+
+/** False when Umami's reply says it ignored the event as bot traffic. */
+export function umamiAccepted (responseBody: string): boolean {
+  try {
+    const parsed = JSON.parse(responseBody) as { beep?: unknown }
+    return parsed?.beep !== 'boop'
+  } catch {
+    return true
+  }
+}

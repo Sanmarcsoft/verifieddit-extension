@@ -9,7 +9,8 @@ import {
   createTicket,
   type Browser,
   type PublicJwk,
-  type RelayEvent
+  type RelayEvent,
+  FORWARD_USER_AGENTS
 } from '../src/protocol'
 import {
   ERASURE_PER_ADDRESS_MAX,
@@ -255,7 +256,7 @@ describe('HTTP Server Handler', () => {
     expect(capturedUrl).toBe('https://umami.example.internal/api/send')
     expect(capturedInit?.method).toBe('POST')
     const headers = capturedInit?.headers as Record<string, string>
-    expect(headers['User-Agent']).toBe('verifieddit-telemetry-relay/1')
+    expect(headers['User-Agent']).toBe(FORWARD_USER_AGENTS.chrome)
     expect(headers['Content-Type']).toBe('application/json')
     expect(headers['X-Forwarded-For']).toBeUndefined()
 

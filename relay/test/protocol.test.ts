@@ -16,7 +16,9 @@ import {
   verifyTicket,
   type Browser,
   type PublicJwk,
-  type RelayEvent
+  type RelayEvent,
+  FORWARD_USER_AGENTS,
+  umamiAccepted
 } from '../src/protocol'
 
 describe('base64url helpers', () => {
@@ -382,5 +384,21 @@ describe('validateEvent', () => {
 
   it('rejects unknown event names', () => {
     expect(() => validateEvent({ name: 'unknown_event', params: {} })).toThrow()
+  })
+})
+
+describe('forwarding to Umami', () => {
+  test('each browser family is forwarded under a fixed browser user agent, never a tool name', () => {
+    // Umami answers 200 {"beep":"boop"} to a sender it takes for a bot and records nothing.
+    expect(FORWARD_USER_AGENTS.chrome).toMatch(/^Mozilla\/5\.0 .*Chrome\/\d+/)
+    expect(FORWARD_USER_AGENTS.firefox).toMatch(/^Mozilla\/5\.0 .*Firefox\/\d+/)
+    expect(FORWARD_USER_AGENTS.firefox).not.toContain('Chrome')
+  })
+
+  test('a bot answer from Umami counts as not recorded', () => {
+    expect(umamiAccepted('{"beep":"boop"}')).toBe(false)
+    expect(umamiAccepted('{"cache":"eyJhbGciOi"}')).toBe(true)
+    expect(umamiAccepted('')).toBe(true)
+    expect(umamiAccepted('not json')).toBe(true)
   })
 })

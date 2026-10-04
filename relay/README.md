@@ -168,7 +168,7 @@ Receives and forwards a signed telemetry event to Umami.
   8. Replay cache: signature recorded; duplicates rejected.
   Order of checks: per-address limit, body and field validation, ticket, timestamp, browser, signature, per-install limit, replay cache.
 - Upstream Forwarding:
-  Accepted events are forwarded to Umami `POST {UMAMI_URL}/api/send` with fixed User-Agent `verifieddit-telemetry-relay/1` and payload:
+  Accepted events are forwarded to Umami `POST {UMAMI_URL}/api/send` with a fixed browser User-Agent per browser family (`FORWARD_USER_AGENTS`; Umami silently discards senders it takes for bots, and a reply of `{"beep":"boop"}` is treated as a failure, `502 upstream_ignored`) and payload:
   ```json
   {
     "type": "event",
