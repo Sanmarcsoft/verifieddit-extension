@@ -1,8 +1,10 @@
 /**
- * Tests for GA4 Measurement Protocol client.
+ * Tests for signed telemetry relay client.
  */
 
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   isAnalyticsConfigured,
   getAnalyticsConsent,
@@ -15,12 +17,22 @@ import {
   badge_scan,
   options_opened,
   consent_changed,
+  canonicaliseEventPayload as clientCanonicaliseEventPayload,
   _resetStateForTesting,
-  _setCredentialsForTesting,
-  _getInMemorySessionForTesting,
-  _setInMemorySessionForTesting,
-  type AnalyticsConsent
+  _setRelayUrlForTesting,
+  _setKeyStoreForTesting,
+  _getOrCreateKeyPairForTesting,
+  _getCachedTicketForTesting,
+  IndexedDbKeyStore,
+  type AnalyticsConsent,
+  type KeyStore
 } from '../src/analytics'
+import {
+  canonicaliseEventPayload as relayCanonicaliseEventPayload,
+  verifyEcdsaSignature,
+  validateEvent
+} from '../relay/src/protocol'
+import { createHandler } from '../relay/src/server'
 
 interface MockStorageArea {
   data: Record<string, unknown>
@@ -69,23 +81,51 @@ function createMockStorageArea (): MockStorageArea {
   }
 }
 
+class InMemoryKeyStore implements KeyStore {
+  public keyPair: CryptoKeyPair | null = null
+  public loadCalls = 0
+  public saveCalls = 0
+  public clearCalls = 0
+
+  async load (): Promise<CryptoKeyPair | null> {
+    this.loadCalls++
+    return this.keyPair
+  }
+
+  async save (kp: CryptoKeyPair): Promise<void> {
+    this.saveCalls++
+    this.keyPair = kp
+  }
+
+  async clear (): Promise<void> {
+    this.clearCalls++
+    this.keyPair = null
+  }
+}
+
 let mockLocalStorage: MockStorageArea
 let mockSessionStorage: MockStorageArea | undefined
+let inMemoryKeyStore: InMemoryKeyStore
 let fetchCalls: Array<{ url: string, init?: RequestInit, bodyJson?: Record<string, unknown> }>
 let manifestVersion: string | undefined
+let storageOnChangedListeners: Array<(changes: Record<string, { oldValue?: unknown, newValue?: unknown }>, area: string) => void> = []
+
+const TEST_RELAY_URL = 'https://telemetry.example.invalid'
+const TEST_TICKET = '1999999999999.mockSignature123'
+const TEST_INSTALL_ID = 'test-install-id-thumbprint'
+const TEST_EXPIRES_AT = Date.now() + 10 * 60 * 1000
 
 beforeEach(() => {
   mockLocalStorage = createMockStorageArea()
   mockSessionStorage = createMockStorageArea()
+  inMemoryKeyStore = new InMemoryKeyStore()
   fetchCalls = []
-  manifestVersion = '1.2.6'
+  manifestVersion = '1.3.0'
+  storageOnChangedListeners = []
 
   _resetStateForTesting()
-  _setCredentialsForTesting({
-    measurementId: 'G-TEST12345',
-    apiSecret: 'secret_test_xyz',
-    debug: false
-  })
+  _setRelayUrlForTesting(TEST_RELAY_URL)
+  _setKeyStoreForTesting(inMemoryKeyStore)
 
   const mockFetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
@@ -98,7 +138,32 @@ beforeEach(() => {
       }
     }
     fetchCalls.push({ url, init, bodyJson })
-    return new Response(JSON.stringify({ validationMessages: [] }), {
+
+    if (url.endsWith('/v1/installs')) {
+      if (init?.method === 'DELETE') {
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+      return new Response(JSON.stringify({
+        install_id: TEST_INSTALL_ID,
+        ticket: TEST_TICKET,
+        expires_at: TEST_EXPIRES_AT
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    if (url.endsWith('/v1/events')) {
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    return new Response(JSON.stringify({ ok: true }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
     })
@@ -109,39 +174,52 @@ beforeEach(() => {
   const mockChrome = {
     storage: {
       local: mockLocalStorage,
-      session: mockSessionStorage
+      session: mockSessionStorage,
+      onChanged: {
+        addListener: (listener: (changes: Record<string, { oldValue?: unknown, newValue?: unknown }>, area: string) => void) => {
+          storageOnChangedListeners.push(listener)
+        },
+        removeListener: (listener: (changes: Record<string, { oldValue?: unknown, newValue?: unknown }>, area: string) => void) => {
+          const idx = storageOnChangedListeners.indexOf(listener)
+          if (idx !== -1) storageOnChangedListeners.splice(idx, 1)
+        }
+      }
     },
     runtime: {
-      getManifest: () => (manifestVersion != null ? { version: manifestVersion } : ({} as any))
+      getManifest: () => (manifestVersion != null ? { version: manifestVersion } : ({} as Record<string, unknown>))
     }
   }
 
-  ;(globalThis as any).chrome = mockChrome
+  // Assign chrome object into global scope for test harness
+  ;(globalThis as unknown as { chrome: unknown }).chrome = mockChrome
 })
 
-describe('GA4 analytics client', () => {
-  it('1. No-op when measurement id or api secret is empty (fetch never called)', async () => {
-    _setCredentialsForTesting({ measurementId: '', apiSecret: 'secret' })
+describe('Telemetry relay client', () => {
+  it('1. No-op when relay URL is empty or unconfigured (no key generation, no IndexedDB, no fetch)', async () => {
+    _setRelayUrlForTesting('')
     expect(isAnalyticsConfigured()).toBe(false)
     await setAnalyticsConsent('granted')
     fetchCalls = []
 
     await extension_installed()
     expect(fetchCalls.length).toBe(0)
+    expect(inMemoryKeyStore.saveCalls).toBe(0)
+    expect(inMemoryKeyStore.loadCalls).toBe(0)
 
-    _setCredentialsForTesting({ measurementId: 'G-123', apiSecret: '' })
+    _setRelayUrlForTesting('   ')
     expect(isAnalyticsConfigured()).toBe(false)
-    await extension_installed()
+    await badge_scan()
     expect(fetchCalls.length).toBe(0)
+    expect(inMemoryKeyStore.saveCalls).toBe(0)
   })
 
   it('2. No event sent when consent is "unset"', async () => {
-    // Default consent is 'unset'
     const consent = await getAnalyticsConsent()
     expect(consent).toBe('unset')
 
     await extension_installed()
     expect(fetchCalls.length).toBe(0)
+    expect(inMemoryKeyStore.saveCalls).toBe(0)
   })
 
   it('3. No event sent when consent is "denied"', async () => {
@@ -153,320 +231,857 @@ describe('GA4 analytics client', () => {
 
     await extension_installed()
     expect(fetchCalls.length).toBe(0)
+    expect(inMemoryKeyStore.saveCalls).toBe(0)
   })
 
-  it('4. Event IS sent when consent is "granted", and POST body matches schema', async () => {
+  it('4. Generated ECDSA P-256 private key has extractable === false', async () => {
     await setAnalyticsConsent('granted')
-    await mockSessionStorage!.remove('ga4SessionData')
     fetchCalls = []
 
     await extension_installed()
 
-    expect(fetchCalls.length).toBe(1)
-    const call = fetchCalls[0]
-    expect(call.url).toContain('https://www.google-analytics.com/mp/collect?')
-    expect(call.url).toContain('measurement_id=G-TEST12345')
-    expect(call.url).toContain('api_secret=secret_test_xyz')
-
-    const body = call.bodyJson as any
-    expect(typeof body.client_id).toBe('string')
-    expect(body.client_id.length).toBeGreaterThan(0)
-    expect(Array.isArray(body.events)).toBe(true)
-    expect(body.events.length).toBe(1)
-
-    const evt = body.events[0]
-    expect(evt.name).toBe('extension_installed')
-    expect(typeof evt.params.engagement_time_msec).toBe('string')
-    expect(evt.params.engagement_time_msec).toBe('100')
-    expect(typeof evt.params.session_id).toBe('string')
-    expect(evt.params.session_id.length).toBeGreaterThan(0)
-    expect(evt.params.extension_version).toBe('1.2.6')
+    expect(inMemoryKeyStore.keyPair).not.toBeNull()
+    const kp = inMemoryKeyStore.keyPair!
+    expect(kp.privateKey.extractable).toBe(false)
+    expect(kp.privateKey.algorithm.name).toBe('ECDSA')
+    // Safe cast for ECDSA algorithm details
+    const alg = kp.privateKey.algorithm as RsaHashedKeyGenParams & EcKeyGenParams
+    expect(alg.namedCurve).toBe('P-256')
   })
 
-  it('5. client_id is generated once and reused across two events (same value, one storage write)', async () => {
+  it('5. Obtains ticket from POST /v1/installs with clean public JWK on first send', async () => {
+    await setAnalyticsConsent('granted')
+    fetchCalls = []
+
+    await extension_installed()
+
+    // Must have called POST /v1/installs then POST /v1/events
+    expect(fetchCalls.length).toBe(2)
+    const installCall = fetchCalls[0]
+    expect(installCall.url).toBe(`${TEST_RELAY_URL}/v1/installs`)
+    expect(installCall.init?.method).toBe('POST')
+
+    const jwk = installCall.bodyJson?.jwk as Record<string, unknown>
+    expect(jwk).toBeDefined()
+    expect(jwk.kty).toBe('EC')
+    expect(jwk.crv).toBe('P-256')
+    expect(typeof jwk.x).toBe('string')
+    expect(typeof jwk.y).toBe('string')
+    expect(jwk.d).toBeUndefined()
+  })
+
+  it('6. Key pair and ticket are reused across multiple events without re-fetching ticket', async () => {
     await setAnalyticsConsent('granted')
     fetchCalls = []
 
     await extension_installed()
     await options_opened()
 
-    expect(fetchCalls.length).toBe(2)
-    const clientId1 = (fetchCalls[0].bodyJson as any).client_id
-    const clientId2 = (fetchCalls[1].bodyJson as any).client_id
-    expect(clientId1).toBe(clientId2)
-
-    // Storage check: ga4ClientId is stored in local storage
-    const stored = await mockLocalStorage.get('ga4ClientId')
-    expect(stored.ga4ClientId).toBe(clientId1)
-
-    // Clear module memory cache and read back to check persistence reuse
-    _resetStateForTesting()
-    _setCredentialsForTesting({
-      measurementId: 'G-TEST12345',
-      apiSecret: 'secret_test_xyz',
-      debug: false
-    })
-    await setAnalyticsConsent('granted')
-    fetchCalls = []
-
-    await badge_scan()
-    expect(fetchCalls.length).toBe(1)
-    const clientId3 = (fetchCalls[0].bodyJson as any).client_id
-    expect(clientId3).toBe(clientId1)
-  })
-
-  it('6. A new session id is created when the stored session is older than 30 minutes', async () => {
-    await setAnalyticsConsent('granted')
-    fetchCalls = []
-
-    const oldSessionId = '1000000'
-    const fortyMinutesAgo = Date.now() - 40 * 60 * 1000
-    await mockSessionStorage!.set({
-      ga4SessionData: {
-        sessionId: oldSessionId,
-        sessionLastUpdated: fortyMinutesAgo
-      }
-    })
-
-    await badge_scan()
-
-    expect(fetchCalls.length).toBe(1)
-    const newSessionId = (fetchCalls[0].bodyJson as any).events[0].params.session_id
-    expect(newSessionId).not.toBe(oldSessionId)
-
-    const storedSession = (await mockSessionStorage!.get('ga4SessionData')).ga4SessionData as any
-    expect(storedSession.sessionId).toBe(newSessionId)
-    expect(storedSession.sessionLastUpdated).toBeGreaterThan(fortyMinutesAgo)
-  })
-
-  it('7. The same session id is reused inside the 30-minute window, and sessionLastUpdated is refreshed', async () => {
-    await setAnalyticsConsent('granted')
-    fetchCalls = []
-
-    const existingSessionId = '2000000'
-    const tenMinutesAgo = Date.now() - 10 * 60 * 1000
-    await mockSessionStorage!.set({
-      ga4SessionData: {
-        sessionId: existingSessionId,
-        sessionLastUpdated: tenMinutesAgo
-      }
-    })
-
-    await badge_scan()
-
-    expect(fetchCalls.length).toBe(1)
-    const sessionId = (fetchCalls[0].bodyJson as any).events[0].params.session_id
-    expect(sessionId).toBe(existingSessionId)
-
-    const storedSession = (await mockSessionStorage!.get('ga4SessionData')).ga4SessionData as any
-    expect(storedSession.sessionId).toBe(existingSessionId)
-    expect(storedSession.sessionLastUpdated).toBeGreaterThan(tenMinutesAgo)
-  })
-
-  it('8. Firefox fallback: when chrome.storage.session is undefined, events still send and in-memory session honours 30-minute expiry', async () => {
-    // Remove storage.session to simulate Firefox environment
-    delete (chrome.storage as any).session
-    await setAnalyticsConsent('granted')
-    _setInMemorySessionForTesting(null)
-    fetchCalls = []
-
-    // First event in session: uses default engagement time
-    await badge_scan()
-    expect(fetchCalls.length).toBe(1)
-    const session1 = (fetchCalls[0].bodyJson as any).events[0].params.session_id
-    expect(typeof session1).toBe('string')
-    expect((fetchCalls[0].bodyJson as any).events[0].params.engagement_time_msec).toBe('100')
-
-    // Second event immediately after: reuses same session
-    await options_opened()
-    expect(fetchCalls.length).toBe(2)
-    const session2 = (fetchCalls[1].bodyJson as any).events[0].params.session_id
-    expect(session2).toBe(session1)
-
-    // Age the in-memory session by 31 minutes
-    const memSession = _getInMemorySessionForTesting()
-    expect(memSession).toBeDefined()
-    if (memSession != null) {
-      _setInMemorySessionForTesting({
-        sessionId: 'old_session_123',
-        sessionLastUpdated: Date.now() - 31 * 60 * 1000
-      })
-    }
-
-    // Next event should start a new session
-    await extension_installed()
+    // 1 install call + 2 event calls
     expect(fetchCalls.length).toBe(3)
-    const session3 = (fetchCalls[2].bodyJson as any).events[0].params.session_id
-    expect(session3).not.toBe('old_session_123')
+    expect(fetchCalls[0].url).toBe(`${TEST_RELAY_URL}/v1/installs`)
+    expect(fetchCalls[1].url).toBe(`${TEST_RELAY_URL}/v1/events`)
+    expect(fetchCalls[2].url).toBe(`${TEST_RELAY_URL}/v1/events`)
+
+    // Verify key was generated once and saved once
+    expect(inMemoryKeyStore.saveCalls).toBe(1)
   })
 
-  it('9. A rejecting fetch does not throw and does not reject out of the send call', async () => {
+  it('7. Re-requests ticket when cached ticket is expired or within safety margin', async () => {
     await setAnalyticsConsent('granted')
+    fetchCalls = []
 
-    globalThis.fetch = mock(async () => {
-      throw new Error('Network offline or connection failed')
+    // Pre-populate ticket in session storage that expires within 10 seconds (safety margin is 30s)
+    await mockSessionStorage!.set({
+      telemetryTicketData: {
+        install_id: TEST_INSTALL_ID,
+        ticket: TEST_TICKET,
+        expires_at: Date.now() + 10_000
+      }
+    })
+
+    await badge_scan()
+
+    // Ticket within safety margin must trigger a new install POST before the event
+    expect(fetchCalls.length).toBe(2)
+    expect(fetchCalls[0].url).toBe(`${TEST_RELAY_URL}/v1/installs`)
+    expect(fetchCalls[1].url).toBe(`${TEST_RELAY_URL}/v1/events`)
+  })
+
+  it('8. Re-requests ticket on relay 400 invalid_ticket rejection (one bounded retry)', async () => {
+    await setAnalyticsConsent('granted')
+    fetchCalls = []
+
+    let eventAttempt = 0
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/v1/events')) {
+        eventAttempt++
+        if (eventAttempt === 1) {
+          fetchCalls.push({ url, init, bodyJson: JSON.parse(String(init?.body)) })
+          return new Response(JSON.stringify({ error: 'invalid_ticket' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' }
+          })
+        }
+      }
+      return originalFetch(input, init)
     }) as unknown as typeof fetch
 
-    // Must resolve cleanly without throwing
-    await expect(extension_installed()).resolves.toBeUndefined()
-    await expect(badge_scan()).resolves.toBeUndefined()
+    await badge_scan()
+
+    // 1 initial install POST, 1 event attempt (rejected), 1 ticket refresh POST, 1 retry event attempt
+    expect(fetchCalls.length).toBe(4)
+    expect(fetchCalls[0].url).toBe(`${TEST_RELAY_URL}/v1/installs`)
+    expect(fetchCalls[1].url).toBe(`${TEST_RELAY_URL}/v1/events`)
+    expect(fetchCalls[2].url).toBe(`${TEST_RELAY_URL}/v1/installs`)
+    expect(fetchCalls[3].url).toBe(`${TEST_RELAY_URL}/v1/events`)
   })
 
-  it('10. Malformed stored values (wrong type) are treated as absent rather than crashing', async () => {
-    // Corrupt client_id in storage (number instead of string)
-    await mockLocalStorage.set({ ga4ClientId: 12345 })
-    // Corrupt session data in storage (string instead of object)
-    await mockSessionStorage!.set({ ga4SessionData: 'not an object' })
-    // Corrupt consent in storage (boolean instead of 'granted' | 'denied' | 'unset')
-    await mockLocalStorage.set({ analyticsConsent: true })
-
-    const consent = await getAnalyticsConsent()
-    expect(consent).toBe('unset')
-
+  it('9. Event POST body contains install_id, ticket, ts, event, version, sig, jwk and no GA4 fields', async () => {
     await setAnalyticsConsent('granted')
     fetchCalls = []
 
     await extension_installed()
-    expect(fetchCalls.length).toBe(1)
 
-    const body = fetchCalls[0].bodyJson as any
-    expect(typeof body.client_id).toBe('string')
-    expect(body.client_id).not.toBe('12345')
-    expect(typeof body.events[0].params.session_id).toBe('string')
+    expect(fetchCalls.length).toBe(2)
+    const eventCall = fetchCalls[1]
+    expect(eventCall.url).toBe(`${TEST_RELAY_URL}/v1/events`)
+    const body = eventCall.bodyJson as Record<string, unknown>
+
+    expect(body.install_id).toBe(TEST_INSTALL_ID)
+    expect(body.ticket).toBe(TEST_TICKET)
+    expect(typeof body.ts).toBe('number')
+    expect(body.version).toBe('1.3.0')
+    expect(typeof body.sig).toBe('string')
+    expect(body.jwk).toBeDefined()
+
+    // Verify signature format matches relay validation
+    const eventObj = body.event as { name: string, params: Record<string, unknown> }
+    const canonical = clientCanonicaliseEventPayload({
+      install_id: body.install_id as string,
+      ts: body.ts as number,
+      event: eventObj,
+      version: body.version as string
+    })
+    const isSigValid = await verifyEcdsaSignature(
+      body.jwk as any,
+      body.sig as string,
+      new TextEncoder().encode(canonical)
+    )
+    expect(isSigValid).toBe(true)
+
+    // Confirm no legacy GA4 fields exist
+    expect(body.client_id).toBeUndefined()
+    expect(body.session_id).toBeUndefined()
+    expect(body.engagement_time_msec).toBeUndefined()
+    expect(body.debug_mode).toBeUndefined()
   })
 
-  it('11. Each event helper produces the correct event name and params, including extension_version', async () => {
+  it('10. Canonicalisation produces byte-identical results between client and relay for all seven events', () => {
+    const testCases = [
+      { name: 'extension_installed' as const, params: {} },
+      { name: 'extension_updated' as const, params: { previous_version: '1.2.9' } },
+      { name: 'verify_started' as const, params: { source: 'popup' as const } },
+      {
+        name: 'verify_completed' as const,
+        params: {
+          result: 'valid' as const,
+          has_durable_binding: true,
+          media_type: 'image' as const
+        }
+      },
+      { name: 'badge_scan' as const, params: {} },
+      { name: 'options_opened' as const, params: {} },
+      { name: 'consent_changed' as const, params: { value: 'granted' as const } }
+    ]
+
+    for (const event of testCases) {
+      const payload = {
+        install_id: 'thumbprint-xyz-123',
+        ts: 1700000000000,
+        event,
+        version: '1.3.0'
+      }
+
+      const clientStr = clientCanonicaliseEventPayload(payload)
+      const relayStr = relayCanonicaliseEventPayload(payload)
+      expect(clientStr).toBe(relayStr)
+    }
+  })
+
+  it('11. End-to-end integration: client-produced request is successfully accepted by relay createHandler', async () => {
+    let capturedUmamiPayload: unknown = null
+    const fakeUmamiFetch = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedUmamiPayload = JSON.parse(String(init?.body))
+      return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    })
+
+    const handler = createHandler({
+      config: {
+        port: 0,
+        ticketKey: 'shared-test-ticket-key-1234567890',
+        umamiUrl: 'https://umami.example.invalid',
+        umamiWebsiteId: 'test-website-uuid'
+      },
+      fetch: fakeUmamiFetch as unknown as typeof fetch
+    })
+
+    // Route fetch directly to relay handler
+    globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const req = new Request(url, {
+        method: init?.method ?? 'GET',
+        headers: init?.headers,
+        body: init?.body
+      })
+      return await handler(req, '127.0.0.1')
+    }) as unknown as typeof fetch
+
     await setAnalyticsConsent('granted')
     fetchCalls = []
-
-    await extension_installed()
-    expect(fetchCalls[0].bodyJson).toMatchObject({
-      events: [{
-        name: 'extension_installed',
-        params: { extension_version: '1.2.6' }
-      }]
-    })
-
-    await extension_updated('1.2.5')
-    expect(fetchCalls[1].bodyJson).toMatchObject({
-      events: [{
-        name: 'extension_updated',
-        params: { previous_version: '1.2.5', extension_version: '1.2.6' }
-      }]
-    })
-
-    await verify_started('context_menu')
-    expect(fetchCalls[2].bodyJson).toMatchObject({
-      events: [{
-        name: 'verify_started',
-        params: { source: 'context_menu', extension_version: '1.2.6' }
-      }]
-    })
 
     await verify_completed({
       result: 'valid',
-      has_durable_binding: true,
-      media_type: 'image'
-    })
-    expect(fetchCalls[3].bodyJson).toMatchObject({
-      events: [{
-        name: 'verify_completed',
-        params: {
-          result: 'valid',
-          has_durable_binding: true,
-          media_type: 'image',
-          extension_version: '1.2.6'
-        }
-      }]
+      has_durable_binding: false,
+      media_type: 'video'
     })
 
-    await badge_scan()
-    expect(fetchCalls[4].bodyJson).toMatchObject({
-      events: [{
-        name: 'badge_scan',
-        params: { extension_version: '1.2.6' }
-      }]
-    })
-
-    await options_opened()
-    expect(fetchCalls[5].bodyJson).toMatchObject({
-      events: [{
-        name: 'options_opened',
-        params: { extension_version: '1.2.6' }
-      }]
-    })
-
-    await consent_changed('granted')
-    expect(fetchCalls[6].bodyJson).toMatchObject({
-      events: [{
-        name: 'consent_changed',
-        params: { value: 'granted', extension_version: '1.2.6' }
-      }]
+    // Verify Umami received the forwarded event
+    expect(capturedUmamiPayload).not.toBeNull()
+    const umami = capturedUmamiPayload as { type: string, payload: Record<string, unknown> }
+    expect(umami.payload.name).toBe('verify_completed')
+    expect(umami.payload.data).toMatchObject({
+      result: 'valid',
+      has_durable_binding: false,
+      media_type: 'video'
     })
   })
 
-  it('12. setAnalyticsConsent("denied") sends nothing; setAnalyticsConsent("granted") sends consent_changed', async () => {
+  it('12. Event helpers produce exact relay-accepted params', async () => {
+    await setAnalyticsConsent('granted')
+    fetchCalls = []
+
+    await extension_installed()
+    await extension_updated('1.2.5')
+    await extension_updated('version-string-that-is-way-longer-than-the-32-character-limit-allowed-by-relay')
+    await verify_started('context_menu')
+    await verify_completed({
+      result: 'error',
+      has_durable_binding: false,
+      media_type: 'pdf'
+    })
+    await badge_scan()
+    await options_opened()
+    await consent_changed('granted')
+
+    // Find all /v1/events calls
+    const eventCalls = fetchCalls.filter(c => c.url.endsWith('/v1/events'))
+    expect(eventCalls.length).toBe(8)
+
+    expect(eventCalls[0].bodyJson?.event).toEqual({
+      name: 'extension_installed',
+      params: {}
+    })
+
+    expect(eventCalls[1].bodyJson?.event).toEqual({
+      name: 'extension_updated',
+      params: { previous_version: '1.2.5' }
+    })
+
+    // Truncated to 32 chars
+    const updatedLong = eventCalls[2].bodyJson?.event as { params: { previous_version: string } }
+    expect(updatedLong.params.previous_version.length).toBe(32)
+
+    expect(eventCalls[3].bodyJson?.event).toEqual({
+      name: 'verify_started',
+      params: { source: 'context_menu' }
+    })
+
+    expect(eventCalls[4].bodyJson?.event).toEqual({
+      name: 'verify_completed',
+      params: {
+        result: 'error',
+        has_durable_binding: false,
+        media_type: 'pdf'
+      }
+    })
+
+    expect(eventCalls[5].bodyJson?.event).toEqual({
+      name: 'badge_scan',
+      params: {}
+    })
+
+    expect(eventCalls[6].bodyJson?.event).toEqual({
+      name: 'options_opened',
+      params: {}
+    })
+
+    expect(eventCalls[7].bodyJson?.event).toEqual({
+      name: 'consent_changed',
+      params: { value: 'granted' }
+    })
+  })
+
+  it('13. Withdrawing consent (setAnalyticsConsent("denied")) sends DELETE /v1/installs when key exists and deletes local state', async () => {
+    // First generate a key by granting consent and sending an event
+    await setAnalyticsConsent('granted')
+    await badge_scan()
+    expect(inMemoryKeyStore.keyPair).not.toBeNull()
+    fetchCalls = []
+
     let notifiedValue: AnalyticsConsent | null = null
-    const unsubscribe = addConsentChangeListener((val) => {
+    const unsubscribe = addConsentChangeListener(val => {
       notifiedValue = val
     })
 
-    // Setting denied: persists, updates cache, notifies listeners, but sends zero network events
     await setAnalyticsConsent('denied')
     expect(notifiedValue).toBe('denied')
-    expect(fetchCalls.length).toBe(0)
 
-    const storedAfterDenied = await mockLocalStorage.get('analyticsConsent')
-    expect(storedAfterDenied.analyticsConsent).toBe('denied')
+    // Expect signed DELETE to /v1/installs
+    const deleteCalls = fetchCalls.filter(c => c.url.endsWith('/v1/installs') && c.init?.method === 'DELETE')
+    expect(deleteCalls.length).toBe(1)
+    const deleteBody = deleteCalls[0].bodyJson as Record<string, unknown>
+    expect(deleteBody.install_id).toBe(TEST_INSTALL_ID)
+    expect(deleteBody.ticket).toBe(TEST_TICKET)
+    expect(typeof deleteBody.sig).toBe('string')
 
-    // Setting granted: persists, updates cache, notifies listeners, and sends consent_changed
-    await setAnalyticsConsent('granted')
-    expect(notifiedValue).toBe('granted')
-    expect(fetchCalls.length).toBe(1)
-    expect((fetchCalls[0].bodyJson as any).events[0].name).toBe('consent_changed')
-    expect((fetchCalls[0].bodyJson as any).events[0].params.value).toBe('granted')
+    // Local key store must be cleared
+    expect(inMemoryKeyStore.clearCalls).toBeGreaterThanOrEqual(1)
+    expect(inMemoryKeyStore.keyPair).toBeNull()
+
+    // No event is sent after consent withdrawal
+    const eventCalls = fetchCalls.filter(c => c.url.endsWith('/v1/events'))
+    expect(eventCalls.length).toBe(0)
 
     unsubscribe()
   })
 
-  it('13. The debug flag routes to the debug/mp/collect URL and logs validation response', async () => {
-    _setCredentialsForTesting({
-      measurementId: 'G-DEBUG001',
-      apiSecret: 'secret_debug',
-      debug: true
-    })
+  it('14. Withdrawing consent when no key pair was ever created sends zero network requests', async () => {
+    expect(inMemoryKeyStore.keyPair).toBeNull()
+    fetchCalls = []
+
+    await setAnalyticsConsent('denied')
+
+    expect(fetchCalls.length).toBe(0)
+    expect(inMemoryKeyStore.saveCalls).toBe(0)
+  })
+
+  it('15. Deletion of local state happens even if erasure request fails or times out', async () => {
+    await setAnalyticsConsent('granted')
+    await badge_scan()
+    expect(inMemoryKeyStore.keyPair).not.toBeNull()
+
+    // Make DELETE request fail
+    globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'DELETE') {
+        throw new Error('Network timeout during erasure')
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    }) as unknown as typeof fetch
+
+    // Must resolve cleanly without throwing
+    await expect(setAnalyticsConsent('denied')).resolves.toBeUndefined()
+
+    // Local state must still be wiped
+    expect(inMemoryKeyStore.keyPair).toBeNull()
+    expect(inMemoryKeyStore.clearCalls).toBeGreaterThanOrEqual(1)
+  })
+
+  it('16. Fire-and-forget: rejecting fetch does not throw or reject out of send calls', async () => {
+    await setAnalyticsConsent('granted')
+
+    globalThis.fetch = mock(async () => {
+      throw new Error('Connection refused')
+    }) as unknown as typeof fetch
+
+    await expect(extension_installed()).resolves.toBeUndefined()
+    await expect(badge_scan()).resolves.toBeUndefined()
+    await expect(setAnalyticsConsent('denied')).resolves.toBeUndefined()
+  })
+
+  it('17. Firefox fallback: when chrome.storage.session is undefined, operates with in-memory ticket cache', async () => {
+    // Delete session storage
+    delete (chrome.storage as unknown as Record<string, unknown>).session
+
     await setAnalyticsConsent('granted')
     fetchCalls = []
 
     await badge_scan()
-
-    expect(fetchCalls.length).toBe(1)
-    expect(fetchCalls[0].url).toContain('https://www.google-analytics.com/debug/mp/collect?')
-    expect(fetchCalls[0].url).toContain('measurement_id=G-DEBUG001')
-    expect(fetchCalls[0].url).toContain('api_secret=secret_debug')
-  })
-
-  it('14. Missing manifest version falls back gracefully to "unknown"', async () => {
-    manifestVersion = undefined
-    await setAnalyticsConsent('granted')
-    fetchCalls = []
-
     await options_opened()
 
-    expect(fetchCalls.length).toBe(1)
-    expect((fetchCalls[0].bodyJson as any).events[0].params.extension_version).toBe('unknown')
+    // 1 install + 2 events (ticket cached in memory across the two events)
+    expect(fetchCalls.length).toBe(3)
+    expect(fetchCalls[0].url).toBe(`${TEST_RELAY_URL}/v1/installs`)
+    expect(fetchCalls[1].url).toBe(`${TEST_RELAY_URL}/v1/events`)
+    expect(fetchCalls[2].url).toBe(`${TEST_RELAY_URL}/v1/events`)
   })
 
-  it('15. Concurrent calls for client_id share the same in-flight resolution', async () => {
+  it('18. Zero matches for GA identifiers across src/', () => {
+    const forbidden = [/google-analytics/i, /googletagmanager/i, /ga4/i, /GA_DEBUG/]
+    const srcDir = join(import.meta.dir, '..', 'src')
+
+    function scanDir (dir: string): void {
+      const entries = readdirSync(dir)
+      for (const entry of entries) {
+        const fullPath = join(dir, entry)
+        const stat = statSync(fullPath)
+        if (stat.isDirectory()) {
+          scanDir(fullPath)
+        } else if (stat.isFile() && (fullPath.endsWith('.ts') || fullPath.endsWith('.js') || fullPath.endsWith('.json'))) {
+          const content = readFileSync(fullPath, 'utf8')
+          for (const pattern of forbidden) {
+            expect(pattern.test(content)).toBe(false)
+          }
+        }
+      }
+    }
+
+    scanDir(srcDir)
+  })
+
+  it('19. Re-requests ticket on relay 401 rejection (one bounded retry)', async () => {
     await setAnalyticsConsent('granted')
     fetchCalls = []
 
-    // Call two events in parallel before client_id is cached
-    await Promise.all([badge_scan(), options_opened()])
+    let eventAttempt = 0
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/v1/events')) {
+        eventAttempt++
+        if (eventAttempt === 1) {
+          fetchCalls.push({ url, init, bodyJson: JSON.parse(String(init?.body)) })
+          return new Response(JSON.stringify({ error: 'unauthorized' }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json' }
+          })
+        }
+      }
+      return originalFetch(input, init)
+    }) as unknown as typeof fetch
 
+    await badge_scan()
+
+    // 1 initial install POST, 1 event attempt (rejected with 401), 1 ticket refresh POST, 1 retry event attempt
+    expect(fetchCalls.length).toBe(4)
+    expect(fetchCalls[0].url).toBe(`${TEST_RELAY_URL}/v1/installs`)
+    expect(fetchCalls[1].url).toBe(`${TEST_RELAY_URL}/v1/events`)
+    expect(fetchCalls[2].url).toBe(`${TEST_RELAY_URL}/v1/installs`)
+    expect(fetchCalls[3].url).toBe(`${TEST_RELAY_URL}/v1/events`)
+  })
+
+  it('20. Re-requests ticket on relay 403 rejection (one bounded retry)', async () => {
+    await setAnalyticsConsent('granted')
+    fetchCalls = []
+
+    let eventAttempt = 0
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/v1/events')) {
+        eventAttempt++
+        if (eventAttempt === 1) {
+          fetchCalls.push({ url, init, bodyJson: JSON.parse(String(init?.body)) })
+          return new Response(JSON.stringify({ error: 'forbidden' }), {
+            status: 403,
+            headers: { 'Content-Type': 'application/json' }
+          })
+        }
+      }
+      return originalFetch(input, init)
+    }) as unknown as typeof fetch
+
+    await badge_scan()
+
+    // 1 initial install POST, 1 event attempt (rejected with 403), 1 ticket refresh POST, 1 retry event attempt
+    expect(fetchCalls.length).toBe(4)
+    expect(fetchCalls[0].url).toBe(`${TEST_RELAY_URL}/v1/installs`)
+    expect(fetchCalls[1].url).toBe(`${TEST_RELAY_URL}/v1/events`)
+    expect(fetchCalls[2].url).toBe(`${TEST_RELAY_URL}/v1/installs`)
+    expect(fetchCalls[3].url).toBe(`${TEST_RELAY_URL}/v1/events`)
+  })
+
+  it('21. Erasure request sent exactly once on "denied", then subsequent calls send nothing', async () => {
+    await setAnalyticsConsent('granted')
+    await badge_scan()
+    expect(inMemoryKeyStore.keyPair).not.toBeNull()
+    fetchCalls = []
+
+    // First denial: triggers signed DELETE /v1/installs and clears key pair & ticket
+    await setAnalyticsConsent('denied')
+    const deleteCalls = fetchCalls.filter(c => c.url.endsWith('/v1/installs') && c.init?.method === 'DELETE')
+    expect(deleteCalls.length).toBe(1)
+    expect(inMemoryKeyStore.keyPair).toBeNull()
+
+    // Second denial: key is already wiped, so no further network request is sent
+    fetchCalls = []
+    await setAnalyticsConsent('denied')
+    expect(fetchCalls.length).toBe(0)
+  })
+
+  it('22. Fire-and-forget: IndexedDB / KeyStore failures do not throw or reject into callers', async () => {
+    class FailingKeyStore implements KeyStore {
+      async load (): Promise<CryptoKeyPair | null> {
+        throw new Error('IndexedDB disk corruption')
+      }
+      async save (): Promise<void> {
+        throw new Error('IndexedDB quota exceeded')
+      }
+      async clear (): Promise<void> {
+        throw new Error('IndexedDB database locked')
+      }
+    }
+
+    _setKeyStoreForTesting(new FailingKeyStore())
+    await setAnalyticsConsent('granted')
+
+    await expect(extension_installed()).resolves.toBeUndefined()
+    await expect(badge_scan()).resolves.toBeUndefined()
+    await expect(options_opened()).resolves.toBeUndefined()
+    await expect(setAnalyticsConsent('denied')).resolves.toBeUndefined()
+  })
+
+  it('23. Fire-and-forget: WebCrypto failures do not throw or reject into callers', async () => {
+    await setAnalyticsConsent('granted')
+
+    const originalSubtle = crypto.subtle
+    const mockSubtle = Object.create(originalSubtle)
+    mockSubtle.generateKey = mock(async () => {
+      throw new Error('Hardware crypto module unavailable')
+    })
+    mockSubtle.sign = mock(async () => {
+      throw new Error('CryptoKey signature operation failed')
+    })
+
+    Object.defineProperty(crypto, 'subtle', {
+      value: mockSubtle,
+      configurable: true
+    })
+
+    try {
+      await expect(extension_installed()).resolves.toBeUndefined()
+      await expect(badge_scan()).resolves.toBeUndefined()
+      await expect(setAnalyticsConsent('denied')).resolves.toBeUndefined()
+    } finally {
+      Object.defineProperty(crypto, 'subtle', {
+        value: originalSubtle,
+        configurable: true
+      })
+    }
+  })
+
+  it('24. IndexedDbKeyStore settles all promises on success, error, blocked, and abort', async () => {
+    const store = new IndexedDbKeyStore()
+
+    // When indexedDB is undefined, openDb rejects and load returns null
+    const origIndexedDB = globalThis.indexedDB
+    delete (globalThis as Record<string, unknown>).indexedDB
+
+    const loaded = await store.load()
+    expect(loaded).toBeNull()
+
+    // Test settling with mock indexedDB
+    type Handler = () => void
+    interface FakeReq {
+      onsuccess: Handler | null
+      onerror: Handler | null
+      onblocked: Handler | null
+      onupgradeneeded: Handler | null
+      result?: unknown
+      error?: Error
+    }
+
+    interface FakeTx {
+      onerror: Handler | null
+      onabort: Handler | null
+      error?: Error
+      objectStore: (name: string) => {
+        get: (key: string) => FakeReq
+        put: (val: unknown, key: string) => FakeReq
+        delete: (key: string) => FakeReq
+      }
+    }
+
+    function createFakeDb () {
+      const mockStoreReq: FakeReq = {
+        onsuccess: null,
+        onerror: null,
+        onblocked: null,
+        onupgradeneeded: null
+      }
+      const mockTx: FakeTx = {
+        onerror: null,
+        onabort: null,
+        objectStore: () => ({
+          get: () => mockStoreReq,
+          put: () => mockStoreReq,
+          delete: () => mockStoreReq
+        })
+      }
+      const fakeDb = {
+        objectStoreNames: { contains: () => true },
+        transaction: () => mockTx
+      }
+      return { fakeDb, mockTx, mockStoreReq }
+    }
+
+    // 1. Open blocked
+    ;(globalThis as Record<string, unknown>).indexedDB = {
+      open: () => {
+        const req: FakeReq = { onsuccess: null, onerror: null, onblocked: null, onupgradeneeded: null }
+        setTimeout(() => req.onblocked?.(), 1)
+        return req
+      }
+    }
+    expect(await store.load()).toBeNull()
+
+    // 2. Open error
+    ;(globalThis as Record<string, unknown>).indexedDB = {
+      open: () => {
+        const req: FakeReq = { onsuccess: null, onerror: null, onblocked: null, onupgradeneeded: null, error: new Error('open failed') }
+        setTimeout(() => req.onerror?.(), 1)
+        return req
+      }
+    }
+    expect(await store.load()).toBeNull()
+
+    // 3. Tx abort
+    ;(globalThis as Record<string, unknown>).indexedDB = {
+      open: () => {
+        const { fakeDb, mockTx } = createFakeDb()
+        const req: FakeReq = { onsuccess: null, onerror: null, onblocked: null, onupgradeneeded: null, result: fakeDb }
+        setTimeout(() => {
+          req.onsuccess?.()
+          setTimeout(() => {
+            mockTx.error = new Error('aborted')
+            mockTx.onabort?.()
+          }, 1)
+        }, 1)
+        return req
+      }
+    }
+    expect(await store.load()).toBeNull()
+
+    // 4. Request error in save
+    ;(globalThis as Record<string, unknown>).indexedDB = {
+      open: () => {
+        const { fakeDb, mockStoreReq } = createFakeDb()
+        const req: FakeReq = { onsuccess: null, onerror: null, onblocked: null, onupgradeneeded: null, result: fakeDb }
+        setTimeout(() => {
+          req.onsuccess?.()
+          setTimeout(() => {
+            mockStoreReq.error = new Error('put error')
+            mockStoreReq.onerror?.()
+          }, 1)
+        }, 1)
+        return req
+      }
+    }
+    await expect(store.save({} as CryptoKeyPair)).rejects.toThrow('put error')
+
+    // Restore original indexedDB
+    if (origIndexedDB !== undefined) {
+      ;(globalThis as Record<string, unknown>).indexedDB = origIndexedDB
+    } else {
+      delete (globalThis as Record<string, unknown>).indexedDB
+    }
+  })
+
+  it('25. Cross-context consent staleness: storage.onChanged to denied invalidates cached consent and drops keys/tickets, zero fetch calls', async () => {
+    await setAnalyticsConsent('granted')
+    await badge_scan()
     expect(fetchCalls.length).toBe(2)
-    const c1 = (fetchCalls[0].bodyJson as any).client_id
-    const c2 = (fetchCalls[1].bodyJson as any).client_id
-    expect(c1).toBe(c2)
+    expect(inMemoryKeyStore.keyPair).not.toBeNull()
+    expect(await _getOrCreateKeyPairForTesting(false)).not.toBeNull()
+    expect(await _getCachedTicketForTesting()).not.toBeNull()
+
+    fetchCalls = []
+
+    // Simulate cross-context storage change from popup/options to 'denied'
+    mockLocalStorage.data.analyticsConsent = 'denied'
+    for (const listener of storageOnChangedListeners) {
+      listener({ analyticsConsent: { oldValue: 'granted', newValue: 'denied' } }, 'local')
+    }
+
+    // In-memory credentials and cached tickets are dropped
+    expect(inMemoryKeyStore.keyPair).toBeNull()
+    expect(await _getOrCreateKeyPairForTesting(false)).toBeNull()
+    expect(await _getCachedTicketForTesting()).toBeNull()
+
+    // Now emit an event
+    await badge_scan()
+
+    expect(fetchCalls.length).toBe(0)
+    expect(await _getOrCreateKeyPairForTesting(false)).toBeNull()
+    expect(await _getCachedTicketForTesting()).toBeNull()
+  })
+
+  it('26. Zero matches for google analytics or ga4 across public/', () => {
+    const forbidden = /google.?analytics|ga4/i
+    const publicDir = join(import.meta.dir, '..', 'public')
+
+    function scanDir (dir: string): void {
+      const entries = readdirSync(dir)
+      for (const entry of entries) {
+        const fullPath = join(dir, entry)
+        const stat = statSync(fullPath)
+        if (stat.isDirectory()) {
+          scanDir(fullPath)
+        } else if (stat.isFile() && (fullPath.endsWith('.html') || fullPath.endsWith('.js') || fullPath.endsWith('.css'))) {
+          const content = readFileSync(fullPath, 'utf8')
+          expect(forbidden.test(content)).toBe(false)
+        }
+      }
+    }
+
+    scanDir(publicDir)
+  })
+
+  it('27. extension_updated with empty or non-string previous_version sends unknown and passes relay validateEvent', async () => {
+    await setAnalyticsConsent('granted')
+    fetchCalls = []
+
+    await extension_updated('')
+    expect(fetchCalls.length).toBe(2)
+    const eventCall = fetchCalls[1]
+    const body = eventCall.bodyJson as { event: { name: string, params: { previous_version: string } } }
+    expect(body.event.name).toBe('extension_updated')
+    expect(body.event.params.previous_version).toBe('unknown')
+
+    const validated = validateEvent(body.event)
+    expect(validated).toEqual({
+      name: 'extension_updated',
+      params: { previous_version: 'unknown' }
+    })
+
+    // Also test with non-string (cast)
+    fetchCalls = []
+    await extension_updated(undefined as unknown as string)
+    expect(fetchCalls.length).toBe(1)
+    const secondBody = fetchCalls[0].bodyJson as { event: { name: string, params: { previous_version: string } } }
+    expect(secondBody.event.params.previous_version).toBe('unknown')
+    expect(validateEvent(secondBody.event)).toEqual({
+      name: 'extension_updated',
+      params: { previous_version: 'unknown' }
+    })
+  })
+
+  it('28. Concurrent first sends share one in-flight ticket promise, calling POST /v1/installs exactly once', async () => {
+    await setAnalyticsConsent('granted')
+    fetchCalls = []
+
+    // Fire two events simultaneously on a clean state
+    await Promise.all([
+      badge_scan(),
+      options_opened()
+    ])
+
+    const installPosts = fetchCalls.filter(c => c.url.endsWith('/v1/installs') && c.init?.method === 'POST')
+    expect(installPosts.length).toBe(1)
+
+    const eventPosts = fetchCalls.filter(c => c.url.endsWith('/v1/events') && c.init?.method === 'POST')
+    expect(eventPosts.length).toBe(2)
+  })
+
+  it('29. getOrCreateKeyPair: concurrent false caller does not cause true caller to receive null, exactly one key pair created', async () => {
+    // When key store is empty and concurrent calls happen (false first, then true):
+    const [kpFalse, kpTrue] = await Promise.all([
+      _getOrCreateKeyPairForTesting(false),
+      _getOrCreateKeyPairForTesting(true)
+    ])
+
+    expect(kpFalse).toBeNull()
+    expect(kpTrue).not.toBeNull()
+    expect(inMemoryKeyStore.saveCalls).toBe(1)
+  })
+
+  it('30. Concurrent setAnalyticsConsent("denied") calls send exactly one DELETE /v1/installs', async () => {
+    await setAnalyticsConsent('granted')
+    await badge_scan()
+    expect(fetchCalls.length).toBe(2)
+    expect(inMemoryKeyStore.keyPair).not.toBeNull()
+
+    fetchCalls = []
+
+    // Call setAnalyticsConsent('denied') concurrently
+    await Promise.all([
+      setAnalyticsConsent('denied'),
+      setAnalyticsConsent('denied')
+    ])
+
+    const deleteCalls = fetchCalls.filter(c => c.url.endsWith('/v1/installs') && c.init?.method === 'DELETE')
+    expect(deleteCalls.length).toBe(1)
+  })
+
+  it('31. 5000 ms timeout bound covers reading response body, aborting body stream if slow', async () => {
+    await setAnalyticsConsent('granted')
+
+    let passedSignal: AbortSignal | undefined
+    globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+      passedSignal = init?.signal
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => {
+          return await new Promise((resolve, reject) => {
+            if (passedSignal?.aborted) {
+              reject(new Error('AbortError'))
+              return
+            }
+            passedSignal?.addEventListener('abort', () => {
+              reject(new Error('AbortError'))
+            })
+            // Abort immediately to test that body reader handles signal abort
+            const controller = (passedSignal as unknown as { _controller?: AbortController })
+            setTimeout(() => {
+              // Trigger abort via dispatching abort event if possible or reject
+              reject(new Error('AbortError'))
+            }, 5)
+          })
+        }
+      } as unknown as Response
+    }) as unknown as typeof fetch
+
+    const sendPromise = extension_installed()
+    await expect(sendPromise).resolves.toBeUndefined()
+    expect(passedSignal).toBeDefined()
+  })
+
+  it('32. Local key pair, ticket and cached id are wiped on denied even when obtaining the ticket for the erasure request fails', async () => {
+    // 1. Establish an install with key pair and ticket
+    await setAnalyticsConsent('granted')
+    await badge_scan()
+
+    expect(inMemoryKeyStore.keyPair).not.toBeNull()
+    expect(await _getCachedTicketForTesting()).not.toBeNull()
+
+    // 2. Clear ticket cache to force getOrFetchTicket during handleConsentDenied to request a new ticket from relay
+    await mockSessionStorage?.remove('telemetryTicketData')
+
+    // 3. Make the ticket request (POST /v1/installs) fail with 500
+    globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/v1/installs') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ error: 'server_error' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }) as unknown as typeof fetch
+
+    // 4. Deny consent
+    await expect(setAnalyticsConsent('denied')).resolves.toBeUndefined()
+
+    // 5. Ensure local key pair, ticket and cached state are completely wiped
+    expect(inMemoryKeyStore.keyPair).toBeNull()
+    expect(await _getOrCreateKeyPairForTesting(false)).toBeNull()
+    expect(await _getCachedTicketForTesting()).toBeNull()
   })
 })

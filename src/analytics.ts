@@ -1,12 +1,14 @@
 /**
- * Google Analytics 4 Measurement Protocol client for MV3.
+ * Signed telemetry relay client.
  *
- * Implements the MV3 service worker approach per Chrome extension guidance:
- * - POST to https://www.google-analytics.com/mp/collect (or /debug/mp/collect)
- * - Persistent client_id in chrome.storage.local
- * - Session id and last updated timestamp in chrome.storage.session (30 min expiry)
- * - Firefox fallback: in-memory session object when storage.session is unavailable
+ * Implements privacy-preserving telemetry per issue #183:
+ * - ECDSA P-256 per-install key pair generated with WebCrypto
+ * - Private key is strictly non-extractable and persisted in IndexedDB
+ * - Ticket-based authentication from POST /v1/installs
+ * - Ticket caching in chrome.storage.session with in-memory fallback
+ * - Canonical JSON payload signing with base64url IEEE P1363 signatures
  * - Consent-gated: only sends when consent is strictly 'granted'
+ * - Signed erasure on consent withdrawal (DELETE /v1/installs)
  * - Bounded async timeouts (5000ms cap)
  * - Fire-and-forget: never throws or rejects out of the public API
  */
@@ -23,84 +25,193 @@ export interface VerifyCompletedParams {
   media_type: MediaType
 }
 
-interface SessionData {
-  sessionId: string
-  sessionLastUpdated: number
+export interface KeyStore {
+  load: () => Promise<CryptoKeyPair | null>
+  save: (keyPair: CryptoKeyPair) => Promise<void>
+  clear: () => Promise<void>
 }
 
-interface StoredSessionWrapper {
-  ga4SessionData?: unknown
+interface TicketData {
+  install_id: string
+  ticket: string
+  expires_at: number
 }
 
-interface StoredClientIdWrapper {
-  ga4ClientId?: unknown
+interface PublicJwk {
+  kty: string
+  crv: string
+  x: string
+  y: string
 }
 
 interface StoredConsentWrapper {
   analyticsConsent?: unknown
 }
 
-const GA_ENDPOINT = 'https://www.google-analytics.com/mp/collect'
-const GA_DEBUG_ENDPOINT = 'https://www.google-analytics.com/debug/mp/collect'
-
-const STORAGE_KEY_CLIENT_ID = 'ga4ClientId'
-const STORAGE_KEY_SESSION = 'ga4SessionData'
 const STORAGE_KEY_CONSENT = 'analyticsConsent'
+const STORAGE_KEY_TICKET = 'telemetryTicketData'
+const DB_NAME = 'verifieddit_telemetry'
+const DB_STORE_NAME = 'keys'
+const DB_KEY_PAIR = 'client_key_pair'
 
-const SESSION_EXPIRATION_IN_MIN = 30
-const DEFAULT_ENGAGEMENT_TIME_MSEC = 100
+const TICKET_SAFETY_MARGIN_MS = 30_000
 const ANALYTICS_TIMEOUT_MSEC = 5000
 
 // Injected at build time by rollup. Never read from runtime storage.
-const BUILD_MEASUREMENT_ID = process.env.GA4_MEASUREMENT_ID ?? ''
-const BUILD_API_SECRET = process.env.GA4_API_SECRET ?? ''
-const BUILD_GA_DEBUG = process.env.GA_DEBUG?.toLowerCase() === 'true'
+const BUILD_RELAY_URL = process.env.TELEMETRY_RELAY_URL ?? ''
 
 // Mutable test overrides
-let testMeasurementId: string | null = null
-let testApiSecret: string | null = null
-let testDebug: boolean | null = null
+let testRelayUrl: string | null = null
 
-// Read-through cache for client_id and active in-flight resolution
-let cachedClientId: string | null = null
-let clientIdPromise: Promise<string> | null = null
+export class IndexedDbKeyStore implements KeyStore {
+  private async openDb (): Promise<IDBDatabase> {
+    return await new Promise((resolve, reject) => {
+      if (typeof indexedDB === 'undefined') {
+        reject(new Error('IndexedDB is unavailable'))
+        return
+      }
+      const req = indexedDB.open(DB_NAME, 1)
+      req.onupgradeneeded = () => {
+        const db = req.result
+        if (!db.objectStoreNames.contains(DB_STORE_NAME)) {
+          db.createObjectStore(DB_STORE_NAME)
+        }
+      }
+      req.onsuccess = () => { resolve(req.result) }
+      req.onerror = () => { reject(req.error ?? new Error('IndexedDB open error')) }
+      req.onblocked = () => { reject(new Error('IndexedDB open blocked')) }
+    })
+  }
 
-// Read-through cache for consent
+  async load (): Promise<CryptoKeyPair | null> {
+    try {
+      const db = await this.openDb()
+      return await new Promise<CryptoKeyPair | null>((resolve, reject) => {
+        const tx = db.transaction(DB_STORE_NAME, 'readonly')
+        const store = tx.objectStore(DB_STORE_NAME)
+        const req = store.get(DB_KEY_PAIR)
+        req.onsuccess = () => { resolve((req.result as CryptoKeyPair) ?? null) }
+        req.onerror = () => { reject(req.error ?? new Error('IndexedDB get error')) }
+        tx.onerror = () => { reject(tx.error ?? new Error('IndexedDB transaction error')) }
+        tx.onabort = () => { reject(tx.error ?? new Error('IndexedDB transaction aborted')) }
+      })
+    } catch {
+      // Fire-and-forget contract: IndexedDB load errors return null so callers proceed without crashing
+      return null
+    }
+  }
+
+  async save (keyPair: CryptoKeyPair): Promise<void> {
+    const db = await this.openDb()
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(DB_STORE_NAME, 'readwrite')
+      const store = tx.objectStore(DB_STORE_NAME)
+      const req = store.put(keyPair, DB_KEY_PAIR)
+      req.onsuccess = () => { resolve() }
+      req.onerror = () => { reject(req.error ?? new Error('IndexedDB put error')) }
+      tx.onerror = () => { reject(tx.error ?? new Error('IndexedDB transaction error')) }
+      tx.onabort = () => { reject(tx.error ?? new Error('IndexedDB transaction aborted')) }
+    })
+  }
+
+  async clear (): Promise<void> {
+    try {
+      const db = await this.openDb()
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(DB_STORE_NAME, 'readwrite')
+        const store = tx.objectStore(DB_STORE_NAME)
+        const req = store.delete(DB_KEY_PAIR)
+        req.onsuccess = () => { resolve() }
+        req.onerror = () => { reject(req.error ?? new Error('IndexedDB delete error')) }
+        tx.onerror = () => { reject(tx.error ?? new Error('IndexedDB transaction error')) }
+        tx.onabort = () => { reject(tx.error ?? new Error('IndexedDB transaction aborted')) }
+      })
+    } catch {
+      // Clear errors handled safely per fire-and-forget contract
+    }
+  }
+}
+
+const defaultKeyStore: KeyStore = new IndexedDbKeyStore()
+let activeKeyStore: KeyStore = defaultKeyStore
+
+// In-memory caches
+let cachedKeyPair: CryptoKeyPair | null = null
+let cachedTicketData: TicketData | null = null
+let ticketPromise: Promise<TicketData | null> | null = null
 let cachedConsent: AnalyticsConsent | null = null
-
-// In-memory fallback session for Firefox or environments without chrome.storage.session
-let inMemorySession: SessionData | null = null
 
 // Listeners observing consent changes
 type ConsentChangeListener = (value: AnalyticsConsent) => void
 const consentChangeListeners = new Set<ConsentChangeListener>()
 
-function getMeasurementId (): string {
-  return testMeasurementId ?? BUILD_MEASUREMENT_ID
+let keyLoadPromise: Promise<CryptoKeyPair | null> | null = null
+let keyGeneratePromise: Promise<CryptoKeyPair | null> | null = null
+
+function dropLocalStateSync (): void {
+  cachedKeyPair = null
+  keyLoadPromise = null
+  keyGeneratePromise = null
+  cachedTicketData = null
+  ticketPromise = null
+  void writeTicketData(null)
+  void activeKeyStore.clear()
 }
 
-function getApiSecret (): string {
-  return testApiSecret ?? BUILD_API_SECRET
+let isStorageListenerRegistered = false
+
+export function _ensureStorageListener (): void {
+  if (isStorageListenerRegistered) return
+  try {
+    if (chrome?.storage?.onChanged?.addListener != null) {
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area !== 'local' || !(STORAGE_KEY_CONSENT in changes)) {
+          return
+        }
+        const raw = changes[STORAGE_KEY_CONSENT]?.newValue
+        const next: AnalyticsConsent = raw === 'granted' || raw === 'denied' || raw === 'unset'
+          ? raw
+          : 'unset'
+        cachedConsent = next
+        if (next !== 'granted') {
+          dropLocalStateSync()
+        }
+        for (const listener of consentChangeListeners) {
+          try {
+            listener(next)
+          } catch {
+            // Fire-and-forget: do not throw to caller
+          }
+        }
+      })
+      isStorageListenerRegistered = true
+    }
+  } catch {
+    // Listener registration failure handled safely per fire-and-forget contract
+  }
 }
 
-function isDebugMode (): boolean {
-  return testDebug ?? BUILD_GA_DEBUG
+// Guarded initial storage change listener for cross-context consent staleness
+_ensureStorageListener()
+
+function getRelayUrl (): string {
+  return testRelayUrl ?? BUILD_RELAY_URL
 }
 
 /**
- * Check if the GA4 client has valid credentials configured.
- * When false, all send calls silently no-op.
+ * Check if the telemetry client has a relay URL configured.
+ * When false, all telemetry operations silently no-op.
  */
 export function isAnalyticsConfigured (): boolean {
-  const mid = getMeasurementId()
-  const secret = getApiSecret()
-  return mid.trim().length > 0 && secret.trim().length > 0
+  const url = getRelayUrl()
+  return url.trim().length > 0
 }
 
 /**
  * Read the current consent state. Validates stored shape before returning.
  */
 export async function getAnalyticsConsent (): Promise<AnalyticsConsent> {
+  _ensureStorageListener()
   if (cachedConsent != null) {
     return cachedConsent
   }
@@ -111,11 +222,9 @@ export async function getAnalyticsConsent (): Promise<AnalyticsConsent> {
     if (raw === 'granted' || raw === 'denied' || raw === 'unset') {
       cachedConsent = raw
     } else {
-      // Treat missing or malformed value as unset
       cachedConsent = 'unset'
     }
   } catch {
-    // If storage read fails, fail safe to unset
     cachedConsent = 'unset'
   }
 
@@ -123,8 +232,8 @@ export async function getAnalyticsConsent (): Promise<AnalyticsConsent> {
 }
 
 /**
- * Update consent state, persist to storage, notify observers,
- * and if granted, dispatch consent_changed event.
+ * Update consent state, persist to local storage, notify registered
+ * change listeners, and when denied, trigger signed erasure and local credential cleanup.
  */
 export async function setAnalyticsConsent (value: AnalyticsConsent): Promise<void> {
   cachedConsent = value
@@ -143,8 +252,8 @@ export async function setAnalyticsConsent (value: AnalyticsConsent): Promise<voi
     }
   }
 
-  if (value === 'granted') {
-    await sendEvent('consent_changed', { value: 'granted' })
+  if (value === 'denied') {
+    await handleConsentDenied()
   }
 }
 
@@ -159,130 +268,274 @@ export function addConsentChangeListener (listener: ConsentChangeListener): () =
 }
 
 /**
- * Retrieve or generate the persistent client_id.
- * Concurrent callers share a single in-flight resolution promise.
+ * Base64url encode a byte array without padding.
  */
-async function getOrCreateClientId (): Promise<string> {
-  if (cachedClientId != null) {
-    return cachedClientId
+function base64UrlEncode (bytes: Uint8Array): string {
+  let binary = ''
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i])
   }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
 
-  if (clientIdPromise != null) {
-    return await clientIdPromise
+/**
+ * Canonical JSON serializer matching the relay wire protocol.
+ * Keys are sorted lexicographically, whitespace is stripped, and numbers are validated.
+ */
+export function canonicalise (value: unknown): string {
+  if (value === null) {
+    return 'null'
   }
-
-  clientIdPromise = (async () => {
-    try {
-      const stored = await chrome.storage?.local?.get(STORAGE_KEY_CLIENT_ID) as StoredClientIdWrapper | undefined
-      const raw = stored?.ga4ClientId
-      if (typeof raw === 'string' && raw.trim().length > 0) {
-        cachedClientId = raw
-        return cachedClientId
+  const valType = typeof value
+  if (valType === 'number') {
+    if (!Number.isFinite(value)) {
+      throw new Error('Cannot canonicalise non-finite number')
+    }
+    return JSON.stringify(value)
+  }
+  if (valType === 'string' || valType === 'boolean') {
+    return JSON.stringify(value)
+  }
+  if (Array.isArray(value)) {
+    return '[' + value.map(item => canonicalise(item)).join(',') + ']'
+  }
+  if (valType === 'object') {
+    const obj = value as Record<string, unknown>
+    const keys = Object.keys(obj).sort()
+    const parts: string[] = []
+    for (const k of keys) {
+      if (obj[k] !== undefined) {
+        parts.push(JSON.stringify(k) + ':' + canonicalise(obj[k]))
       }
-    } catch {
-      // Storage read failed, fallback to generating new id
     }
+    return '{' + parts.join(',') + '}'
+  }
+  throw new Error('Unsupported value type for canonicalisation')
+}
 
-    const newId = crypto.randomUUID()
-    cachedClientId = newId
+export function canonicaliseEventPayload (payload: {
+  install_id: string
+  ts: number
+  event: {
+    name: string
+    params: Record<string, unknown>
+  }
+  version: string
+}): string {
+  return canonicalise({
+    event: payload.event,
+    install_id: payload.install_id,
+    ts: payload.ts,
+    version: payload.version
+  })
+}
 
-    try {
-      await chrome.storage?.local?.set({ [STORAGE_KEY_CLIENT_ID]: newId })
-    } catch {
-      // Storage write failure is handled safely
-    }
+export function canonicaliseErasurePayload (payload: {
+  install_id: string
+  ts: number
+}): string {
+  return canonicalise({
+    action: 'erase',
+    install_id: payload.install_id,
+    ts: payload.ts
+  })
+}
 
-    return newId
-  })()
+/**
+ * Retrieve or generate the persistent ECDSA P-256 key pair.
+ * Private key is non-extractable.
+ */
+async function getOrCreateKeyPair (createIfMissing: boolean): Promise<CryptoKeyPair | null> {
+  if (cachedKeyPair != null) {
+    return cachedKeyPair
+  }
+
+  // First, check if a load from storage is already pending or needed
+  if (keyLoadPromise == null) {
+    keyLoadPromise = (async () => {
+      try {
+        const stored = await activeKeyStore.load()
+        if (stored != null) {
+          cachedKeyPair = stored
+          return cachedKeyPair
+        }
+      } catch {
+        // KeyStore read failure handled safely per fire-and-forget contract
+      }
+      return null
+    })()
+  }
+
+  const loaded = await keyLoadPromise
+  if (loaded != null) {
+    return loaded
+  }
+
+  if (cachedKeyPair != null) {
+    return cachedKeyPair
+  }
+
+  if (!createIfMissing) {
+    return null
+  }
+
+  // Key is missing and needs creation. Share one keyGeneratePromise so exactly one key is generated.
+  if (keyGeneratePromise == null) {
+    keyGeneratePromise = (async () => {
+      try {
+        if (crypto?.subtle == null) {
+          return null
+        }
+
+        const keyPair = await crypto.subtle.generateKey(
+          { name: 'ECDSA', namedCurve: 'P-256' },
+          false,
+          ['sign', 'verify']
+        )
+        cachedKeyPair = keyPair
+
+        try {
+          await activeKeyStore.save(keyPair)
+        } catch {
+          // KeyStore save failure handled safely per fire-and-forget contract
+        }
+
+        return keyPair
+      } catch {
+        // WebCrypto key generation failure handled safely per fire-and-forget contract
+        return null
+      }
+    })()
+  }
 
   try {
-    return await clientIdPromise
+    return await keyGeneratePromise
   } finally {
-    clientIdPromise = null
+    keyGeneratePromise = null
   }
 }
 
-function isValidSessionData (obj: unknown): obj is SessionData {
+function isValidTicketData (obj: unknown): obj is TicketData {
   if (typeof obj !== 'object' || obj == null) return false
   const candidate = obj as Record<string, unknown>
-  return typeof candidate.sessionId === 'string' &&
-    candidate.sessionId.trim().length > 0 &&
-    typeof candidate.sessionLastUpdated === 'number' &&
-    !Number.isNaN(candidate.sessionLastUpdated)
+  return typeof candidate.install_id === 'string' &&
+    candidate.install_id.length > 0 &&
+    typeof candidate.ticket === 'string' &&
+    candidate.ticket.length > 0 &&
+    typeof candidate.expires_at === 'number' &&
+    Number.isFinite(candidate.expires_at)
 }
 
-/**
- * Read session data from chrome.storage.session, falling back to in-memory session.
- */
-async function readSessionData (): Promise<SessionData | null> {
-  // Firefox or older browsers might not support chrome.storage.session
+async function readTicketData (): Promise<TicketData | null> {
+  if (cachedTicketData != null) {
+    return cachedTicketData
+  }
+
   if (chrome?.storage?.session == null) {
-    return inMemorySession
+    return cachedTicketData
   }
 
   try {
-    const stored = await chrome.storage.session.get(STORAGE_KEY_SESSION) as StoredSessionWrapper | undefined
-    if (isValidSessionData(stored?.ga4SessionData)) {
-      return stored.ga4SessionData
+    const stored = await chrome.storage.session.get(STORAGE_KEY_TICKET) as Record<string, unknown> | undefined
+    const raw = stored?.[STORAGE_KEY_TICKET]
+    if (isValidTicketData(raw)) {
+      cachedTicketData = raw
+      return cachedTicketData
     }
-    // Malformed stored session: treat as absent
-    return null
   } catch {
-    // Fall back to in-memory session if storage.session throws
-    return inMemorySession
+    // Session storage read failure falls back to memory
   }
+
+  return cachedTicketData
 }
 
-/**
- * Persist session data to chrome.storage.session and update in-memory session.
- */
-async function writeSessionData (session: SessionData): Promise<void> {
-  inMemorySession = { ...session }
+async function writeTicketData (data: TicketData | null): Promise<void> {
+  cachedTicketData = data
 
   if (chrome?.storage?.session == null) {
     return
   }
 
   try {
-    await chrome.storage.session.set({ [STORAGE_KEY_SESSION]: session })
+    if (data == null) {
+      await chrome.storage.session.remove(STORAGE_KEY_TICKET)
+    } else {
+      await chrome.storage.session.set({ [STORAGE_KEY_TICKET]: data })
+    }
   } catch {
-    // Fall back silently to in-memory session
+    // Session storage write failure handled safely
   }
 }
 
-interface SessionInfo {
-  sessionId: string
-  engagementTimeMsec: string
+async function exportCleanJwk (publicKey: CryptoKey): Promise<PublicJwk> {
+  const exported = await crypto.subtle.exportKey('jwk', publicKey)
+  return {
+    kty: exported.kty ?? 'EC',
+    crv: exported.crv ?? 'P-256',
+    x: exported.x ?? '',
+    y: exported.y ?? ''
+  }
 }
 
 /**
- * Retrieve active session id and compute engagement time in msec.
- * Starts a new session if expired or absent.
+ * Obtain a ticket from the relay, validating the response before caching.
  */
-async function getOrCreateSession (): Promise<SessionInfo> {
-  const now = Date.now()
-  const maxAgeMs = SESSION_EXPIRATION_IN_MIN * 60 * 1000
-  const session = await readSessionData()
-
-  if (session == null || now - session.sessionLastUpdated > maxAgeMs) {
-    const newSession: SessionData = {
-      sessionId: String(now),
-      sessionLastUpdated: now
-    }
-    await writeSessionData(newSession)
-    return {
-      sessionId: newSession.sessionId,
-      engagementTimeMsec: String(DEFAULT_ENGAGEMENT_TIME_MSEC)
+async function getOrFetchTicket (keyPair: CryptoKeyPair, forceRefresh = false): Promise<TicketData | null> {
+  if (!forceRefresh) {
+    const cached = await readTicketData()
+    if (cached != null && Date.now() < cached.expires_at - TICKET_SAFETY_MARGIN_MS) {
+      return cached
     }
   }
 
-  const elapsed = Math.max(0, now - session.sessionLastUpdated)
-  session.sessionLastUpdated = now
-  await writeSessionData(session)
+  if (ticketPromise != null && !forceRefresh) {
+    return await ticketPromise
+  }
 
-  return {
-    sessionId: session.sessionId,
-    engagementTimeMsec: String(elapsed)
+  const inFlight = (async () => {
+    const relayUrl = getRelayUrl().replace(/\/+$/, '')
+    const jwk = await exportCleanJwk(keyPair.publicKey)
+
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => {
+      controller.abort()
+    }, ANALYTICS_TIMEOUT_MSEC)
+
+    try {
+      const res = await fetch(`${relayUrl}/v1/installs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ jwk }),
+        signal: controller.signal
+      })
+
+      if (!res.ok) {
+        return null
+      }
+
+      const data: unknown = await res.json()
+      if (isValidTicketData(data)) {
+        await writeTicketData(data)
+        return data
+      }
+      return null
+    } catch {
+      return null
+    } finally {
+      clearTimeout(timeoutId)
+    }
+  })()
+
+  ticketPromise = inFlight
+
+  try {
+    return await inFlight
+  } finally {
+    if (ticketPromise === inFlight) {
+      ticketPromise = null
+    }
   }
 }
 
@@ -290,7 +543,7 @@ function getExtensionVersion (): string {
   try {
     const manifest = chrome.runtime?.getManifest?.()
     if (typeof manifest?.version === 'string' && manifest.version.length > 0) {
-      return manifest.version
+      return manifest.version.slice(0, 32)
     }
   } catch {
     // Fall through to default
@@ -298,10 +551,95 @@ function getExtensionVersion (): string {
   return 'unknown'
 }
 
+let inFlightErasurePromise: Promise<void> | null = null
+
 /**
- * Core send routine.
- * Guarded against unconfigured credentials, ungranted consent, and timeouts.
- * Fire-and-forget: catch all internal errors so callers are never rejected.
+ * Handle consent withdrawal: send signed erasure to relay if a key exists,
+ * then wipe all local credentials, tickets, and cached state.
+ */
+async function handleConsentDenied (): Promise<void> {
+  if (inFlightErasurePromise != null) {
+    await inFlightErasurePromise
+    return
+  }
+
+  const inFlight = (async () => {
+    try {
+      if (isAnalyticsConfigured()) {
+        const existingKeyPair = await getOrCreateKeyPair(false)
+        if (existingKeyPair != null) {
+          const ticketData = await getOrFetchTicket(existingKeyPair)
+          if (ticketData != null) {
+            const jwk = await exportCleanJwk(existingKeyPair.publicKey)
+            const ts = Date.now()
+            const canonical = canonicaliseErasurePayload({
+              install_id: ticketData.install_id,
+              ts
+            })
+            const sigBytes = await crypto.subtle.sign(
+              { name: 'ECDSA', hash: 'SHA-256' },
+              existingKeyPair.privateKey,
+              new TextEncoder().encode(canonical)
+            )
+            const sig = base64UrlEncode(new Uint8Array(sigBytes))
+
+            const relayUrl = getRelayUrl().replace(/\/+$/, '')
+            const controller = new AbortController()
+            const timeoutId = setTimeout(() => {
+              controller.abort()
+            }, ANALYTICS_TIMEOUT_MSEC)
+
+            try {
+              await fetch(`${relayUrl}/v1/installs`, {
+                method: 'DELETE',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  install_id: ticketData.install_id,
+                  ticket: ticketData.ticket,
+                  ts,
+                  sig,
+                  jwk
+                }),
+                signal: controller.signal
+              })
+            } finally {
+              clearTimeout(timeoutId)
+            }
+          }
+        }
+      }
+    } catch {
+      // Network errors during erasure must never block local state cleanup
+    } finally {
+      cachedKeyPair = null
+      keyLoadPromise = null
+      keyGeneratePromise = null
+      ticketPromise = null
+      await writeTicketData(null)
+      try {
+        await activeKeyStore.clear()
+      } catch {
+        // KeyStore clear failure handled safely
+      }
+    }
+  })()
+
+  inFlightErasurePromise = inFlight
+
+  try {
+    await inFlight
+  } finally {
+    if (inFlightErasurePromise === inFlight) {
+      inFlightErasurePromise = null
+    }
+  }
+}
+
+/**
+ * Core send routine for telemetry events.
+ * Signs payload with non-extractable ECDSA key and handles ticket refreshing.
  */
 async function sendEvent (eventName: string, eventParams: Record<string, unknown> = {}): Promise<void> {
   if (!isAnalyticsConfigured()) {
@@ -313,74 +651,149 @@ async function sendEvent (eventName: string, eventParams: Record<string, unknown
     return
   }
 
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => {
-    controller.abort()
-  }, ANALYTICS_TIMEOUT_MSEC)
-
   try {
-    const clientId = await getOrCreateClientId()
-    const { sessionId, engagementTimeMsec } = await getOrCreateSession()
-    const extensionVersion = getExtensionVersion()
-
-    const mid = getMeasurementId()
-    const secret = getApiSecret()
-    const debug = isDebugMode()
-
-    const baseUrl = debug ? GA_DEBUG_ENDPOINT : GA_ENDPOINT
-    const url = `${baseUrl}?measurement_id=${encodeURIComponent(mid)}&api_secret=${encodeURIComponent(secret)}`
-
-    const payload = {
-      client_id: clientId,
-      events: [
-        {
-          name: eventName,
-          params: {
-            ...eventParams,
-            session_id: sessionId,
-            engagement_time_msec: engagementTimeMsec,
-            extension_version: extensionVersion
-          }
-        }
-      ]
+    const keyPair = await getOrCreateKeyPair(true)
+    if (keyPair == null) {
+      return
     }
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload),
-      signal: controller.signal
+    const ticketData = await getOrFetchTicket(keyPair)
+    if (ticketData == null) {
+      return
+    }
+
+    const jwk = await exportCleanJwk(keyPair.publicKey)
+    const version = getExtensionVersion()
+    const ts = Date.now()
+
+    const relayEvent = {
+      name: eventName,
+      params: eventParams
+    }
+
+    const canonical = canonicaliseEventPayload({
+      install_id: ticketData.install_id,
+      ts,
+      event: relayEvent,
+      version
     })
 
-    if (debug) {
-      try {
-        const bodyText = await response.text()
-        console.log('[GA4 Debug Validation]', response.status, bodyText)
-      } catch {
-        // Ignore response body read failures in debug logging
+    const sigBytes = await crypto.subtle.sign(
+      { name: 'ECDSA', hash: 'SHA-256' },
+      keyPair.privateKey,
+      new TextEncoder().encode(canonical)
+    )
+    const sig = base64UrlEncode(new Uint8Array(sigBytes))
+
+    const body = {
+      install_id: ticketData.install_id,
+      ticket: ticketData.ticket,
+      ts,
+      event: relayEvent,
+      version,
+      sig,
+      jwk
+    }
+
+    const relayUrl = getRelayUrl().replace(/\/+$/, '')
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => {
+      controller.abort()
+    }, ANALYTICS_TIMEOUT_MSEC)
+
+    let res: Response
+    let isInvalidTicket = false
+    try {
+      res = await fetch(`${relayUrl}/v1/events`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      })
+
+      if (res.status === 400) {
+        try {
+          const errorJson = await res.json() as Record<string, unknown> | undefined
+          if (errorJson?.error === 'invalid_ticket') {
+            isInvalidTicket = true
+          }
+        } catch {
+          // Response was not JSON
+        }
+      }
+    } finally {
+      clearTimeout(timeoutId)
+    }
+
+    if (res.status === 400 || res.status === 401 || res.status === 403) {
+      const shouldRefreshTicket = res.status === 401 || res.status === 403 || isInvalidTicket
+
+      if (shouldRefreshTicket) {
+        const freshTicket = await getOrFetchTicket(keyPair, true)
+        if (freshTicket != null) {
+          const retryTs = Date.now()
+          const retryCanonical = canonicaliseEventPayload({
+            install_id: freshTicket.install_id,
+            ts: retryTs,
+            event: relayEvent,
+            version
+          })
+          const retrySigBytes = await crypto.subtle.sign(
+            { name: 'ECDSA', hash: 'SHA-256' },
+            keyPair.privateKey,
+            new TextEncoder().encode(retryCanonical)
+          )
+          const retrySig = base64UrlEncode(new Uint8Array(retrySigBytes))
+
+          const retryBody = {
+            install_id: freshTicket.install_id,
+            ticket: freshTicket.ticket,
+            ts: retryTs,
+            event: relayEvent,
+            version,
+            sig: retrySig,
+            jwk
+          }
+
+          const retryController = new AbortController()
+          const retryTimeoutId = setTimeout(() => {
+            retryController.abort()
+          }, ANALYTICS_TIMEOUT_MSEC)
+
+          try {
+            await fetch(`${relayUrl}/v1/events`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(retryBody),
+              signal: retryController.signal
+            })
+          } finally {
+            clearTimeout(retryTimeoutId)
+          }
+        }
       }
     }
-  } catch (error) {
-    // Deliberate fire-and-forget catch: extension operations must never fail due to analytics
-    if (isDebugMode()) {
-      console.warn('[GA4 Analytics Warning]', error)
-    }
-  } finally {
-    clearTimeout(timeoutId)
+  } catch {
+    // Deliberate fire-and-forget catch: extension operations must never fail due to telemetry
   }
 }
 
-// Public Typed Event APIs (snake_case names per GA4 specification)
+// Public Typed Event APIs (snake_case names preserved for backward compatibility)
 /* eslint-disable @typescript-eslint/naming-convention */
 
 export async function extension_installed (): Promise<void> {
-  await sendEvent('extension_installed')
+  await sendEvent('extension_installed', {})
 }
 
 export async function extension_updated (previous_version: string): Promise<void> {
-  await sendEvent('extension_updated', { previous_version })
+  const truncated = typeof previous_version === 'string' && previous_version.length > 0
+    ? previous_version.slice(0, 32)
+    : 'unknown'
+  await sendEvent('extension_updated', { previous_version: truncated })
 }
 
 export async function verify_started (source: VerifySource): Promise<void> {
@@ -396,11 +809,11 @@ export async function verify_completed (params: VerifyCompletedParams): Promise<
 }
 
 export async function badge_scan (): Promise<void> {
-  await sendEvent('badge_scan')
+  await sendEvent('badge_scan', {})
 }
 
 export async function options_opened (): Promise<void> {
-  await sendEvent('options_opened')
+  await sendEvent('options_opened', {})
 }
 
 export async function consent_changed (value: 'granted' | 'denied'): Promise<void> {
@@ -410,7 +823,7 @@ export async function consent_changed (value: 'granted' | 'denied'): Promise<voi
 /* eslint-enable @typescript-eslint/naming-convention */
 
 /**
- * Map an arbitrary media type string to GA4 MediaType ('image' | 'video' | 'audio' | 'pdf').
+ * Map an arbitrary media type string to MediaType ('image' | 'video' | 'audio' | 'pdf').
  * Defaults to 'image' for any unrecognized or missing value.
  */
 export function mapMediaType (rawType?: string | null): MediaType {
@@ -423,7 +836,7 @@ export function mapMediaType (rawType?: string | null): MediaType {
 }
 
 /**
- * Map a verification outcome to GA4 VerifyResult ('valid' | 'invalid' | 'none' | 'error').
+ * Map a verification outcome to VerifyResult ('valid' | 'invalid' | 'none' | 'error').
  * Reuses repo's verdict semantics without inventing parallel classification.
  */
 export function mapVerificationResult (
@@ -470,7 +883,6 @@ const lastScanEmissionByTab = new Map<number, number>()
  * Prunes expired entries on every call to keep memory usage bounded.
  */
 export function shouldEmitScanEvent (tabId: number | undefined, now: number): boolean {
-  // Prune entries older than the window
   for (const [key, timestamp] of lastScanEmissionByTab) {
     if (now - timestamp >= SCAN_EVENT_THROTTLE_MSEC) {
       lastScanEmissionByTab.delete(key)
@@ -495,37 +907,31 @@ export function _scanThrottleSizeForTesting (): number {
 }
 
 export function _resetStateForTesting (): void {
-  cachedClientId = null
-  clientIdPromise = null
+  cachedKeyPair = null
+  keyLoadPromise = null
+  keyGeneratePromise = null
+  cachedTicketData = null
+  ticketPromise = null
   cachedConsent = null
-  inMemorySession = null
+  isStorageListenerRegistered = false
   consentChangeListeners.clear()
-  testMeasurementId = null
-  testApiSecret = null
-  testDebug = null
+  testRelayUrl = null
+  activeKeyStore = defaultKeyStore
   lastScanEmissionByTab.clear()
 }
 
-export function _setCredentialsForTesting (creds: {
-  measurementId?: string
-  apiSecret?: string
-  debug?: boolean
-}): void {
-  if (creds.measurementId !== undefined) {
-    testMeasurementId = creds.measurementId
-  }
-  if (creds.apiSecret !== undefined) {
-    testApiSecret = creds.apiSecret
-  }
-  if (creds.debug !== undefined) {
-    testDebug = creds.debug
-  }
+export function _setRelayUrlForTesting (url: string | null): void {
+  testRelayUrl = url
 }
 
-export function _getInMemorySessionForTesting (): SessionData | null {
-  return inMemorySession
+export function _setKeyStoreForTesting (store: KeyStore | null): void {
+  activeKeyStore = store ?? defaultKeyStore
 }
 
-export function _setInMemorySessionForTesting (session: SessionData | null): void {
-  inMemorySession = session != null ? { ...session } : null
+export async function _getOrCreateKeyPairForTesting (createIfMissing: boolean): Promise<CryptoKeyPair | null> {
+  return await getOrCreateKeyPair(createIfMissing)
+}
+
+export async function _getCachedTicketForTesting (): Promise<TicketData | null> {
+  return await readTicketData()
 }
