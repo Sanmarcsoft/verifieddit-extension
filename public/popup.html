@@ -136,12 +136,7 @@
             <br>
             <toggle-switch label="Share anonymous usage statistics" id="toggleAnalyticsConsent"></toggle-switch>
             <p class="option-note">
-                Off by default. When on, Verifieddit shares anonymous usage statistics
-                to help improve the extension. What is sent: an anonymous random id,
-                the event name, and the extension version. No URLs, no page content,
-                no file names, and no image data are ever sent. Statistics are sent to
-                Google Analytics, and Google sees the request's IP address as it would
-                for any HTTPS request.
+                Usage statistics are optional and off by default. Each event is signed by a key created on this device and sent to a relay operated by SanMarcSoft, stored in SanMarcSoft's self-hosted Umami in the EU. Nothing is sent to Google. IP addresses are not stored. Turning this off sends an erasure request and deletes the key.
             </p>
 
             <hr>
