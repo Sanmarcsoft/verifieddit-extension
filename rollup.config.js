@@ -199,7 +199,7 @@ const backgroundC = {
   background.js (Firefox v3)
 */
 const backgroundFF = {
-  input: ['src/background.ts'],
+  input: ['src/background.ts', 'src/popup.ts', 'src/options.ts'],
   treeshake,
   output: {
     dir: 'dist/firefox',
