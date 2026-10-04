@@ -57,6 +57,7 @@ docker run -d -p 3000:3000
   -e UMAMI_URL=https://umami.example.com 
   -e UMAMI_WEBSITE_ID=00000000-0000-0000-0000-000000000000 
   -e PORT=3000 
+  # -e RELAY_CLIENT_IP_HEADER=CF-Connecting-IP # Optional: set ONLY if reachable solely through trusted proxy to prevent header forgery
   verifieddit-relay
 ```
 
@@ -99,7 +100,7 @@ To prevent captured signed requests from being replayed, the relay implements an
 
 - The replay cache keys on the low-s canonical form of the signature (see `relay/src/replayCache.ts`) to avoid signature malleability duplicates.
 - Entries expire alongside the 5-minute timestamp validity window (`TIMESTAMP_WINDOW_MS = 5 * 60 * 1000`).
-- The cache enforces a hard cap of `MAX_REPLAY_CACHE_ENTRIES = 100000` entries. When full, the oldest entries are evicted first.
+- The cache enforces a hard cap of `MAX_REPLAY_CACHE_ENTRIES = 100000` entries. When full, the oldest entries are evicted first: when the cache is at its hard cap the oldest entry is evicted even if its timestamp is still acceptable, which re-opens the replay window for that one signature, and that the cap (100,000 entries) is far above what the rate limits allow within five minutes in normal operation.
 - The replay cache is in-memory only and lost on process restart; a restart within five minutes re-opens the window for signatures seen before it.
 - A duplicate or replayed request is rejected with `409 Conflict` (`{"error":"replayed_request"}`).
 
@@ -156,15 +157,16 @@ Receives and forwards a signed telemetry event to Umami.
     "jwk": { ... }
   }
   ```
-- Validation Requirements:
-  1. Ticket HMAC is valid and not expired.
-  2. RFC 7638 thumbprint of `jwk` matches `install_id`.
-  3. `ts` is within 5 minutes of relay's clock.
-  4. `version` is a string up to 32 characters.
-  5. `browser` is `"chrome"` or `"firefox"` (taken from extension build, rejected with `400 {"error":"invalid_browser"}` otherwise).
-  6. `event.name` is one of the 7 allowed events and `event.params` matches the exact schema with no extra or missing keys.
-  7. `sig` is a valid ECDSA P-256 / SHA-256 raw (IEEE P1363, 64 bytes) signature over the canonical JSON of signed fields (`browser`, `event`, `install_id`, `ts`, `version`).
-  8. `sig` is not present in the replay cache.
+- Order of checks:
+  1. Per-address limit: client IP rate limit checked before request body parsing.
+  2. Body and field validation: JSON syntax, required fields, public key JWK validation, RFC 7638 thumbprint matching `install_id`, `version`, and `event` schema.
+  3. Ticket: HMAC is valid and not expired.
+  4. Timestamp: `ts` is within 5 minutes of relay clock.
+  5. Browser: `"chrome"` or `"firefox"`.
+  6. Signature: valid ECDSA P-256 / SHA-256 raw (IEEE P1363, 64 bytes) signature over canonical JSON of signed fields (`browser`, `event`, `install_id`, `ts`, `version`).
+  7. Per-install limit: install ID rate limit checked only after signature verification succeeds.
+  8. Replay cache: signature recorded; duplicates rejected.
+  Order of checks: per-address limit, body and field validation, ticket, timestamp, browser, signature, per-install limit, replay cache.
 - Upstream Forwarding:
   Accepted events are forwarded to Umami `POST {UMAMI_URL}/api/send` with fixed User-Agent `verifieddit-telemetry-relay/1` and payload:
   ```json
@@ -199,7 +201,8 @@ Enqueues an install erasure request.
     "jwk": { ... }
   }
   ```
-- Verified identically to events, with signature calculated over canonical payload `{ action: "erase", browser, install_id, ts }`.
+- Order of checks:
+  Evaluated in the same order as events: per-address limit, body and field validation, ticket, timestamp, browser, signature, per-install limit, replay cache. Signature is verified over the canonical erasure payload `{ action: "erase", browser, install_id, ts }`.
 - Response: `200 OK` with JSON `{"ok":true}`.
 
 ### Error Responses
