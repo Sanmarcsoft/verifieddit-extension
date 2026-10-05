@@ -110,7 +110,12 @@ for no functional benefit.
   right-click Verify of an image with no credentials (never on auto-scan),
   `recoverStripped` sends the same perceptual hashes to
   `manifests.sanmarcsoft.com` to look for a stripped credential, and on a match
-  fetches that credential's public JSON record.
+  fetches that credential's public JSON record and the registered credential
+  itself, which is shown marked as recovered. For a file whose signed
+  credentials name a TrustMark watermark, `checkRegistryRecord` sends that
+  binding value to `manifests.sanmarcsoft.com` and fetches the matching public
+  record to compare with the file; the file's hash is compared locally and never
+  sent.
 - **Optional: technicalAndInteraction.** Anonymous usage statistics via a signed
   telemetry relay operated by SanMarcSoft and stored in self-hosted Umami in the
   EU at `analytics.sanmarcsoft.com` (`src/analytics.ts`). No data is sent to

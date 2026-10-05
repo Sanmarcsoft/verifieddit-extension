@@ -265,7 +265,10 @@ async function buildResult (store: C2paRsStore, blob: Blob, url: string, probe: 
   const durableRegistries = recoveredFrom != null ? [recoveredFrom.registry] : await probeRegistries(declaredBindings, probe)
   // And does our registry's record agree with this file? (same opt-in)
   const registryRecord = recoveredFrom != null ? null : await checkRegistryRecord(blob, declaredBindings, probe)
-  if (durableRegistries.length > 0) manifestStoreVerified = true
+  // Forge review 2026-10-05: a record found by the binding is a confirmation too.
+  // Without this, a cropped or re-saved copy (fingerprint no longer matching)
+  // dropped the record it had just found and read as merely "declared".
+  if (durableRegistries.length > 0 || registryRecord != null) manifestStoreVerified = true
 
   // AI generation is a claim the producer signed about the CONTENT, so it is
   // read from the active manifest's own actions assertion, not from the signer.

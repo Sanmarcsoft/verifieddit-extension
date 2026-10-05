@@ -22,6 +22,9 @@ import { MANIFEST_STORE_PROBE_DEFAULT, MANIFEST_STORE_PROBE_KEY } from './consta
 import { type RecoveredCredential } from './recovered'
 
 const MANIFEST_STORE_URL = 'https://manifests.sanmarcsoft.com/v1'
+// No registry request may hang a validation: the service worker is killed when idle.
+const REGISTRY_TIMEOUT_MS = 8000
+const MAX_REGISTRY_NAME = 60
 
 interface ManifestMatch { manifestId: string, similarityScore: number, algorithm: string }
 interface ByBindingResponse { matches: ManifestMatch[] }
@@ -79,7 +82,7 @@ export async function probeManifestStore (blob: Blob, enabled?: boolean): Promis
     const phash = computePerceptualHash(imageData)
     const dhash = computeDifferenceHash(imageData)
     const params = new URLSearchParams({ alg: 'phash', value: phash, crossAlg: 'dhash', crossValue: dhash })
-    const response = await fetch(`${MANIFEST_STORE_URL}/matches/byBinding?${params.toString()}`, { credentials: 'omit' })
+    const response = await fetch(`${MANIFEST_STORE_URL}/matches/byBinding?${params.toString()}`, { credentials: 'omit', signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS) })
     if (!response.ok) return false // 404 = not registered, anything else = unknown → fail closed
     const data = await response.json() as ByBindingResponse
     return Array.isArray(data?.matches) && data.matches.length > 0
@@ -140,12 +143,12 @@ export async function probeRegistries (bindings: readonly SoftBinding[], enabled
     const names = new Set<string>()
     for (const { alg, value } of bindings) {
       const params = new URLSearchParams({ alg, value })
-      const response = await fetch(`${REGISTRY_HUB_URL}/resolve?${params.toString()}`, { credentials: 'omit' })
+      const response = await fetch(`${REGISTRY_HUB_URL}/resolve?${params.toString()}`, { credentials: 'omit', signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS) })
       if (!response.ok) continue
       const data = await response.json() as { results?: RegistryAnswer[] }
       if (!Array.isArray(data?.results)) continue
       for (const r of data.results) {
-        if (r?.status === 'match' && Array.isArray(r.matches) && r.matches.length > 0 && typeof r.name === 'string') names.add(r.name)
+        if (r?.status === 'match' && Array.isArray(r.matches) && r.matches.length > 0 && typeof r.name === 'string' && r.name.trim() !== '') names.add(r.name.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, MAX_REGISTRY_NAME))
       }
     }
     return [...names]
@@ -175,11 +178,11 @@ export async function recoverByFingerprint (fp: { phash: string, dhash: string }
   try {
     if (!(await checkIsOn(enabled))) return null
     const params = new URLSearchParams({ alg: 'phash', value: fp.phash, crossAlg: 'dhash', crossValue: fp.dhash })
-    const response = await fetch(`${MANIFEST_STORE_URL}/matches/byBinding?${params.toString()}`, { credentials: 'omit' })
+    const response = await fetch(`${MANIFEST_STORE_URL}/matches/byBinding?${params.toString()}`, { credentials: 'omit', signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS) })
     if (!response.ok) return null
     const best = (await response.json() as ByBindingResponse)?.matches?.[0]
     if (best == null || typeof best.manifestId !== 'string' || !MANIFEST_ID.test(best.manifestId)) return null
-    const record = await fetch(`${MANIFEST_STORE_URL}/manifests/${best.manifestId}?format=json`, { credentials: 'omit' })
+    const record = await fetch(`${MANIFEST_STORE_URL}/manifests/${best.manifestId}?format=json`, { credentials: 'omit', signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS) })
     if (!record.ok) return null
     const meta = await record.json() as { signerCn?: unknown, signedAt?: unknown, filename?: unknown } | null
     if (meta == null) return null
@@ -228,11 +231,11 @@ export async function checkRegistryRecord (blob: Blob, bindings: readonly SoftBi
     const binding = bindings.find((b) => OUR_ALGS.test(b.alg))
     if (binding == null || !(await checkIsOn(enabled))) return null
     const params = new URLSearchParams({ alg: 'trustmark', value: binding.value })
-    const response = await fetch(`${MANIFEST_STORE_URL}/matches/byBinding?${params.toString()}`, { credentials: 'omit' })
+    const response = await fetch(`${MANIFEST_STORE_URL}/matches/byBinding?${params.toString()}`, { credentials: 'omit', signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS) })
     if (!response.ok) return null
     const best = (await response.json() as ByBindingResponse)?.matches?.[0]
     if (best == null || typeof best.manifestId !== 'string' || !MANIFEST_ID.test(best.manifestId)) return null
-    const record = await fetch(`${MANIFEST_STORE_URL}/manifests/${best.manifestId}?format=json`, { credentials: 'omit' })
+    const record = await fetch(`${MANIFEST_STORE_URL}/manifests/${best.manifestId}?format=json`, { credentials: 'omit', signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS) })
     if (!record.ok) return null
     const meta = await record.json() as { signerCn?: unknown, signedAt?: unknown, fileHash?: unknown } | null
     if (meta == null) return null

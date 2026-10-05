@@ -148,7 +148,8 @@ export const BADGE_LEGEND: ReadonlyArray<{ status: BadgeStatus }> = [
   { status: 'error' },
   { status: 'stripped' },
   { status: 'stripped-ai' },
-  { status: 'stripped-unrecovered' },
+  // 'stripped-unrecovered' is drawn but not listed: without a watermark reader the
+  // extension cannot know a label was ever there, so it must not claim it.
   { status: 'no-credentials' },
   { status: 'unavailable' }
 ]

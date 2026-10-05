@@ -93,3 +93,9 @@ describe('plain-language explainers', () => {
     expect(explainBadge(withDurable('success', true)).text).toMatch(/lock/i)
   })
 })
+
+describe('the legend only shows what the extension can actually tell you', () => {
+  it('does not list "label removed, no copy found": without a watermark reader that cannot be known', () => {
+    expect(BADGE_LEGEND.map((r) => r.status)).not.toContain('stripped-unrecovered')
+  })
+})

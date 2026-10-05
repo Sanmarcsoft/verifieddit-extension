@@ -123,3 +123,15 @@ describe('probeRegistries — consent gate and honest reporting', () => {
     expect(await probeRegistries([binding])).toEqual([])
   })
 })
+
+describe('what a registry returns is not trusted (Forge review 2026-10-05)', () => {
+  it('clamps and cleans a registry name before it can reach the panel', async () => {
+    storage.manifestStoreProbe = true
+    answer = { results: [{ registry: 'x', name: `  Evil\u0000\nRegistry ${'A'.repeat(500)}`, status: 'match', matches: [{ manifestId: 'm' }] }] }
+    const { probeRegistries } = await loadFresh()
+    const [name] = await probeRegistries([binding])
+    expect(name.length).toBeLessThanOrEqual(60)
+    expect(name).not.toMatch(/[\u0000-\u001f]/)
+    expect(name.startsWith('Evil')).toBe(true)
+  })
+})
