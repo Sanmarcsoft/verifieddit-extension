@@ -36,6 +36,11 @@ export interface DurablePillars {
    *  'absent'   — no soft binding
    */
   manifestStore: ManifestStoreState
+  /**
+   * Registries that reported the credential registered, by name (#184). Empty
+   * unless P3 is 'verified'; also empty when only the fingerprint probe confirmed it.
+   */
+  confirmedBy: string[]
   /** Offline-provable durability: signed+timestamped AND a durable binding. */
   durable: boolean
   /** Pillars in a positive (green) state: P1 + P2 + (P3 only when 'verified'). */
@@ -71,6 +76,8 @@ export function detectDurablePillars (opts: {
   assertionLabels?: readonly string[] | null
   /** True only when a live manifest-store byBinding probe confirmed recovery. */
   manifestStoreVerified?: boolean
+  /** Names of the registries that reported it registered. */
+  confirmedBy?: readonly string[] | null
 }): DurablePillars {
   const softBinding = hasSoftBinding(opts.assertionLabels)
 
@@ -90,6 +97,7 @@ export function detectDurablePillars (opts: {
     signedAndTimestamped,
     trustmark,
     manifestStore,
+    confirmedBy: manifestStore === 'verified' ? [...(opts.confirmedBy ?? [])] : [],
     // Durability we can actually prove offline: signed+timestamped + a binding.
     durable: signedAndTimestamped && trustmark,
     count,

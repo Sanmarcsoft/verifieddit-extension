@@ -907,6 +907,7 @@ export class C2paPillars extends LitElement {
         padding: 8px 10px;
       }
       .detail p { margin: 0; font-size: 10px; line-height: 1.5; color: #cbd5e1; }
+      .detail p.confirmed-by { margin-top: 6px; color: #86efac; font-weight: 600; }
       /* A request to send something off-device is marked as such, not slipped in. */
       .detail.consent {
         border-color: rgba(245, 158, 11, 0.4);
@@ -993,6 +994,11 @@ export class C2paPillars extends LitElement {
           return html`
             <div class="detail ${needsOptIn ? 'consent' : ''}">
               <p>${def.detail}</p>
+              ${def.key === 'manifestStore' && this.pillars?.manifestStore === 'verified'
+                ? html`<p class="confirmed-by">${(this.pillars.confirmedBy ?? []).length > 0
+                    ? `Registered with: ${this.pillars.confirmedBy.join(', ')}.`
+                    : 'Confirmed by image fingerprint in the SanMarcSoft Manifest Store.'}</p>`
+                : nothing}
               ${def.needsConsent === true
                 ? (needsOptIn
                     ? html`

@@ -280,7 +280,8 @@ async function validateUrl (url: string): Promise<C2paResult | C2paError> {
     assertionLabels: c2paResult.assertionLabels,
     // P3 'verified' only when the offscreen byBinding probe found the credential
     // registered in the manifest store.
-    manifestStoreVerified: c2paResult.manifestStoreVerified
+    manifestStoreVerified: c2paResult.manifestStoreVerified,
+    confirmedBy: c2paResult.durableRegistries
   });
 
   // rc11.6 / #83 — removed the anonymous cross-origin verifieddit.com
