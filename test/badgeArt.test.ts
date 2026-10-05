@@ -62,7 +62,28 @@ describe('badgeSvg', () => {
     expect(badgeSvg('success', { small: true })).not.toContain('data-part="cr"')
   })
 
+  it('icon-only mode says the verdict by shape, with no colour at all', () => {
+    const shapes = { success: 'check', 'ai-success': 'spark', warning: 'triangle', error: 'cross', 'ai-error': 'cross', stripped: 'check', 'stripped-ai': 'spark' } as const
+    for (const [status, shape] of Object.entries(shapes)) {
+      const svg = badgeSvg(status as keyof typeof shapes, { iconOnly: true })
+      expect(svg).toContain(`data-verdict="${shape}"`)
+      for (const colour of Object.values(COLOURS)) expect(svg).not.toContain(colour)
+    }
+  })
+
+  it('icon-only mode keeps the indicator and gives every badge a different drawing', () => {
+    expect(badgeSvg('success-durable', { iconOnly: true })).toContain('data-glyph="lock"')
+    expect(badgeSvg('stripped-ai', { iconOnly: true })).toContain('data-glyph="recover"')
+    expect(badgeSvg('unavailable', { iconOnly: true })).toContain('data-glyph="alert"')
+    const none = badgeSvg('no-credentials', { iconOnly: true })
+    expect(none).toContain('data-part="slash"')
+    expect(none).not.toContain(COLOURS.slash)
+    const drawings = BADGE_LEGEND.map((row) => badgeSvg(row.status, { iconOnly: true }))
+    expect(new Set(drawings).size).toBe(drawings.length)
+  })
+
   it('contains nothing but static markup', () => {
+    for (const row of BADGE_LEGEND) expect(badgeSvg(row.status, { iconOnly: true })).not.toMatch(/<script|onload|href/i)
     for (const row of BADGE_LEGEND) expect(badgeSvg(row.status)).not.toMatch(/<script|onload|href/i)
   })
 })

@@ -47,6 +47,17 @@
 
     <br>
 
+    <toggle-switch label="Icon-only badges, no colour needed" id="toggleIconOnly"></toggle-switch>
+    <p class="option-note">
+        Off by default. For anyone who cannot tell the badge colours apart:
+        every badge becomes black on white and says its verdict with a shape.
+        A check means verified, a four-point spark means made with AI, a
+        triangle means the signer is unknown, a cross means changed after
+        signing. Nothing is sent anywhere.
+    </p>
+
+    <br>
+
     <toggle-switch label="Share anonymous usage statistics" id="toggleAnalyticsConsent"></toggle-switch>
     <p class="option-note">
         Usage statistics are optional and off by default. Each event is signed by a key created on this device and sent to a relay operated by SanMarcSoft, stored in SanMarcSoft's self-hosted Umami in the EU. Events carry only the event name, its typed parameters, the extension version and the browser family (Chrome or Firefox). Nothing is sent to Google. IP addresses are not stored. Turning this off sends an erasure request and deletes the key.

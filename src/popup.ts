@@ -7,10 +7,10 @@ import { type TrustListInfo, getTrustListInfos, removeTrustList, addTSATrustFile
 import packageManifest from '../package.json'
 import { BUILD_INFO } from './build-info'
 import { familyTag } from './releaseTag.js'
-import { AUTO_SCAN_DEFAULT, MSG_AUTO_SCAN_UPDATED, MSG_REQUEST_C2PA_ENTRIES, TRUSTEDDIT_LINK, taggedLink, MSG_RESPONSE_C2PA_ENTRIES, MSG_RESPONSE_C2PA_SUMMARY, MANIFEST_STORE_PROBE_DEFAULT, MANIFEST_STORE_PROBE_KEY } from './constants.js'
+import { AUTO_SCAN_DEFAULT, MSG_AUTO_SCAN_UPDATED, MSG_REQUEST_C2PA_ENTRIES, TRUSTEDDIT_LINK, taggedLink, MSG_RESPONSE_C2PA_ENTRIES, MSG_RESPONSE_C2PA_SUMMARY, MANIFEST_STORE_PROBE_DEFAULT, MANIFEST_STORE_PROBE_KEY, ICON_ONLY_DEFAULT, ICON_ONLY_KEY } from './constants.js'
 import { getAnalyticsConsent, setAnalyticsConsent, options_opened } from './analytics.js'
 import { type C2paEntryDetails, type MSG_RESPONSE_C2PA_ENTRIES_PAYLOAD, type MSG_RESPONSE_C2PA_SUMMARY_PAYLOAD } from './inject.js'
-import { crIconDataUrl } from './icon.js'
+import { crIconDataUrl, iconOnlyReady, isIconOnly } from './icon.js'
 import { BADGE_LEGEND, badgeDataUrl, explainBadge } from './badgeArt'
 // Side-effect import: registers <c2pa-provenance-graph>. rollup's
 // moduleSideEffects predicate keeps src/ modules, so this survives the build
@@ -222,7 +222,7 @@ async function renderAnalyticsConsentBanner (): Promise<void> {
 }
 
 document.addEventListener('DOMContentLoaded', function (): void {
-  renderBadgeLegend()
+  void iconOnlyReady.then(renderBadgeLegend)
   populateBuildInfo()
   renderWhatsNew()
   void renderInitErrorBanner()
@@ -278,6 +278,28 @@ document.addEventListener('DOMContentLoaded', function (): void {
   probeToggle.addEventListener('change', (event) => {
     const checked = (event as CustomEvent).detail.checked
     void chrome.storage.local.set({ [MANIFEST_STORE_PROBE_KEY]: checked })
+  })
+
+  // Icon-only badges: a display preference, nothing leaves the browser. The
+  // legend and the rows already listed are redrawn so the change is seen at once.
+  const iconOnlyToggle = document.getElementById('toggleIconOnly') as ToggleSwitch | null
+  if (iconOnlyToggle != null) {
+    chrome.storage.local.get(ICON_ONLY_KEY, (result) => {
+      iconOnlyToggle.checked = result[ICON_ONLY_KEY] ?? ICON_ONLY_DEFAULT
+    })
+    iconOnlyToggle.addEventListener('change', (event) => {
+      const checked = (event as CustomEvent).detail.checked
+      void chrome.storage.local.set({ [ICON_ONLY_KEY]: checked })
+    })
+  }
+  // Registered after icon.ts's own listener, so isIconOnly() is already current.
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !(ICON_ONLY_KEY in changes)) return
+    renderBadgeLegend()
+    document.querySelectorAll<HTMLElement>('.v-row[data-status]').forEach((row) => {
+      const img = row.querySelector<HTMLImageElement>('.v-status-icon')
+      if (img != null) img.src = crIconDataUrl(row.dataset.status as Parameters<typeof crIconDataUrl>[0])
+    })
   })
 
   const analyticsConsentToggle = document.getElementById('toggleAnalyticsConsent') as ToggleSwitch | null
@@ -823,12 +845,13 @@ function openDiagramInTab (event: Event): void {
 function renderBadgeLegend (): void {
   const list = document.getElementById('badgeLegendList')
   if (list == null) return
+  list.replaceChildren()
   for (const { status } of BADGE_LEGEND) {
     const { title, text } = explainBadge(status)
     const row = document.createElement('div')
     row.className = 'badge-legend-row'
     const img = document.createElement('img')
-    img.src = badgeDataUrl(status)
+    img.src = badgeDataUrl(status, { iconOnly: isIconOnly() })
     img.alt = ''
     img.width = 28
     img.height = 28

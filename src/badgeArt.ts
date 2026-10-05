@@ -11,6 +11,11 @@
  * No credentials is a white teardrop with a red outline and slash.
  * At the smallest size the CR letters are dropped: colour and indicator only.
  *
+ * Icon-only mode is for people who cannot tell the colours apart. Every badge is
+ * black on white and the verdict is a shape in place of the letters: a check for
+ * verified, a four-point spark for AI-made, a triangle for an unknown signer, a
+ * cross for changed. The indicators stay where they are.
+ *
  * Free of imports and side effects: the content script, the popup and the tests
  * all use it. The art and its plain-language explanation live together so they
  * cannot drift apart. Designs: art/badges.pen, "Badge system v3".
@@ -46,6 +51,25 @@ const GLYPHS: Record<Glyph, string> = {
   question: '<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
   alert: '<path d="M12 6v8"/><path d="M12 18h.01"/>'
 }
+
+type Verdict = 'check' | 'spark' | 'triangle' | 'cross'
+
+const VERDICTS: Record<Verdict, string> = {
+  check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  spark: '<path d="M12 3l2.2 6.8L21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2z"/>',
+  triangle: '<path d="M12 4l9 16H3z"/>',
+  cross: '<path d="M6 6l12 12"/><path d="M18 6L6 18"/>'
+}
+
+function verdictOf (status: BadgeStatus): Verdict | null {
+  if (status === 'success' || status === 'success-durable' || status === 'stripped') return 'check'
+  if (status === 'ai-success' || status === 'ai-success-durable' || status === 'stripped-ai') return 'spark'
+  if (status === 'warning' || status === 'warning-durable') return 'triangle'
+  if (status === 'error' || status === 'error-durable' || status === 'ai-error') return 'cross'
+  return null
+}
+
+export interface BadgeOptions { small?: boolean, iconOnly?: boolean }
 
 const FILL: Record<BadgeStatus, string> = {
   success: COLOURS.green,
@@ -92,8 +116,26 @@ function strokeGlyph (glyph: Glyph, x: number, y: number, scale: number, width: 
   return `<g data-glyph="${glyph}" transform="translate(${x} ${y}) scale(${scale})" fill="none" stroke="#000000" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round">${GLYPHS[glyph]}</g>`
 }
 
-/** The badge as SVG markup. `small` drops the CR letters. */
-export function badgeSvg (status: BadgeStatus, opts: { small?: boolean } = {}): string {
+const INDICATOR_DISC = '<circle cx="31" cy="10" r="8.6" fill="#FFFFFF" stroke="#000000" stroke-width="1.4"/>'
+
+/** The same badge with no colour: the verdict is a shape where the letters were. */
+function iconOnlySvg (status: BadgeStatus): string {
+  const verdict = verdictOf(status)
+  const glyph = glyphOf(status)
+  const parts = [`<path data-part="pin" fill="#FFFFFF" stroke="#000000" stroke-width="2" d="${PIN}"/>`]
+  if (verdict != null) {
+    // Beside an indicator the shape moves down and left, so the two never touch.
+    const place = glyph != null ? 'translate(4.5 11.5) scale(0.78)' : 'translate(7.5 8) scale(0.875)'
+    parts.push(`<g data-verdict="${verdict}" transform="${place}" fill="none" stroke="#000000" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">${VERDICTS[verdict]}</g>`)
+  }
+  if (status === 'no-credentials') parts.push('<path data-part="slash" fill="none" stroke="#000000" stroke-width="3" stroke-linecap="round" d="M6 6L31 31"/>')
+  if (glyph != null) parts.push(`<g data-part="indicator">${INDICATOR_DISC}${strokeGlyph(glyph, 25, 4, 0.5, 2.8)}</g>`)
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 41 41">${parts.join('')}</svg>`
+}
+
+/** The badge as SVG markup. `small` drops the CR letters; `iconOnly` drops the colour. */
+export function badgeSvg (status: BadgeStatus, opts: BadgeOptions = {}): string {
+  if (opts.iconOnly === true) return iconOnlySvg(status)
   const small = opts.small === true
   const none = status === 'no-credentials'
   const glyph = glyphOf(status)
@@ -105,12 +147,12 @@ export function badgeSvg (status: BadgeStatus, opts: { small?: boolean } = {}): 
   if (glyph != null) {
     parts.push(small
       ? `<g data-part="indicator">${strokeGlyph(glyph, 9, 9, 0.75, 2.8)}</g>`
-      : `<g data-part="indicator"><circle cx="31" cy="10" r="8.6" fill="#FFFFFF" stroke="#000000" stroke-width="1.4"/>${strokeGlyph(glyph, 25, 4, 0.5, 2.8)}</g>`)
+      : `<g data-part="indicator">${INDICATOR_DISC}${strokeGlyph(glyph, 25, 4, 0.5, 2.8)}</g>`)
   }
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 41 41">${parts.join('')}</svg>`
 }
 
-export function badgeDataUrl (status: BadgeStatus, opts: { small?: boolean } = {}): string {
+export function badgeDataUrl (status: BadgeStatus, opts: BadgeOptions = {}): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(badgeSvg(status, opts))}`
 }
 

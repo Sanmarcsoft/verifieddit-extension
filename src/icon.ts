@@ -4,7 +4,7 @@
  */
 
 import { badgeSvg, explainBadge, isBadgeStatus, type BadgeStatus } from './badgeArt'
-import { CR_ICON_SIZE, CR_ICON_Z_INDEX, type VALIDATION_STATUS, CR_ICON_MARGIN_RIGHT, CR_ICON_MARGIN_TOP, CR_ICON_AUDIO_MARGIN_TOP, CR_ICON_AUDIO_MARGIN_RIGHT } from './constants'
+import { ICON_ONLY_DEFAULT, ICON_ONLY_KEY, CR_ICON_SIZE, CR_ICON_Z_INDEX, type VALIDATION_STATUS, CR_ICON_MARGIN_RIGHT, CR_ICON_MARGIN_TOP, CR_ICON_AUDIO_MARGIN_TOP, CR_ICON_AUDIO_MARGIN_RIGHT } from './constants'
 import { type MediaElement } from './mediaRecord'
 
 // C2PA CR branding — two-tone scheme baked in per status (fix #52).
@@ -44,6 +44,40 @@ const imageSources: { [key in VALIDATION_STATUS]: string } = {
   ...Object.fromEntries(BADGE_STATUSES.map((st) => [st, badgeSvg(st)]))
 } as { [key in VALIDATION_STATUS]: string }
 
+// Icon-only mode (#184): the user's display preference, read once and followed
+// live, so a badge already on the page changes the moment the switch does.
+let iconOnly = ICON_ONLY_DEFAULT
+const liveIcons = new Set<{ redraw: () => void }>()
+
+function sourceOf (status: VALIDATION_STATUS): string {
+  if (iconOnly && isBadgeStatus(status)) return badgeSvg(status, { iconOnly: true })
+  return imageSources[status] ?? ''
+}
+
+export function isIconOnly (): boolean {
+  return iconOnly
+}
+
+export function setIconOnly (value: boolean): void {
+  if (iconOnly === value) return
+  iconOnly = value
+  for (const icon of liveIcons) icon.redraw()
+}
+
+/** Settles once the stored preference has been read; a failed read keeps the default. */
+export const iconOnlyReady: Promise<void> = (async () => {
+  try {
+    const stored = await chrome.storage.local.get(ICON_ONLY_KEY)
+    setIconOnly(stored?.[ICON_ONLY_KEY] === true)
+  } catch {}
+})()
+
+try {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && ICON_ONLY_KEY in changes) setIconOnly(changes[ICON_ONLY_KEY].newValue === true)
+  })
+} catch {}
+
 // The "no credentials" verdict is a real finding, but a weaker one than any
 // verdict about a signature: nothing was cryptographically checked because
 // there was nothing to check. Rendering it at full strength gives it the same
@@ -59,7 +93,7 @@ export const CR_ICON_NO_CREDENTIALS_OPACITY = '1'
  * mapping to files in `icons/` that has already drifted once.
  */
 export function crIconDataUrl (status: VALIDATION_STATUS): string {
-  const source = imageSources[status] ?? ''
+  const source = sourceOf(status)
   // The camera/video/audio entries are already extension URLs, not SVG markup.
   if (!source.startsWith('<svg')) return source
   return `data:image/svg+xml;utf8,${encodeURIComponent(source)}`
@@ -86,6 +120,7 @@ export class CrIcon {
     
     this._crDiv = iconDiv
     document.body.appendChild(this._crDiv)
+    liveIcons.add(this)
     this.setStatus(status) // Set initial SVG and color
     this.show()
   }
@@ -103,6 +138,7 @@ export class CrIcon {
   }
 
   public remove (): void {
+    liveIcons.delete(this)
     if (this._crDiv == null) return
     this._crDiv.onclick = null
     this._clickListener = undefined
@@ -181,6 +217,11 @@ export class CrIcon {
     this.setStatus(status) // Call new helper to update SVG
   }
 
+  /** Draw the current status again, after the icon-only preference changed. */
+  public redraw (): void {
+    if (this._crDiv != null) this.setStatus(this._status)
+  }
+
   private setStatus (status: VALIDATION_STATUS): void {
     let fillColor = 'green'
     if (status === 'warning') {
@@ -189,7 +230,7 @@ export class CrIcon {
       fillColor = '#ae3f28' // Red for error
     }
 
-    const svgContent = imageSources[status].replace(/CURRENT_COLOR/g, fillColor)
+    const svgContent = sourceOf(status).replace(/CURRENT_COLOR/g, fillColor)
     this._crDiv!.style.backgroundImage = `url('data:image/svg+xml;utf8,${encodeURIComponent(svgContent)}')`
     this._crDiv!.style.backgroundSize = 'contain'
     this._crDiv!.style.backgroundRepeat = 'no-repeat'

@@ -35,6 +35,11 @@ export const RELEASE_NOTES: readonly ReleaseEntry[] = [
     summary: 'A removed label that is found again now shows everything it said, clearly marked as recovered, and the online check works in Chrome.',
     fixes: [
       {
+        title: 'Icon-only badges for anyone who cannot tell the colours apart',
+        howToVerify:
+          'Open the popup, go to Options and turn on "Icon-only badges, no colour needed". Every badge on the page and in the popup turns black on white and shows a shape: a check for verified, a four-point spark for made with AI, a triangle for an unknown signer, a cross for changed after signing. Turn it off and the colours return.'
+      },
+      {
         title: 'Recovered credentials are shown in full, marked as recovered from a registry',
         howToVerify:
           'Turn on "Check durable credentials online", right-click an image whose credentials were removed and choose Verify. If a registered copy matches, click the badge: the panel shows the signer, date and history just as it would for a file that still carried them, under a banner saying they were recovered from a registry and describe the original, not this copy.'
