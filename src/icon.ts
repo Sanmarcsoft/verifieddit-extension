@@ -97,7 +97,8 @@ export class CrIcon {
     // Hover says what the badge means, in plain words; the click shows the detail.
     const status = this._status
     this._crDiv.title = isBadgeStatus(status)
-      ? `${explainBadge(status).title}. ${explainBadge(status).text} Click for details.`
+      // The address stays on its own last line: it says which file the badge is about.
+      ? `${explainBadge(status).title}. ${explainBadge(status).text} Click for details.\n${url}`
       : `Click to view Content Credentials: ${url}`
   }
 
