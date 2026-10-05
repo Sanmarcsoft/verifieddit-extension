@@ -58,6 +58,14 @@ export interface DurablePillars {
 const SOFT_BINDING_PATTERN = /soft[_-]?binding/i
 
 /**
+ * Whether the file claims any durable feature at all (#186). The "self-asserted"
+ * warning is about those claims, so a file that makes none must not carry it.
+ */
+export function claimsDurability (p: Pick<DurablePillars, 'signedAndTimestamped' | 'trustmark' | 'manifestStore'> | null | undefined): boolean {
+  return p != null && (p.signedAndTimestamped || p.trustmark || p.manifestStore !== 'absent')
+}
+
+/**
  * True when any of the supplied (signed, claim-bound) assertion labels denotes
  * a soft binding.
  */

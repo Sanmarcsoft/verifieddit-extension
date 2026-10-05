@@ -4,7 +4,7 @@
  *  (Playwright only scans ./test/e2e, so this file is ignored by `npm test`.)
  */
 import { describe, it, expect } from 'bun:test'
-import { detectDurablePillars, hasSoftBinding } from '../src/durableCredentials'
+import { claimsDurability, detectDurablePillars, hasSoftBinding } from '../src/durableCredentials'
 
 describe('hasSoftBinding', () => {
   it('returns false for null / empty', () => {
@@ -77,5 +77,21 @@ describe('detectDurablePillars', () => {
   it('timestamp without signature does not light P1', () => {
     const p = detectDurablePillars({ signed: false, hasTimestamp: true, assertionLabels: ['c2pa.soft_binding'] })
     expect(p.signedAndTimestamped).toBe(false)
+  })
+})
+
+describe('claimsDurability (#186)', () => {
+  const none = { signedAndTimestamped: false, trustmark: false, manifestStore: 'absent' } as const
+
+  it('is false when the file claims no durable feature, so there is nothing to warn about', () => {
+    expect(claimsDurability(none)).toBe(false)
+    expect(claimsDurability(null)).toBe(false)
+  })
+
+  it('is true as soon as one durable feature is claimed', () => {
+    expect(claimsDurability({ ...none, signedAndTimestamped: true })).toBe(true)
+    expect(claimsDurability({ ...none, trustmark: true })).toBe(true)
+    expect(claimsDurability({ ...none, manifestStore: 'declared' })).toBe(true)
+    expect(claimsDurability({ ...none, manifestStore: 'verified' })).toBe(true)
   })
 })
