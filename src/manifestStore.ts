@@ -19,6 +19,7 @@
  */
 import { computeDifferenceHash, computePerceptualHash } from './perceptualHash'
 import { MANIFEST_STORE_PROBE_DEFAULT, MANIFEST_STORE_PROBE_KEY } from './constants'
+import { type RecoveredCredential } from './recovered'
 
 const MANIFEST_STORE_URL = 'https://manifests.sanmarcsoft.com/v1'
 
@@ -141,5 +142,99 @@ export async function probeRegistries (bindings: readonly SoftBinding[]): Promis
     return [...names]
   } catch {
     return []
+  }
+}
+
+/*
+ * Recovery of a stripped image (#184). When the Content Credentials have been
+ * removed, nothing in the file says where they went. What survives is the
+ * picture, so its fingerprint is looked up in our registry and, on a match, the
+ * registered record says who signed the original and when.
+ *
+ * Same opt-in as everything else here, and the caller only invokes it on an
+ * explicit Verify, never on auto-scan: with auto-scan it would send a
+ * fingerprint of every unsigned image a person browses past.
+ *
+ * A match is a lead. The copy in hand may have been edited since it was signed;
+ * the registry only says a credential exists for a picture this similar.
+ */
+export { recoveredNote, type RecoveredCredential } from './recovered'
+
+const MANIFEST_ID = /^[A-Za-z0-9][A-Za-z0-9:._-]{0,127}$/
+
+export async function recoverByFingerprint (fp: { phash: string, dhash: string }): Promise<RecoveredCredential | null> {
+  try {
+    if (!(await isProbeEnabled())) return null
+    const params = new URLSearchParams({ alg: 'phash', value: fp.phash, crossAlg: 'dhash', crossValue: fp.dhash })
+    const response = await fetch(`${MANIFEST_STORE_URL}/matches/byBinding?${params.toString()}`, { credentials: 'omit' })
+    if (!response.ok) return null
+    const best = (await response.json() as ByBindingResponse)?.matches?.[0]
+    if (best == null || typeof best.manifestId !== 'string' || !MANIFEST_ID.test(best.manifestId)) return null
+    const record = await fetch(`${MANIFEST_STORE_URL}/manifests/${best.manifestId}?format=json`, { credentials: 'omit' })
+    if (!record.ok) return null
+    const meta = await record.json() as { signerCn?: unknown, signedAt?: unknown, filename?: unknown } | null
+    if (meta == null) return null
+    const text = (v: unknown): string | null => typeof v === 'string' && v !== '' ? v.slice(0, 200) : null
+    return {
+      registry: 'SanMarcSoft Manifest Store',
+      manifestId: best.manifestId,
+      similarityScore: typeof best.similarityScore === 'number' ? best.similarityScore : 0,
+      signerCn: text(meta.signerCn),
+      signedAt: text(meta.signedAt),
+      filename: text(meta.filename)
+    }
+  } catch {
+    return null
+  }
+}
+
+/** Recovery for an image blob: fingerprints are computed here, on the device. */
+export async function recoverStripped (blob: Blob): Promise<RecoveredCredential | null> {
+  if (!(await isProbeEnabled())) return null
+  const imageData = await blobToImageData(blob)
+  if (imageData == null) return null
+  return await recoverByFingerprint({ phash: computePerceptualHash(imageData), dhash: computeDifferenceHash(imageData) })
+}
+
+/*
+ * Does the registry's record agree with the file in hand (#184)? For a file
+ * that carries credentials and names a TrustMark binding, fetch the record our
+ * registry holds for that binding and compare. Only the binding value is sent;
+ * the file's hash is computed and compared here, on the device.
+ */
+export interface RegistryRecord {
+  registry: string
+  manifestId: string
+  signerCn: string | null
+  signedAt: string | null
+  /** true: this is the registered file. false: it differs. null: the registry holds no hash. */
+  sameFile: boolean | null
+}
+
+const OUR_ALGS = /^(trustmark|com\.adobe\.trustmark\..+)$/
+
+export async function checkRegistryRecord (blob: Blob, bindings: readonly SoftBinding[]): Promise<RegistryRecord | null> {
+  try {
+    const binding = bindings.find((b) => OUR_ALGS.test(b.alg))
+    if (binding == null || !(await isProbeEnabled())) return null
+    const params = new URLSearchParams({ alg: 'trustmark', value: binding.value })
+    const response = await fetch(`${MANIFEST_STORE_URL}/matches/byBinding?${params.toString()}`, { credentials: 'omit' })
+    if (!response.ok) return null
+    const best = (await response.json() as ByBindingResponse)?.matches?.[0]
+    if (best == null || typeof best.manifestId !== 'string' || !MANIFEST_ID.test(best.manifestId)) return null
+    const record = await fetch(`${MANIFEST_STORE_URL}/manifests/${best.manifestId}?format=json`, { credentials: 'omit' })
+    if (!record.ok) return null
+    const meta = await record.json() as { signerCn?: unknown, signedAt?: unknown, fileHash?: unknown } | null
+    if (meta == null) return null
+    const text = (v: unknown): string | null => typeof v === 'string' && v !== '' ? v.slice(0, 200) : null
+    const registered = text(meta.fileHash)?.replace(/^sha256:/i, '').toLowerCase() ?? null
+    let sameFile: boolean | null = null
+    if (registered != null) {
+      const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', await blob.arrayBuffer()))
+      sameFile = Array.from(digest).map((b) => b.toString(16).padStart(2, '0')).join('') === registered
+    }
+    return { registry: 'SanMarcSoft Manifest Store', manifestId: best.manifestId, signerCn: text(meta.signerCn), signedAt: text(meta.signedAt), sameFile }
+  } catch {
+    return null
   }
 }

@@ -41,6 +41,8 @@ export interface DurablePillars {
    * unless P3 is 'verified'; also empty when only the fingerprint probe confirmed it.
    */
   confirmedBy: string[]
+  /** The registry's own record, compared with the file. Null when not checked or not found. */
+  registryRecord: { registry: string, signerCn: string | null, signedAt: string | null, sameFile: boolean | null } | null
   /** Offline-provable durability: signed+timestamped AND a durable binding. */
   durable: boolean
   /** Pillars in a positive (green) state: P1 + P2 + (P3 only when 'verified'). */
@@ -78,6 +80,7 @@ export function detectDurablePillars (opts: {
   manifestStoreVerified?: boolean
   /** Names of the registries that reported it registered. */
   confirmedBy?: readonly string[] | null
+  registryRecord?: DurablePillars['registryRecord']
 }): DurablePillars {
   const softBinding = hasSoftBinding(opts.assertionLabels)
 
@@ -98,6 +101,7 @@ export function detectDurablePillars (opts: {
     trustmark,
     manifestStore,
     confirmedBy: manifestStore === 'verified' ? [...(opts.confirmedBy ?? [])] : [],
+    registryRecord: manifestStore === 'verified' ? (opts.registryRecord ?? null) : null,
     // Durability we can actually prove offline: signed+timestamped + a binding.
     durable: signedAndTimestamped && trustmark,
     count,

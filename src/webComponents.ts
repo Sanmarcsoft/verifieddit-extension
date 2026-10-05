@@ -999,6 +999,13 @@ export class C2paPillars extends LitElement {
                     ? `Registered with: ${this.pillars.confirmedBy.join(', ')}.`
                     : 'Confirmed by image fingerprint in the SanMarcSoft Manifest Store.'}</p>`
                 : nothing}
+              ${def.key === 'manifestStore' && this.pillars?.registryRecord != null
+                ? html`<p class="confirmed-by">Registry record: signed by ${this.pillars.registryRecord.signerCn ?? 'an unnamed signer'}${this.pillars.registryRecord.signedAt != null ? ` on ${this.pillars.registryRecord.signedAt.slice(0, 10)}` : ''}. ${this.pillars.registryRecord.sameFile === true
+                    ? 'This file is the registered original.'
+                    : this.pillars.registryRecord.sameFile === false
+                      ? 'This file DIFFERS from the registered original: it has been changed or re-saved since it was signed.'
+                      : 'The registry holds no file hash to compare.'}</p>`
+                : nothing}
               ${def.needsConsent === true
                 ? (needsOptIn
                     ? html`

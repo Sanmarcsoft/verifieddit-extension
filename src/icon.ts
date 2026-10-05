@@ -30,6 +30,13 @@ const SVG_CR_AI_ERROR = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 41
 // state during scan) and from "has credentials, trust unknown" (warning).
 const SVG_CR_NO_CREDENTIALS = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 41 41"><path fill="#888888" stroke="#555555" stroke-width="2" d="M1.56 18c0-9.08 7.361-16.44 16.441-16.44s16.443 7.362 16.443 16.442V34.44H18C8.92 34.44 1.56 27.08 1.56 18Z" /><path fill="#ffffff" d="M9 13h5l1.5-2h6l1.5 2h4v10h-18v-10z" /><circle fill="#ffffff" cx="18" cy="18" r="3.5" /><circle fill="none" stroke="#c83232" stroke-width="3" cx="31" cy="30" r="7" /><line stroke="#c83232" stroke-width="3" stroke-linecap="round" x1="26" y1="25" x2="36" y2="35" /></svg>`
 
+// #184 — "credentials were stripped, and a registered credential matches this
+// picture". Deliberately NOT the grey slashed camera: that says "nothing here",
+// this says "something was here, and we found where it is registered". Blue,
+// full strength, with a recovery arrow. It is still not a verdict on the file in
+// hand, so it is never green.
+const SVG_CR_STRIPPED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 41 41"><path fill="#1d6fd6" stroke="#0f4a96" stroke-width="2" d="M1.56 18c0-9.08 7.361-16.44 16.441-16.44s16.443 7.362 16.443 16.442V34.44H18C8.92 34.44 1.56 27.08 1.56 18Z"/><path fill="none" stroke="#ffffff" stroke-width="3.2" stroke-linecap="round" d="M26 18.5a8 8 0 1 1-2.6-5.9"/><path fill="#ffffff" d="M25.6 6.6v7.6h-7.6z"/></svg>`
+
 const imageSources: { [key in VALIDATION_STATUS]: string } = {
   success: SVG_CR_SUCCESS,
   warning: SVG_CR_WARNING,
@@ -40,7 +47,8 @@ const imageSources: { [key in VALIDATION_STATUS]: string } = {
   none: '',
   'ai-success': SVG_CR_AI_SUCCESS,
   'ai-error': SVG_CR_AI_ERROR,
-  'no-credentials': SVG_CR_NO_CREDENTIALS
+  'no-credentials': SVG_CR_NO_CREDENTIALS,
+  stripped: SVG_CR_STRIPPED
 }
 
 // The "no credentials" verdict is a real finding, but a weaker one than any
@@ -193,6 +201,6 @@ export class CrIcon {
   }
 
   private static validateStatus (status: unknown): status is VALIDATION_STATUS {
-    return ['success', 'warning', 'error', 'img', 'video', 'audio', 'none', 'ai-success', 'ai-error', 'no-credentials'].includes(status as string)
+    return ['success', 'warning', 'error', 'img', 'video', 'audio', 'none', 'ai-success', 'ai-error', 'no-credentials', 'stripped'].includes(status as string)
   }
 }

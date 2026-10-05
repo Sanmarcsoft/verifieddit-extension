@@ -12,7 +12,7 @@ import { getManifestFromMetadata } from './certs/metadata.js'
 import { AWAIT_ASYNC_RESPONSE, MSG_C2PA_VALIDATE_URL, type MSG_PAYLOAD } from './constants.js'
 import { type TrustListMatch } from './trustlistProxy.js'
 import { type DurablePillars, hasSoftBinding } from './durableCredentials.js'
-import { probeManifestStore, probeRegistries, softBindingsOf } from './manifestStore.js'
+import { probeManifestStore, probeRegistries, softBindingsOf, recoverStripped, checkRegistryRecord, type RecoveredCredential, type RegistryRecord } from './manifestStore.js'
 import { buildProvenanceGraph } from './provenanceGraph.js'
 import { type ProvenanceGraph } from './provenanceTypes.js'
 import { detectAiGeneration, type AiGeneration } from './aiDetection.js'
@@ -51,6 +51,8 @@ export interface C2paResult extends ExtensionC2paResult {
   manifestStoreVerified: boolean
   /** Public registries, other than our own store, that report this credential registered (#184). */
   durableRegistries: string[]
+  /** Our registry's record for this file's binding, compared with the file (#184). */
+  registryRecord: RegistryRecord | null
   // Whether the asset DECLARES AI generation, read from the IPTC
   // digitalSourceType in its own c2pa.actions assertion. Never inferred from
   // who signed it — see aiDetection.ts.
@@ -67,6 +69,8 @@ export interface C2paResult extends ExtensionC2paResult {
 
 export interface C2paError extends Error {
   url: string
+  /** Set on 'No Manifest' when a registered credential matches the stripped image (#184). */
+  recovered?: RecoveredCredential | null
 }
 
 // The wire helpers that flatten a C2paError for extension messaging live in
@@ -106,7 +110,7 @@ export async function init (): Promise<void> {
   chrome.runtime.onMessage.addListener(
     (request: MSG_PAYLOAD, sender, sendResponse) => {
       if (request.action === MSG_C2PA_VALIDATE_URL) {
-        void validateUrl(request.data as string).then(sendResponse)
+        void validateUrl(request.data as string, (request as { recover?: boolean }).recover === true).then(sendResponse)
         return AWAIT_ASYNC_RESPONSE
       }
     }
@@ -130,7 +134,7 @@ function safeProvenanceGraph (store: C2paRsStore, filename: string): ProvenanceG
   }
 }
 
-export async function validateUrl (url: string): Promise<C2paResult | C2paError> {
+export async function validateUrl (url: string, recover = false): Promise<C2paResult | C2paError> {
   if (c2pa == null) {
     return new Error('C2PA not initialized') as C2paError
   }
@@ -153,7 +157,10 @@ export async function validateUrl (url: string): Promise<C2paResult | C2paError>
   // reader is null when the asset carries no C2PA metadata.
   const reader = await c2pa.reader.fromBlob(blob.type, blob)
   if (reader == null) {
-    return { message: 'No manifest found', url, name: 'No Manifest' } satisfies C2paError
+    // The credentials may have been stripped rather than never present. On an
+    // explicit Verify (never auto-scan) look the picture up in the registry.
+    const recovered = recover && blob.type.startsWith('image/') ? await recoverStripped(blob) : null
+    return { message: 'No manifest found', url, name: 'No Manifest', recovered } satisfies C2paError
   }
 
   const store: C2paRsStore = await reader.manifestStore()
@@ -194,9 +201,10 @@ export async function validateUrl (url: string): Promise<C2paResult | C2paError>
   // Our store is one registry among several (#184). Ask the registry that owns
   // each declared watermark algorithm too. Same opt-in; only the algorithm and
   // binding value from the signed claim are sent, so this works for any media.
-  const durableRegistries = hasSoftBinding(assertionLabels)
-    ? await probeRegistries(softBindingsOf(activeManifest.assertions))
-    : []
+  const declaredBindings = hasSoftBinding(assertionLabels) ? softBindingsOf(activeManifest.assertions) : []
+  const durableRegistries = await probeRegistries(declaredBindings)
+  // And does our registry's record agree with this file? (same opt-in)
+  const registryRecord = await checkRegistryRecord(blob, declaredBindings)
   if (durableRegistries.length > 0) manifestStoreVerified = true
 
   // AI generation is a claim the producer signed about the CONTENT, so it is
@@ -214,6 +222,7 @@ export async function validateUrl (url: string): Promise<C2paResult | C2paError>
     assertionLabels,
     manifestStoreVerified,
     durableRegistries,
+    registryRecord,
     // Built from the raw store — the flattened ExtensionC2paResult has already
     // dropped relationships, per-ingredient validation, and assertion payloads.
     // The diagram is a display affordance walking attacker-supplied structure;

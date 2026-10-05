@@ -7,6 +7,7 @@ import { type C2paError, type C2paResult } from './c2pa'
 // Value import: must come from the side-effect-free wire module, or the whole
 // WASM engine is inlined into every page this content script runs on.
 import { isC2paErrorWire, fromC2paErrorWire } from './c2paWire'
+import { recoveredNote, type RecoveredCredential } from './recovered'
 import { type ProvenanceGraph } from './provenanceTypes.js'
 import { type MediaElement } from './content'
 import { CrIcon } from './icon'
@@ -189,7 +190,10 @@ async function handleValidationResult (mediaElement: MediaElement, c2paResult: C
         // Create (or update) an icon in the 'no-credentials' state so the
         // user gets clear feedback. Click handler opens a minimal panel —
         // no API call, just explanatory text (respects #83 security baseline).
-        ensureNoCredentialsIcon(mediaRecord, url)
+        // A registered credential for a stripped image changes what we say,
+        // not the badge: the file in hand still carries nothing verifiable.
+        const recovered = (failure as { recovered?: RecoveredCredential | null }).recovered
+        ensureNoCredentialsIcon(mediaRecord, url, recovered != null ? recoveredNote(recovered) : NO_CREDENTIALS_HINT, recovered != null ? 'stripped' : 'no-credentials')
       } else {
         // Assigning null runs CrIcon.remove() via the setter; this also
         // clears the neutral scanning badge auto-scan put there first.
@@ -218,23 +222,29 @@ function unavailableNote (detail: string): string {
     `unsigned — the check itself failed. Details: ${detail}`
 }
 
-function ensureNoCredentialsIcon (mediaRecord: MediaRecord, url: string): void {
+// Shown when nothing was recovered. It cannot tell "not registered" from
+// "online check is off", so it says how to look rather than guessing which.
+const NO_CREDENTIALS_HINT = NO_CREDENTIALS_NOTE +
+  ` If its credentials were stripped, a registered copy may still exist: turn on ` +
+  `"Check durable credentials online" in the extension's Options and verify again.`
+
+function ensureNoCredentialsIcon (mediaRecord: MediaRecord, url: string, note: string = NO_CREDENTIALS_NOTE, status: 'no-credentials' | 'stripped' = 'no-credentials'): void {
   // The click handler is re-bound on the existing-icon path too. Auto-scan
   // creates a neutral 'img' badge first and wires it to open the C2PA overlay;
   // upgrading only the artwork left that stale handler in place, so a faded
   // no-credentials badge still tried to open an overlay for a manifest that
   // does not exist and appeared inert when it silently gave up.
   if (mediaRecord.icon != null) {
-    mediaRecord.icon.status = 'no-credentials'
+    mediaRecord.icon.status = status
     mediaRecord.icon.setMetadataLink(url)
-    mediaRecord.icon.onClick = () => { showNoCredentialsToast(NO_CREDENTIALS_NOTE, url) }
+    mediaRecord.icon.onClick = () => { showNoCredentialsToast(note, url) }
     mediaRecord.icon.show()
     return
   }
   mediaRecord.onReady = (mr: MediaRecord): void => {
-    mr.icon = new CrIcon(mr.element, 'no-credentials')
+    mr.icon = new CrIcon(mr.element, status)
     mr.icon.setMetadataLink(url)
-    mr.icon.onClick = () => { showNoCredentialsToast(NO_CREDENTIALS_NOTE, url) }
+    mr.icon.onClick = () => { showNoCredentialsToast(note, url) }
   }
 }
 

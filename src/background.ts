@@ -114,7 +114,8 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
   void verify_started('context_menu')
 
-  void validateUrl(url).then(c2paResult => {
+  // The user asked: this is the one path that may look a stripped image up (#184).
+  void validateUrl(url, true).then(c2paResult => {
     emitVerifyCompleted(c2paResult, mapMediaType(info.mediaType))
 
     // A thrown Error used to be dropped here with a bare `return`, so when the
@@ -248,8 +249,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 })
 
-async function validateUrl (url: string): Promise<C2paResult | C2paError> {
-  const c2paResult = await c2paValidateWithRetry(url);
+async function validateUrl (url: string, recover = false): Promise<C2paResult | C2paError> {
+  const c2paResult = await c2paValidateWithRetry(url, recover);
 
   if (c2paResult instanceof Error) {
     // rc11.6 / #83 — removed the anonymous cross-origin verifieddit.com
@@ -281,7 +282,8 @@ async function validateUrl (url: string): Promise<C2paResult | C2paError> {
     // P3 'verified' only when the offscreen byBinding probe found the credential
     // registered in the manifest store.
     manifestStoreVerified: c2paResult.manifestStoreVerified,
-    confirmedBy: c2paResult.durableRegistries
+    confirmedBy: c2paResult.durableRegistries,
+    registryRecord: c2paResult.registryRecord
   });
 
   // rc11.6 / #83 — removed the anonymous cross-origin verifieddit.com
@@ -345,11 +347,11 @@ async function ensureOffscreen (): Promise<void> {
 // The offscreen document initializes c2pa asynchronously on load, so a request
 // that arrives first may get "C2PA not initialized" (or no listener yet); retry
 // briefly before giving up.
-async function c2paValidateWithRetry (url: string): Promise<C2paResult | C2paError> {
+async function c2paValidateWithRetry (url: string, recover = false): Promise<C2paResult | C2paError> {
   await ensureOffscreen()
   let last: C2paResult | C2paError | undefined
   for (let attempt = 0; attempt < 30; attempt++) {
-    const result = await c2paValidateUrl(url).catch(() => undefined)
+    const result = await c2paValidateUrl(url, recover).catch(() => undefined)
     last = result
     const notReady = result == null ||
       (result as C2paError)?.message === 'C2PA not initialized'
