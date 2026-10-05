@@ -30,6 +30,23 @@ export const DEMO_URL = 'https://www.verifieddit.com/demo'
 
 export const RELEASE_NOTES: readonly ReleaseEntry[] = [
   {
+    tag: 'v1.3.0',
+    date: '2026-10-05',
+    summary: 'Media signed with the newer timestamp format verifies correctly, and you can choose to share anonymous usage statistics.',
+    fixes: [
+      {
+        title: 'Newer timestamps are read, so a valid file no longer shows an expired-certificate error',
+        howToVerify:
+          'Verify a file whose signer uses the current timestamp format, such as media from a recent signing service. Earlier versions looked for the timestamp only in the older place, found none, saw that the signing certificate had since expired, and showed an error. The timestamp is now read from both places, and a file signed while its certificate was valid shows as verified.'
+      },
+      {
+        title: 'Anonymous usage statistics, off unless you turn them on',
+        howToVerify:
+          'Open the extension and look for "Share anonymous usage statistics". It is off by default and nothing is sent until you switch it on. If you do, each event is signed by a key created in your browser and sent to a relay SanMarcSoft operates in the EU, never to a third-party analytics service. No page addresses, media or personal identifiers are included, and your IP address is not stored. Switching it off sends one request to erase your statistics and deletes the key.'
+      }
+    ]
+  },
+  {
     tag: 'v1.2.6',
     date: '2026-09-08',
     summary: 'An expired certificate no longer looks like a broken file, and the third durable pillar can be verified again.',

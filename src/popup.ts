@@ -6,6 +6,7 @@
 import { type TrustListInfo, getTrustListInfos, removeTrustList, addTSATrustFile, addTrustFile } from './trustlistProxy.js'
 import packageManifest from '../package.json'
 import { BUILD_INFO } from './build-info'
+import { familyTag } from './releaseTag.js'
 import { AUTO_SCAN_DEFAULT, MSG_AUTO_SCAN_UPDATED, MSG_REQUEST_C2PA_ENTRIES, TRUSTEDDIT_LINK, taggedLink, MSG_RESPONSE_C2PA_ENTRIES, MSG_RESPONSE_C2PA_SUMMARY, MANIFEST_STORE_PROBE_DEFAULT, MANIFEST_STORE_PROBE_KEY } from './constants.js'
 import { getAnalyticsConsent, setAnalyticsConsent, options_opened } from './analytics.js'
 import { type C2paEntryDetails, type MSG_RESPONSE_C2PA_ENTRIES_PAYLOAD, type MSG_RESPONSE_C2PA_SUMMARY_PAYLOAD } from './inject.js'
@@ -40,12 +41,7 @@ function setHref (id: string, url: string): void {
  * Falls back to the version string from package.json if no tag is available.
  */
 function releaseFamilyTag (): string {
-  if (BUILD_INFO.tag !== '') return BUILD_INFO.tag
-  const td = BUILD_INFO.tagDescribe
-  if (td == null || td === '' || td === 'unknown') return `v${BUILD_INFO.version}`
-  // Strip trailing "-<n>-g<sha>[-dirty]" if present.
-  const match = td.match(/^(.+?)(?:-\d+-g[0-9a-f]+(?:-dirty)?)?$/)
-  return match?.[1] ?? td
+  return familyTag(BUILD_INFO)
 }
 
 function populateReleaseHeader (): void {
