@@ -65,6 +65,7 @@ This is the complete list. There is nothing else.
 | 3.2 | The web address of one media file | Only when you click "Inspect on Verifieddit" | verifieddit.com, in a new tab | The URL you chose, as a `?url=` parameter, visible in your address bar |
 | 3.3 | A fixed surface name | Only when you click a link to Trusteddit or Verifieddit | The site you are opening | `?src=` plus one of five fixed words: `extension-panel`, `extension-popup`, `extension-options`, `extension-context-menu`, `extension-release-notes` |
 | 3.4 | Two perceptual hashes of one image | Only if you switched the durable-credential check on | manifests.sanmarcsoft.com | A pHash and a dHash computed on your device, sent without cookies |
+| 3.4b | A watermark's algorithm name and value, read from the file's signed credentials | Only if you switched the durable-credential check on | api.verifieddit.com, which forwards those two values to the public registry that owns the watermark | Sent without cookies; no image, no hash of the image, no identifier |
 | 3.5 | A request for an updated trust list | Only for a trust list you imported from a URL yourself | An allowlisted host | Nothing about you. Sent with credentials omitted. |
 | 3.6 | A request for a trust list you typed in | Only when you paste a URL into the trust-list importer and click Fetch | The host you typed | Nothing about you. Sent with credentials omitted. |
 | 3.7 | Anonymous usage statistics | Only if you opted in to share usage statistics (off by default) | Telemetry relay operated by SanMarcSoft, forwarded to self-hosted Umami in the EU (`analytics.sanmarcsoft.com`) | Signed event payload with install ID (public key thumbprint), ticket, timestamp, extension version, browser family (Chrome or Firefox), signature, JWK, and event parameters. No URLs, file names, media content, or personal data. |
@@ -88,7 +89,15 @@ Turn it on from the "Cloud-recoverable" panel when you inspect a file, or from
 Options; turn it off in the same places. When it is on, and only for images
 whose credential declares a durable binding, the request carries two short hash
 values and nothing else: not the image, not any part of it, not the page you
-found it on, and no identifier for you, your device or your session. Turning it
+found it on, and no identifier for you, your device or your session.
+
+With the same switch on, and for any file whose signed credentials name a
+watermark, a second request goes to `api.verifieddit.com`. It carries the
+watermark's algorithm name and its value, both read from the signed credentials
+on your device, and nothing else. Our service passes those two values to the
+public registry that owns that watermark (for example Trufo, or our own manifest
+store) and returns whether a credential is registered. No image and no hash of
+your image is involved in this second request. Turning it
 on applies from that moment forward and never re-examines anything you looked at
 earlier. With it off, such files still verify normally; the durable binding is
 simply reported as *declared* rather than *confirmed*.

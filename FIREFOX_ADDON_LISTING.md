@@ -173,7 +173,9 @@ Both halves are load-bearing and both are truthful:
   `manifests.sanmarcsoft.com` to recover credentials stripped from a file. Image
   bytes are never sent, but a perceptual hash of what someone is viewing is
   still information about what they are viewing, so it is disclosed and it is a
-  choice rather than a default.
+  choice rather than a default. With the same switch on, when a file's signed
+  credentials name a watermark, its algorithm name and value are sent to
+  `api.verifieddit.com`, which asks the public registry that owns it (#184).
 - **`optional: ["technicalAndInteraction"]`**: anonymous usage statistics via
   a signed telemetry relay operated by SanMarcSoft and forwarded to self-hosted
   Umami in the EU at `analytics.sanmarcsoft.com` (`src/analytics.ts`). No data

@@ -77,3 +77,67 @@ export async function probeManifestStore (blob: Blob): Promise<boolean> {
     return false
   }
 }
+
+/*
+ * Federated lookup (#184). Our store is one registry among several. When the
+ * signed credentials name a watermark algorithm and its value, the Verifieddit
+ * hub can ask the registry that owns that algorithm whether it is registered.
+ *
+ * Same switch as the probe above, gated here for the same reason. What leaves
+ * is the algorithm name and the binding value, both read from the signed
+ * claim: no image, no fingerprint computed from pixels, no identifier.
+ */
+const REGISTRY_HUB_URL = 'https://api.verifieddit.com/api/v1/durable'
+const SOFT_BINDING_LABEL = /^c2pa\.soft-binding/
+const ALG_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{2,99}$/
+const MAX_BINDINGS = 4
+const MAX_VALUE_LENGTH = 2048
+
+export interface SoftBinding { alg: string, value: string }
+
+interface RegistryAnswer { registry: string, name: string, status: string, matches: unknown[] }
+
+/**
+ * The soft bindings declared by a manifest's assertions. Pass only the
+ * VALIDATED, claim-bound assertions of the active manifest (see c2pa.ts).
+ */
+export function softBindingsOf (assertions: ReadonlyArray<{ label?: unknown, data?: unknown }> | null | undefined): SoftBinding[] {
+  const out: SoftBinding[] = []
+  for (const a of assertions ?? []) {
+    if (typeof a?.label !== 'string' || !SOFT_BINDING_LABEL.test(a.label)) continue
+    const data = a.data as { alg?: unknown, blocks?: unknown } | null | undefined
+    const alg = data?.alg
+    if (typeof alg !== 'string' || !ALG_PATTERN.test(alg) || !Array.isArray(data?.blocks)) continue
+    for (const block of data.blocks as Array<{ value?: unknown }>) {
+      const value = block?.value
+      if (typeof value !== 'string' || value === '' || value.length > MAX_VALUE_LENGTH) continue
+      if (out.length < MAX_BINDINGS) out.push({ alg, value })
+    }
+  }
+  return out
+}
+
+/**
+ * The names of the registries that report a credential registered for any of
+ * these bindings. Empty when the user has not opted in, and on any failure:
+ * an unanswered question confirms nothing.
+ */
+export async function probeRegistries (bindings: readonly SoftBinding[]): Promise<string[]> {
+  try {
+    if (bindings.length === 0 || !(await isProbeEnabled())) return []
+    const names = new Set<string>()
+    for (const { alg, value } of bindings) {
+      const params = new URLSearchParams({ alg, value })
+      const response = await fetch(`${REGISTRY_HUB_URL}/resolve?${params.toString()}`, { credentials: 'omit' })
+      if (!response.ok) continue
+      const data = await response.json() as { results?: RegistryAnswer[] }
+      if (!Array.isArray(data?.results)) continue
+      for (const r of data.results) {
+        if (r?.status === 'match' && Array.isArray(r.matches) && r.matches.length > 0 && typeof r.name === 'string') names.add(r.name)
+      }
+    }
+    return [...names]
+  } catch {
+    return []
+  }
+}

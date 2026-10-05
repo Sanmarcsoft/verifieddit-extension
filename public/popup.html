@@ -129,7 +129,10 @@
                 of images that declare a durable credential to
                 <code>manifests.sanmarcsoft.com</code> to confirm the credential is
                 registered and recoverable. Fingerprints only, never the image, and
-                nothing identifying you or your device. With this off, such assets
+                nothing identifying you or your device. If the signed credentials name
+                a watermark, its name and value also go to
+                <code>api.verifieddit.com</code>, which asks the public registry that
+                owns it. With this off, such assets
                 still verify: their durable binding reads as declared rather than
                 confirmed.
             </p>

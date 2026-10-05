@@ -103,7 +103,10 @@ for no functional benefit.
   to `manifests.sanmarcsoft.com` to recover Content Credentials that were
   stripped from a file. Image bytes are never sent. We still disclose it,
   because a perceptual hash of a viewed image is information about what the user
-  is viewing.
+  is viewing. The same switch also allows one request to
+  `api.verifieddit.com/api/v1/durable/resolve` carrying the watermark algorithm
+  name and value read from the file's signed credentials (`probeRegistries` in
+  `src/manifestStore.ts`); no image data and no identifier.
 - **Optional: technicalAndInteraction.** Anonymous usage statistics via a signed
   telemetry relay operated by SanMarcSoft and stored in self-hosted Umami in the
   EU at `analytics.sanmarcsoft.com` (`src/analytics.ts`). No data is sent to

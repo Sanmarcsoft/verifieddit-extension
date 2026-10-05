@@ -778,7 +778,7 @@ const PILLAR_DEFS: Array<{
     label: 'Cloud-recoverable',
     sub: 'manifest store · probe',
     needsConsent: true,
-    detail: 'Confirming this means asking manifests.sanmarcsoft.com whether a credential is actually registered for this image. That request sends a perceptual fingerprint of the image — a short hash, never the image itself, and nothing identifying you or your device. It is off until you turn it on.',
+    detail: 'Confirming this means asking manifests.sanmarcsoft.com whether a credential is actually registered for this image. That request sends a perceptual fingerprint of the image — a short hash, never the image itself, and nothing identifying you or your device. If the signed credentials name a watermark, its name and value are also sent to api.verifieddit.com, which asks the public registry that owns it. It is off until you turn it on.',
     icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>`
   }
 ]

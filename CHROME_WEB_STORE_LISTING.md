@@ -123,6 +123,7 @@ under the following categories and purposes:
 1. **Website content → App functionality**:
    - User-initiated click to inspect media (`verifieddit.com/?url=<media-url>`)
    - Opt-in durable credential lookup (`manifests.sanmarcsoft.com/v1/matches/byBinding`) sending a perceptual hash
+   - Same opt-in: registry lookup (`api.verifieddit.com/api/v1/durable/resolve`) sending the watermark algorithm name and value read from the file's signed credentials
 2. **User activity → Analytics**:
    - Opt-in interaction events (`extension_installed`, `extension_updated`, `verify_started`, `verify_completed`, `badge_scan`, `options_opened`, `consent_changed`)
 3. **Personally identifiable information: User identifiers → Analytics**:
@@ -135,6 +136,7 @@ Outbound destinations:
 | `www.verifieddit.com/?url=<media-url>` | User clicks "Inspect on Verifieddit" | The URL of the one media file they chose to inspect |
 | `www.trusteddit.com/?src=<surface>` | User clicks "Sign your own content with Trusteddit" | A constant naming which extension surface the link was clicked from. No user, device, asset or session identifier |
 | `manifests.sanmarcsoft.com/v1/matches/byBinding` | **Only after the user opts in** to "Check durable credentials online" (off by default), for images whose credential declares a durable binding | A perceptual hash of the image (pHash + dHash). Never the image, never a user, device or session identifier. `credentials: 'omit'` |
+| `api.verifieddit.com/api/v1/durable/resolve` | **Only after the user opts in** to "Check durable credentials online" (the same switch, off by default), for files whose signed credentials name a watermark | The watermark's algorithm name and binding value, read from the signed credentials. Never the image or a hash of it, never a user, device or session identifier. `credentials: 'omit'`. The service forwards the two values to the public registry that owns the algorithm |
 | Telemetry relay (configured by `TELEMETRY_RELAY_URL`) | **Only after the user opts in** to "Share anonymous usage statistics" (off by default) | Signed event payload with install ID (public key thumbprint), ticket, timestamp, extension version, browser family (Chrome or Firefox), signature, JWK, and typed event parameters (`source`, `result`, `has_durable_binding`, `media_type`, `previous_version`, `value`). Forwarded to self-hosted Umami in the EU (`analytics.sanmarcsoft.com`). `fetch` POST / DELETE. |
 
 The `src` value is drawn from a fixed set (`extension-panel`, `extension-popup`,

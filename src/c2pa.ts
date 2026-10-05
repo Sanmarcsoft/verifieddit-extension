@@ -12,7 +12,7 @@ import { getManifestFromMetadata } from './certs/metadata.js'
 import { AWAIT_ASYNC_RESPONSE, MSG_C2PA_VALIDATE_URL, type MSG_PAYLOAD } from './constants.js'
 import { type TrustListMatch } from './trustlistProxy.js'
 import { type DurablePillars, hasSoftBinding } from './durableCredentials.js'
-import { probeManifestStore } from './manifestStore.js'
+import { probeManifestStore, probeRegistries, softBindingsOf } from './manifestStore.js'
 import { buildProvenanceGraph } from './provenanceGraph.js'
 import { type ProvenanceGraph } from './provenanceTypes.js'
 import { detectAiGeneration, type AiGeneration } from './aiDetection.js'
@@ -49,6 +49,8 @@ export interface C2paResult extends ExtensionC2paResult {
   // credential is REGISTERED and recoverable (Pillar 3 'verified'). Probed in
   // the offscreen/background validate path where the image bytes are available.
   manifestStoreVerified: boolean
+  /** Public registries, other than our own store, that report this credential registered (#184). */
+  durableRegistries: string[]
   // Whether the asset DECLARES AI generation, read from the IPTC
   // digitalSourceType in its own c2pa.actions assertion. Never inferred from
   // who signed it — see aiDetection.ts.
@@ -156,7 +158,7 @@ export async function validateUrl (url: string): Promise<C2paResult | C2paError>
 
   const store: C2paRsStore = await reader.manifestStore()
 
-  if (store.active_manifest == null || store.manifests == null || store.manifests[store.active_manifest] == null) {
+  if (store.active_manifest == null || store.manifests?.[store.active_manifest] == null) {
     return { message: 'No manifest found', url, name: 'No Manifest' } satisfies C2paError
   }
 
@@ -189,6 +191,13 @@ export async function validateUrl (url: string): Promise<C2paResult | C2paError>
   if (hasSoftBinding(assertionLabels) && blob.type.startsWith('image/')) {
     manifestStoreVerified = await probeManifestStore(blob)
   }
+  // Our store is one registry among several (#184). Ask the registry that owns
+  // each declared watermark algorithm too. Same opt-in; only the algorithm and
+  // binding value from the signed claim are sent, so this works for any media.
+  const durableRegistries = hasSoftBinding(assertionLabels)
+    ? await probeRegistries(softBindingsOf(activeManifest.assertions))
+    : []
+  if (durableRegistries.length > 0) manifestStoreVerified = true
 
   // AI generation is a claim the producer signed about the CONTENT, so it is
   // read from the active manifest's own actions assertion, not from the signer.
@@ -204,6 +213,7 @@ export async function validateUrl (url: string): Promise<C2paResult | C2paError>
     editsAndActivity,
     assertionLabels,
     manifestStoreVerified,
+    durableRegistries,
     // Built from the raw store — the flattened ExtensionC2paResult has already
     // dropped relationships, per-ingredient validation, and assertion payloads.
     // The diagram is a display affordance walking attacker-supplied structure;
