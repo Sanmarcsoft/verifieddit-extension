@@ -7,7 +7,7 @@ import { LitElement, html, css, type TemplateResult, type PropertyValues, nothin
 import { customElement, property, state } from 'lit/decorators.js'
 import { type ExtensionC2paIngredient, type C2paResult } from './c2pa'
 import { type CertificateInfoExtended } from './certs/certs'
-import { type DurablePillars } from './durableCredentials'
+import { claimsDurability, type DurablePillars } from './durableCredentials'
 import { buildExpiryEvidence, classifyExpiry, expiryReason, type ExpiryVerdict } from './signatureValidity'
 import { computeVerdict, durabilityApplies, isFatalValidationCode, type Verdict } from './verdict'
 import { MSG_L3_INSPECT_URL, TRUSTEDDIT_LINK, taggedLink, MSG_SET_MANIFEST_STORE_PROBE, MANIFEST_STORE_PROBE_KEY, MANIFEST_STORE_PROBE_DEFAULT } from './constants'
@@ -1048,7 +1048,7 @@ export class C2paPillars extends LitElement {
             </div>
           `
         })()}
-        ${!this.signerTrusted
+        ${!this.signerTrusted && claimsDurability(p)
           ? html`<p class="note warn">⚠ Signer is not in a trust list — these durability features are self-asserted by the signer, not independently verified.</p>`
           : nothing}
         ${p.manifestStore === 'declared' && this.probeEnabled
