@@ -44,3 +44,17 @@ export function noLabelNote (r: { recovered: RecoveredCredential | null | undefi
     ? `${NO_LABEL} We also looked for a copy of a label that might have been removed, and found none.`
     : `${NO_LABEL} If its credentials were removed, a copy may still exist: turn on "Check durable credentials online" in the extension's Options and verify again.`
 }
+
+/**
+ * The media type of a recovered credential, read from its first bytes. The
+ * registry labels its answer application/c2pa but returns the whole signed file,
+ * so the label cannot be trusted; the bytes can.
+ */
+export function sniffMediaType (b: Uint8Array): string {
+  const at = (i: number, ...v: number[]): boolean => v.every((x, k) => b[i + k] === x)
+  if (at(0, 0x89, 0x50, 0x4e, 0x47)) return 'image/png'
+  if (at(0, 0xff, 0xd8, 0xff)) return 'image/jpeg'
+  if (at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50)) return 'image/webp'
+  if (at(4, 0x66, 0x74, 0x79, 0x70)) return 'video/mp4'
+  return 'application/c2pa'
+}

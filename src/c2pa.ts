@@ -12,6 +12,7 @@ import { getManifestFromMetadata } from './certs/metadata.js'
 import { AWAIT_ASYNC_RESPONSE, MSG_C2PA_VALIDATE_URL, type MSG_PAYLOAD } from './constants.js'
 import { type TrustListMatch } from './trustlistProxy.js'
 import { type DurablePillars, hasSoftBinding } from './durableCredentials.js'
+import { sniffMediaType } from './recovered.js'
 import { probeManifestStore, probeRegistries, softBindingsOf, recoverStripped, checkRegistryRecord, type RecoveredCredential, type RegistryRecord } from './manifestStore.js'
 import { buildProvenanceGraph } from './provenanceGraph.js'
 import { type ProvenanceGraph } from './provenanceTypes.js'
@@ -162,8 +163,11 @@ async function registeredStore (manifestId: string): Promise<{ store: C2paRsStor
     if (!response.ok) return { error: `registry answered ${response.status}` }
     const bytes = await response.blob()
     if (bytes.size === 0 || bytes.size > REGISTERED_MANIFEST_MAX_BYTES) return { error: `unexpected size ${bytes.size}` }
-    const blob = new Blob([bytes], { type: 'application/c2pa' })
-    const reader = await c2pa.reader.fromBlob('application/c2pa', blob)
+    // The registry says application/c2pa but returns the signed file itself, so
+    // the type is read from the bytes. Read as what it is, the file verifies.
+    const type = sniffMediaType(new Uint8Array(await bytes.slice(0, 16).arrayBuffer()))
+    const blob = new Blob([bytes], { type })
+    const reader = await c2pa.reader.fromBlob(type, blob)
     if (reader == null) return { error: 'the registered credential could not be read' }
     const store: C2paRsStore = await reader.manifestStore()
     if (store.active_manifest == null || store.manifests?.[store.active_manifest] == null) return { error: 'the registered credential is empty' }

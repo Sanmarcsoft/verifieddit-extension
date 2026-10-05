@@ -171,3 +171,18 @@ describe('the no-label note says whether we looked', () => {
     expect(noLabelNote({ recovered: { registry: 'R', manifestId: 'm', similarityScore: 97, signerCn: 's', signedAt: '2026-10-05', filename: null, aiGenerated: null }, checked: true })).toMatch(/not proof/i)
   })
 })
+
+describe('what the registry really returns', () => {
+  // Found 2026-10-05: /v1/manifests/{id} is labelled application/c2pa but returns
+  // the whole signed file. Read as a bare manifest it fails with "invalid JUMBF
+  // header"; read as what it is, it verifies. So the type is taken from the bytes.
+  it('names the media type from the first bytes, whatever the label says', async () => {
+    const { sniffMediaType } = await import('../src/recovered')
+    expect(sniffMediaType(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))).toBe('image/png')
+    expect(sniffMediaType(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]))).toBe('image/jpeg')
+    expect(sniffMediaType(new Uint8Array([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50]))).toBe('image/webp')
+    expect(sniffMediaType(new Uint8Array([0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70]))).toBe('video/mp4')
+    expect(sniffMediaType(new Uint8Array([0, 0, 0, 0x1d, 0x6a, 0x75, 0x6d, 0x62]))).toBe('application/c2pa')
+    expect(sniffMediaType(new Uint8Array([]))).toBe('application/c2pa')
+  })
+})

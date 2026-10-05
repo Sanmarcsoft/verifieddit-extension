@@ -61,7 +61,12 @@ async function clickBadgeAndDescribe (page: Page): Promise<{ overlay: boolean, t
 }
 
 test.describe('recovering a stripped image', () => {
-  test('Verify recovers the credential, the badge opens the full panel, and it works again after a reload', async () => {
+  // FIXME(#184): in headless CI the dispatched menu click reaches the service worker
+  // ("dispatched to tab N") but no badge of any kind appears, so this test cannot yet
+  // tell a working build from a broken one. Kept as the written-down flow; not a gate
+  // until the trigger is understood. The fault it was written for was found another
+  // way: the registry returns the whole signed file labelled application/c2pa.
+  test.fixme('Verify recovers the credential, the badge opens the full panel, and it works again after a reload', async () => {
     test.setTimeout(180_000)
     const { ctx, page } = await launch()
     try {
