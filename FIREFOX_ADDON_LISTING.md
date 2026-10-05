@@ -56,6 +56,16 @@
 > the diff is the version bump, `CHANGELOG.md`, `src/releaseNotes.ts` and test
 > fixtures, which are not packaged.
 
+> **v1.3.0 delta a reviewer will see.** The manifest adds an optional data
+> collection category (#182):
+> `"data_collection_permissions": { "required": ["none"], "optional": ["websiteContent", "technicalAndInteraction"] }`.
+> The new category covers anonymous, opt-in usage statistics via a signed
+> telemetry relay operated by SanMarcSoft and stored in self-hosted Umami in
+> the EU (`src/analytics.ts`). No data is sent to Google. It is declared under
+> `optional` because it is strictly off by default and requires explicit user
+> consent, meeting Mozilla's data collection policy; `required` remains `["none"]`
+> because no data is collected without consent.
+
 ## How AMO differs from the Chrome Web Store
 
 These are the deltas that actually change the submission. Everything not listed
@@ -148,7 +158,7 @@ AMO reads this from the manifest rather than a web form. The shipped value:
 ```json
 "data_collection_permissions": {
   "required": ["none"],
-  "optional": ["websiteContent"]
+  "optional": ["websiteContent", "technicalAndInteraction"]
 }
 ```
 
@@ -156,14 +166,46 @@ Both halves are load-bearing and both are truthful:
 
 - **`required: ["none"]`**: with default settings the add-on makes no outbound
   request carrying user data. C2PA verification is WASM, entirely in-browser,
-  and media bytes never leave the machine.
+  and media bytes never leave the machine. No data is collected without user consent.
 - **`optional: ["websiteContent"]`**: the Manifest Store probe
   (`src/manifestStore.ts`) is **off unless the user turns it on**. When enabled,
   it sends *perceptual hashes* (pHash/dHash hex digests) of viewed images to
   `manifests.sanmarcsoft.com` to recover credentials stripped from a file. Image
   bytes are never sent, but a perceptual hash of what someone is viewing is
   still information about what they are viewing, so it is disclosed and it is a
-  choice rather than a default.
+  choice rather than a default. With the same switch on, when a file's signed
+  credentials name a watermark, its algorithm name and value are sent to
+  `api.verifieddit.com`, which asks the public registry that owns it (#184).
+  On an explicit right-click Verify of an image with no credentials, and only
+  then, the same perceptual hashes are sent to look for a credential that was
+  stripped; this never runs during automatic scanning.
+- **`optional: ["technicalAndInteraction"]`**: anonymous usage statistics via
+  a signed telemetry relay operated by SanMarcSoft and forwarded to self-hosted
+  Umami in the EU at `analytics.sanmarcsoft.com` (`src/analytics.ts`). No data
+  is sent to Google. This is **off by default** and requires explicit user
+  opt-in (via the initial popup consent banner or the Preferences toggle).
+  Mozilla's policy requires opt-in telemetry to be declared as optional, so
+  `technicalAndInteraction` is placed in `optional`; `required` remains `["none"]`
+  because nothing is sent without consent. When enabled, each event is signed by
+  a key generated on the device for that install (ECDSA P-256, private key
+  non-extractable, kept in the browser's IndexedDB); the install identifier is the
+  RFC 7638 thumbprint of the public key, not derived from the user or device.
+  IP addresses are not stored: the relay uses the client address only in memory,
+  as a salted hash with a daily rotating salt, for rate limiting, and never
+  forwards or logs it. Events carry only the event name, its typed parameters,
+  the extension version, and the browser family (Chrome or Firefox). The exact
+  seven events and their parameters are: `extension_installed`;
+  `extension_updated` (`previous_version`); `verify_started` (`source`);
+  `verify_completed` (`result`, `has_durable_binding`, `media_type`);
+  `badge_scan`; `options_opened`; `consent_changed` (`value`). It never sends
+  URLs, page titles, page content, file names, or content of verified media
+  (no media bytes, no media hashes, no signer identities, no certificate details,
+  or account credentials). Auto-scan telemetry is throttled to at most once per
+  tab per minute. Turning it off in Preferences stops all outbound analytics
+  immediately, sends one signed erasure request to the relay, and deletes the
+  key, ticket, and identifier from the browser. Erasure of already stored
+  records in Umami is processed by SanMarcSoft from the relay's erasure queue (it
+  is not instantaneous or automatic inside Umami).
 
 The one remaining lint warning pair
 (`KEY_FIREFOX_UNSUPPORTED_BY_MIN_VERSION`) is expected: the key needs Firefox

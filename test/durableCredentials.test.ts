@@ -49,6 +49,16 @@ describe('detectDurablePillars', () => {
     expect(p.embedOnly).toBe(false)
   })
 
+  it('names the registries that confirmed it, and only when it is confirmed (#184)', () => {
+    const base = { signed: true, hasTimestamp: true, assertionLabels: ['c2pa.soft_binding'] }
+    expect(detectDurablePillars({ ...base, manifestStoreVerified: true, confirmedBy: ['SanMarcSoft Manifest Store', 'Trufo'] }).confirmedBy)
+      .toEqual(['SanMarcSoft Manifest Store', 'Trufo'])
+    // Confirmed by the image-fingerprint probe alone: verified, but no registry named.
+    expect(detectDurablePillars({ ...base, manifestStoreVerified: true }).confirmedBy).toEqual([])
+    // Names without a confirmation are dropped: a name must never imply a check that did not pass.
+    expect(detectDurablePillars({ ...base, manifestStoreVerified: false, confirmedBy: ['Trufo'] }).confirmedBy).toEqual([])
+  })
+
   it('manifest-store probe confirmed → P3 verified, 3/3', () => {
     const p = detectDurablePillars({ signed: true, hasTimestamp: true, assertionLabels: ['c2pa.soft_binding'], manifestStoreVerified: true })
     expect(p.manifestStore).toBe('verified')

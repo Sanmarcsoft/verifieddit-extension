@@ -9,7 +9,7 @@ import { bytesToHex } from '../utils.js'
 
 export interface COSE {
   0: Uint8Array
-  1: { x5chain?: Uint8Array[], sigTst?: { tstTokens: Array<{ val: Uint8Array }> } }
+  1: { x5chain?: Uint8Array[], sigTst?: { tstTokens: Array<{ val: Uint8Array }> }, sigTst2?: { tstTokens: Array<{ val: Uint8Array }> } }
   2: null
   3: Uint8Array
 }

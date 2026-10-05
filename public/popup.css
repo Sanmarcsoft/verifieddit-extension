@@ -296,6 +296,46 @@
     margin-bottom: 2px;
 }
 
+.consent-banner {
+    background: #f0f9ff;
+    border-left: 3px solid #0284c7;
+    color: #0c4a6e;
+    padding: 8px 10px;
+    margin: 0 0 8px 0;
+    font-size: 12px;
+    line-height: 1.4;
+    border-radius: 3px;
+}
+.consent-banner-text {
+    margin-bottom: 6px;
+}
+.consent-banner-link {
+    color: #0284c7;
+    text-decoration: underline;
+    margin-left: 4px;
+    cursor: pointer;
+}
+.consent-banner-actions {
+    display: flex;
+    gap: 8px;
+}
+.consent-btn {
+    border: none;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 3px;
+    cursor: pointer;
+}
+.consent-btn-primary {
+    background: #0284c7;
+    color: #ffffff;
+}
+.consent-btn-secondary {
+    background: #e2e8f0;
+    color: #1e293b;
+}
+
 .ingredient-header {
     font-weight: 600;
     color: #555;
@@ -593,3 +633,40 @@
     padding: 1px 4px;
     border-radius: 3px;
 }
+
+/* Badge legend (#184): one click from the first tab, plain words beside each badge. */
+.badge-legend {
+  margin: 12px 0 4px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 8px;
+}
+.badge-legend summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  color: #0f172a;
+}
+.badge-legend-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 10px;
+}
+.badge-legend-row img {
+  flex: none;
+}
+.badge-legend-row strong {
+  display: block;
+  font-size: 13px;
+  color: #0f172a;
+}
+.badge-legend-row p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #475569;
+}
+
+/* Recovered from a registry (#184): not a verdict on the file in hand. */
+.status-recovered { background: #1d6fd6; }
+.status-recovered-ai { background: #7c3aed; }

@@ -1,15 +1,17 @@
 # Verifieddit Browser Extension: Privacy Policy
 
 **Applies to:** the Verifieddit browser extension for Chrome and Firefox
-(extension ID `verifieddit@verifieddit.com`), version 1.2.5 and later.
-**Version:** 1.0 · **Effective:** 2026-09-06
+(extension ID `verifieddit@verifieddit.com`), version 1.3.0 and later.
+**Version:** 1.1 · **Effective:** 2026-09-12
 
 This document covers the **extension only**. The Verifieddit website has its own
 policy at <https://www.verifieddit.com/privacy>, which is a broader document
 covering accounts, billing and website analytics. None of that applies here: the
-extension has no account, no sign-in, and no analytics. Where the two documents
-touch the same behaviour, the website policy sections 2.1, 2.8 and 2.9 and this
-document say the same thing, and this document is the more specific one.
+extension has no account and no sign-in. It collects anonymous usage statistics
+only if you explicitly choose to share them, and that collection is off by default.
+Where the two documents touch the same behaviour, the website policy sections 2.1,
+2.8 and 2.9 and this document say the same thing, and this document is the more
+specific one.
 
 ---
 
@@ -17,8 +19,9 @@ document say the same thing, and this document is the more specific one.
 
 The extension reads C2PA Content Credentials out of media on the pages you
 visit and verifies them **on your device**, in WebAssembly. Your media never
-leaves your machine. There is no account, no analytics, no tracking, no
-advertising, and no history of what you inspected.
+leaves your machine. There is no account, no advertising, no tracking of what
+you browse, and no history of what you inspected. Anonymous usage statistics
+are collected only if you turn them on, and they are off until then.
 
 With default settings the extension sends **nothing** to us. Every outbound
 request it can make is either started by a click of yours or is a setting you
@@ -48,7 +51,9 @@ Verifieddit.", the extension:
 
 Every step of that happens in your browser. The C2PA engine is a WebAssembly
 module shipped inside the extension package. No file content, no extracted
-metadata, and no verification result is transmitted anywhere.
+metadata, and no media bytes are transmitted anywhere. (If you opt in to
+anonymous usage statistics, an aggregate outcome category is included in
+verification completion telemetry; see Section 3.)
 
 ## 3. Everything that can leave your device
 
@@ -60,10 +65,15 @@ This is the complete list. There is nothing else.
 | 3.2 | The web address of one media file | Only when you click "Inspect on Verifieddit" | verifieddit.com, in a new tab | The URL you chose, as a `?url=` parameter, visible in your address bar |
 | 3.3 | A fixed surface name | Only when you click a link to Trusteddit or Verifieddit | The site you are opening | `?src=` plus one of five fixed words: `extension-panel`, `extension-popup`, `extension-options`, `extension-context-menu`, `extension-release-notes` |
 | 3.4 | Two perceptual hashes of one image | Only if you switched the durable-credential check on | manifests.sanmarcsoft.com | A pHash and a dHash computed on your device, sent without cookies |
+| 3.4b | A watermark's algorithm name and value, read from the file's signed credentials | Only if you switched the durable-credential check on | api.verifieddit.com, which forwards those two values to the public registry that owns the watermark | Sent without cookies; no image, no hash of the image, no identifier |
+| 3.4c | Two perceptual hashes of an image that has no credentials | Only if the durable-credential check is on AND you right-click that image and choose Verify | manifests.sanmarcsoft.com | Same two hashes as 3.4, sent without cookies; never during automatic scanning |
+| 3.4d | A watermark's binding value, read from the file's signed credentials, then the id of the matching record | Only if the durable-credential check is on, for a file whose credentials name a TrustMark watermark | manifests.sanmarcsoft.com | Used to fetch that credential's public record (signer, date, file hash) and compare it with the file on your device. The file and its hash are never sent |
+| 3.4e | The id of a recovered credential | Only after 3.4c found a match | manifests.sanmarcsoft.com | Fetches the full registered credential so it can be shown to you, marked as recovered |
 | 3.5 | A request for an updated trust list | Only for a trust list you imported from a URL yourself | An allowlisted host | Nothing about you. Sent with credentials omitted. |
 | 3.6 | A request for a trust list you typed in | Only when you paste a URL into the trust-list importer and click Fetch | The host you typed | Nothing about you. Sent with credentials omitted. |
+| 3.7 | Anonymous usage statistics | Only if you opted in to share usage statistics (off by default) | Telemetry relay operated by SanMarcSoft, forwarded to self-hosted Umami in the EU (`analytics.sanmarcsoft.com`) | Signed event payload with install ID (public key thumbprint), ticket, timestamp, extension version, browser family (Chrome or Firefox), signature, JWK, and event parameters. No URLs, file names, media content, or personal data. |
 
-Notes on the two that deserve detail:
+Notes on the ones that deserve detail:
 
 **3.3, the `?src=` parameter.** It names a place in our interface, never you,
 your device, your session, or the file you were looking at. It is one of five
@@ -82,7 +92,23 @@ Turn it on from the "Cloud-recoverable" panel when you inspect a file, or from
 Options; turn it off in the same places. When it is on, and only for images
 whose credential declares a durable binding, the request carries two short hash
 values and nothing else: not the image, not any part of it, not the page you
-found it on, and no identifier for you, your device or your session. Turning it
+found it on, and no identifier for you, your device or your session.
+
+With the same switch on, and for any file whose signed credentials name a
+watermark, a second request goes to `api.verifieddit.com`. It carries the
+watermark's algorithm name and its value, both read from the signed credentials
+on your device, and nothing else. Our service passes those two values to the
+public registry that owns that watermark (for example Trufo, or our own manifest
+store) and returns whether a credential is registered. No image and no hash of
+your image is involved in this second request.
+
+There is one case where the fingerprint of an image *without* credentials is
+sent: when you right-click that image and choose Verify. The extension then
+asks our manifest store whether a credential registered for that picture exists,
+so that a label someone removed can be found again. This happens only on that
+explicit click, only with the switch on, and never during automatic scanning.
+If a match is found, the extension also fetches that credential's public record
+(signer, date) from the same store. Turning it
 on applies from that moment forward and never re-examines anything you looked at
 earlier. With it off, such files still verify normally; the durable binding is
 simply reported as *declared* rather than *confirmed*.
@@ -93,10 +119,71 @@ lists bundled with the extension set no `download_url` and are never re-fetched.
 Refreshes are further restricted to an allowlist of four hosts:
 `contentcredentials.org`, `c2pa.org`, `trusteddit.com`, `verifieddit.com`.
 
+**3.7, anonymous usage statistics.** We collect aggregate, anonymous product
+metrics so we know whether the extension is working and which features are used.
+Events are sent to a telemetry relay operated by SanMarcSoft and stored in our
+self-hosted Umami instance in the EU (`https://analytics.sanmarcsoft.com`). No
+data is sent to Google Analytics or any other Google service.
+
+This is **off by default**. It sends nothing unless you explicitly opt in by
+clicking "Yes" on the first-run consent banner or by toggling "Share anonymous
+usage statistics" on in Options.
+
+How it works:
+- Each event is signed by a key generated on your device for that installation
+  (ECDSA P-256). The private key is non-extractable and kept securely in the
+  browser's IndexedDB database.
+- The installation identifier (`install_id`) is the RFC 7638 JWK thumbprint of
+  that public key, not derived from you, your account, or your device hardware.
+- The relay issues a short-lived ticket, which the extension includes with
+  subsequent signed event payloads.
+
+What IS sent:
+- The installation identifier (`install_id`), ticket, event timestamp (`ts`),
+  extension version, browser family (Chrome or Firefox), and an ECDSA P-256
+  signature (`sig`) over the canonical JSON payload, accompanied by the public key
+  (`jwk`) to verify the signature. This is the build's browser family only, not
+  the user agent string, not the browser version, not the operating system.
+- Event-specific parameters for one of the exact seven events:
+  - `extension_installed`: no parameters.
+  - `extension_updated`: `previous_version` (string, max 32 characters).
+  - `verify_started`: `source` (`context_menu`, `popup`, or `auto_scan`).
+  - `verify_completed`: `result` (`valid`, `invalid`, `none`, or `error`),
+    `has_durable_binding` (boolean), and `media_type` (`image`, `video`,
+    `audio`, or `pdf`).
+  - `badge_scan`: no parameters.
+  - `options_opened`: no parameters.
+  - `consent_changed`: `value` (`granted` or `denied`).
+
+What is NOT sent:
+No URLs, no page titles, no page content, no file names, no content of verified
+media (no image, video, audio, or PDF data), no hashes of user media, no signer
+identities, no certificate details, no account or contact details, and nothing
+that identifies you or your device beyond the installation public key thumbprint.
+No data is sent to Google.
+
+IP addresses are not stored: the relay uses the client IP address only in memory,
+as a salted hash with a daily rotating salt, for rate limiting, and never
+forwards or logs it. The relay rate-limits requests per install and per hashed
+address, and rejects a replayed signed request.
+
+Auto-scan telemetry is throttled to at most one `verify_started`,
+`verify_completed`, and `badge_scan` set per browser tab per minute, ensuring
+page scanning does not become a per-image beacon.
+
+How to withdraw:
+You can turn the setting off at any time from the extension's options page
+(or Preferences on Firefox). Turning it off immediately stops all outbound
+telemetry. Doing so sends one signed erasure request (`DELETE /v1/installs`)
+to the relay and deletes the key pair, the ticket, and the identifier from the
+browser's IndexedDB and local storage. Erasure of already stored records in Umami
+is processed by SanMarcSoft from the relay's erasure queue (it is not
+instantaneous or automatic inside Umami).
+
 ## 4. What is stored, and where
 
-Only on your device, in `chrome.storage.local` and `chrome.storage.session`.
-Nothing is synced to a server or to your browser profile sync.
+Only on your device, in `chrome.storage.local`, `chrome.storage.session`, and
+IndexedDB. Nothing is synced to a server or to your browser profile sync.
 
 | Key | What it is |
 |---|---|
@@ -104,31 +191,45 @@ Nothing is synced to a server or to your browser profile sync.
 | `manifestStoreProbe` | Whether the durable-credential check is on |
 | `trustList` | The cached trust lists, bundled and imported |
 | `rc117AutoScanMigrationDone` | A one-time settings migration flag |
+| `analyticsConsent` | Consent status for usage statistics (`granted`, `denied`, or `unset`) |
+| `telemetryTicketData` | Ephemeral relay ticket and install ID in `chrome.storage.session` (or memory on Firefox) |
 
-Transient C2PA engine startup errors are held in `chrome.storage.session` so the
-popup can show a banner if the engine fails to load. Your browser clears that
-automatically when it closes.
+The telemetry signing key pair is stored in IndexedDB (`verifieddit_telemetry`),
+with the private key set to non-extractable. Ephemeral relay tickets
+(`telemetryTicketData`) and transient C2PA engine startup errors are held in
+`chrome.storage.session` (or in memory on Firefox). Your browser clears session
+data automatically when it closes.
 
-No browsing history is stored. No verification results are stored. No record of
-which media you inspected is stored. Uninstalling the extension removes all of
+No browsing history is stored. No media content is stored. No record of which
+media or URLs you inspected is stored. Uninstalling the extension removes all of
 it.
 
 ## 5. What we never do
 
-- No analytics of any kind. There is no Google Analytics, no Sentry, no
-  PostHog, no Mixpanel, no Segment, and no home-grown telemetry anywhere in the
-  codebase.
-- No cookies. No advertising identifiers. No fingerprinting.
-- No sale or sharing of data with third parties. There is no data to sell.
-- No account, no sign-in, no email address collected.
-- No remote code. Every executable byte ships inside the package. The
-  WebAssembly module and its worker are loaded from the extension's own origin.
+- No tracking of your browsing activity, visited URLs, page titles, or page
+  content.
+- No surveillance or inspection logging: we never collect, log, or transmit the
+  media files you view, the hashes of your media files (except the opt-in
+  durable credential check described in 3.4), or who signed the credentials you
+  inspect.
+- No default telemetry. Usage statistics are strictly opt-in and off by
+  default.
+- No third-party advertising trackers or session replay tools (no Sentry,
+  PostHog, Mixpanel, Segment, Datadog, or FullStory). Outbound analytics uses
+  only minimal, signed requests to the SanMarcSoft telemetry relay when
+  explicitly enabled. No data is sent to Google Analytics or any third party.
+- No cookies. No advertising identifiers. No browser fingerprinting.
+- No sale or commercial brokering of data. We do not sell or monetize user data.
+- No account, no sign-in, no email address or contact information collected.
+- No remote code. Every executable byte ships inside the extension package. The
+  WebAssembly module and its worker are loaded strictly from the extension's own
+  origin.
 
 ## 6. Permissions, and why each one exists
 
 | Permission | Why it is needed |
 |---|---|
-| `storage` | The four settings above and the local trust-list cache |
+| `storage` | The settings above, consent state, and the local trust-list cache (the telemetry signing key is kept in IndexedDB) |
 | `activeTab` | Limits the popup and the context menu to the one tab you are acting on, instead of standing access to every tab |
 | `contextMenus` | Adds the single item "Verify with Verifieddit." on images, video and audio |
 | `alarms` | The once-daily trust-list refresh described in 3.5 |
@@ -146,14 +247,21 @@ anything.
   the Add-ons Manager (Firefox). With it off, nothing is verified until you ask.
 - **Durable-credential check:** off unless you turn it on, in the same places
   or from the "Cloud-recoverable" panel.
+- **Anonymous usage statistics:** off by default. You can enable or disable
+  "Share anonymous usage statistics" at any time from the Options tab in the
+  toolbar popup on Chrome, or under about:addons -> Verifieddit -> Preferences
+  on Firefox. When turned off, the extension stops sending telemetry, sends a
+  signed erasure request to the relay, and deletes its local signing key, ticket,
+  and install identifier.
 - **Trust lists:** you can add and remove them, including your own.
 - **Everything else:** uninstalling removes all locally stored data.
 
 ## 8. Your rights
 
-Because the extension stores nothing on our servers and collects no identifier,
-we hold no personal data about you arising from its use, and so there is
-normally nothing to access, correct, port or erase.
+Because the extension stores no identifying personal information on our servers
+and identifies analytics only by a per-install public key thumbprint (if
+enabled), we hold no directly identifying personal data about you arising from
+its use, and so there is normally nothing to access, correct, port or erase.
 
 If you are in the EEA, the UK or Switzerland, the GDPR rights of access,
 rectification, erasure, restriction, portability, objection and withdrawal of
@@ -169,8 +277,8 @@ We would rather you wrote to us first at privacy@sanmarcsoft.com.
 
 ## 9. Children
 
-The extension is not directed at children under 13 and collects no data from
-anyone, including children.
+The extension is not directed at children under 13 and collects no personal
+data from anyone, including children.
 
 ## 10. Changes
 
@@ -188,10 +296,10 @@ and the source is public:
 |---|---|
 | The durable check is off by default | `src/constants.ts`, `MANIFEST_STORE_PROBE_DEFAULT` |
 | What the durable check sends | `src/manifestStore.ts` |
-| The complete set of network calls | `grep -rn "fetch(" src/` returns exactly five. Four are rows 3.1, 3.4, 3.5 and 3.6; the fifth (`src/utils.ts`) is a `data:` URL that reaches no network. |
+| The complete set of network calls | `grep -rn "fetch(" src/` returns exactly six. Five reach external endpoints: rows 3.1, 3.4, 3.5, 3.6, and 3.7 (analytics, opt-in only); the sixth (`src/utils.ts`) is a `data:` URL that reaches no network. |
 | The trust-list host allowlist | `src/trustlist.ts`, `ALLOWED_REFRESH_HOSTS` |
 | The `?src=` values | `src/constants.ts`, the `ClickSource` type |
-| No analytics | `grep -rniE "google-analytics|googletagmanager|gtag\(|\bsentry\b|posthog|mixpanel|@segment|amplitude" src/` returns zero hits |
+| Anonymous analytics implementation | The source file is `src/analytics.ts`, with all events and parameters typed and declared there. A build with an empty `TELEMETRY_RELAY_URL` makes the client completely inert: it never calls `fetch` and never logs. The companion relay service is in `relay/`. |
 
 ## 12. Contact
 

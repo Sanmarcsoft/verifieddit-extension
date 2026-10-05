@@ -6,9 +6,12 @@
 import { type TrustListInfo, getTrustListInfos, removeTrustList, addTSATrustFile, addTrustFile } from './trustlistProxy.js'
 import packageManifest from '../package.json'
 import { BUILD_INFO } from './build-info'
-import { AUTO_SCAN_DEFAULT, MSG_AUTO_SCAN_UPDATED, MSG_REQUEST_C2PA_ENTRIES, TRUSTEDDIT_LINK, taggedLink, MSG_RESPONSE_C2PA_ENTRIES, MSG_RESPONSE_C2PA_SUMMARY, MANIFEST_STORE_PROBE_DEFAULT, MANIFEST_STORE_PROBE_KEY } from './constants.js'
+import { familyTag } from './releaseTag.js'
+import { AUTO_SCAN_DEFAULT, MSG_AUTO_SCAN_UPDATED, MSG_REQUEST_C2PA_ENTRIES, TRUSTEDDIT_LINK, taggedLink, MSG_RESPONSE_C2PA_ENTRIES, MSG_RESPONSE_C2PA_SUMMARY, MANIFEST_STORE_PROBE_DEFAULT, MANIFEST_STORE_PROBE_KEY, ICON_ONLY_DEFAULT, ICON_ONLY_KEY } from './constants.js'
+import { getAnalyticsConsent, setAnalyticsConsent, options_opened } from './analytics.js'
 import { type C2paEntryDetails, type MSG_RESPONSE_C2PA_ENTRIES_PAYLOAD, type MSG_RESPONSE_C2PA_SUMMARY_PAYLOAD } from './inject.js'
-import { crIconDataUrl } from './icon.js'
+import { crIconDataUrl, iconOnlyReady, isIconOnly } from './icon.js'
+import { BADGE_LEGEND, badgeDataUrl, explainBadge } from './badgeArt'
 // Side-effect import: registers <c2pa-provenance-graph>. rollup's
 // moduleSideEffects predicate keeps src/ modules, so this survives the build
 // (see rollup.config.js — a bare import here was silently dropped before).
@@ -39,12 +42,7 @@ function setHref (id: string, url: string): void {
  * Falls back to the version string from package.json if no tag is available.
  */
 function releaseFamilyTag (): string {
-  if (BUILD_INFO.tag !== '') return BUILD_INFO.tag
-  const td = BUILD_INFO.tagDescribe
-  if (td == null || td === '' || td === 'unknown') return `v${BUILD_INFO.version}`
-  // Strip trailing "-<n>-g<sha>[-dirty]" if present.
-  const match = td.match(/^(.+?)(?:-\d+-g[0-9a-f]+(?:-dirty)?)?$/)
-  return match?.[1] ?? td
+  return familyTag(BUILD_INFO)
 }
 
 function populateReleaseHeader (): void {
@@ -190,10 +188,45 @@ async function renderInitErrorBanner (): Promise<void> {
   banner.removeAttribute('hidden')
 }
 
+async function renderAnalyticsConsentBanner (): Promise<void> {
+  const banner = document.getElementById('analyticsConsentBanner')
+  if (banner == null) return
+
+  const consent = await getAnalyticsConsent()
+  if (consent !== 'unset') {
+    banner.setAttribute('hidden', '')
+    return
+  }
+
+  banner.removeAttribute('hidden')
+
+  const btnYes = document.getElementById('consentBtnYes')
+  const btnNo = document.getElementById('consentBtnNo')
+  const linkOptions = document.getElementById('consentBannerOptionsLink')
+
+  btnYes?.addEventListener('click', () => {
+    void setAnalyticsConsent('granted')
+    banner.setAttribute('hidden', '')
+  })
+
+  btnNo?.addEventListener('click', () => {
+    void setAnalyticsConsent('denied')
+    banner.setAttribute('hidden', '')
+  })
+
+  linkOptions?.addEventListener('click', (e) => {
+    e.preventDefault()
+    const optionsTabBtn = document.querySelector('.tab[data-tab="options"]') as HTMLButtonElement | null
+    optionsTabBtn?.click()
+  })
+}
+
 document.addEventListener('DOMContentLoaded', function (): void {
+  void iconOnlyReady.then(renderBadgeLegend)
   populateBuildInfo()
   renderWhatsNew()
   void renderInitErrorBanner()
+  void renderAnalyticsConsentBanner()
   // The Options-tab call to action ships as href="#" in the static markup and
   // is resolved here, so the surface tag lives in one place (constants.ts)
   // rather than being hand-written into HTML where it would drift.
@@ -206,9 +239,18 @@ document.addEventListener('DOMContentLoaded', function (): void {
   // touch the session storage keys we care about, so a delayed init
   // failure still becomes visible to the user.
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'session') return
-    if ('c2paInitError' in changes || 'trustListsInitError' in changes) {
+    if (area === 'session' && ('c2paInitError' in changes || 'trustListsInitError' in changes)) {
       void renderInitErrorBanner()
+    }
+    if (area === 'local' && 'analyticsConsent' in changes) {
+      const consentToggle = document.getElementById('toggleAnalyticsConsent') as ToggleSwitch | null
+      if (consentToggle != null) {
+        consentToggle.checked = changes.analyticsConsent.newValue === 'granted'
+      }
+      if (changes.analyticsConsent.newValue !== 'unset') {
+        const banner = document.getElementById('analyticsConsentBanner')
+        banner?.setAttribute('hidden', '')
+      }
     }
   })
 
@@ -238,6 +280,40 @@ document.addEventListener('DOMContentLoaded', function (): void {
     void chrome.storage.local.set({ [MANIFEST_STORE_PROBE_KEY]: checked })
   })
 
+  // Icon-only badges: a display preference, nothing leaves the browser. The
+  // legend and the rows already listed are redrawn so the change is seen at once.
+  const iconOnlyToggle = document.getElementById('toggleIconOnly') as ToggleSwitch | null
+  if (iconOnlyToggle != null) {
+    chrome.storage.local.get(ICON_ONLY_KEY, (result) => {
+      iconOnlyToggle.checked = result[ICON_ONLY_KEY] ?? ICON_ONLY_DEFAULT
+    })
+    iconOnlyToggle.addEventListener('change', (event) => {
+      const checked = (event as CustomEvent).detail.checked
+      void chrome.storage.local.set({ [ICON_ONLY_KEY]: checked })
+    })
+  }
+  // Registered after icon.ts's own listener, so isIconOnly() is already current.
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !(ICON_ONLY_KEY in changes)) return
+    renderBadgeLegend()
+    document.querySelectorAll<HTMLElement>('.v-row[data-status]').forEach((row) => {
+      const img = row.querySelector<HTMLImageElement>('.v-status-icon')
+      if (img != null) img.src = crIconDataUrl(row.dataset.status as Parameters<typeof crIconDataUrl>[0])
+    })
+  })
+
+  const analyticsConsentToggle = document.getElementById('toggleAnalyticsConsent') as ToggleSwitch | null
+  if (analyticsConsentToggle != null) {
+    void getAnalyticsConsent().then((consent) => {
+      analyticsConsentToggle.checked = consent === 'granted'
+    })
+
+    analyticsConsentToggle.addEventListener('change', (event) => {
+      const checked = (event as CustomEvent).detail.checked
+      void setAnalyticsConsent(checked ? 'granted' : 'denied')
+    })
+  }
+
   // Add event listeners to switch tabs
   const tabs = document.querySelectorAll('.tab')
   const tabContents = document.querySelectorAll('.tab-content')
@@ -254,6 +330,7 @@ document.addEventListener('DOMContentLoaded', function (): void {
 
       // refresh the trust lists info in the option tab
       if (tabContentId === 'options') {
+        void options_opened()
         const info = document.getElementById('trust-list-info')
         if (info !== null && info.innerHTML === '') {
           // Paint an immediate placeholder so the Options tab never
@@ -356,6 +433,7 @@ async function showResults (): Promise<void> {
     return
   }
   armScanTimeout()
+  chrome.runtime.sendMessage({ action: MSG_REQUEST_C2PA_ENTRIES }).catch(() => {})
   chrome.tabs.sendMessage(id, { action: MSG_REQUEST_C2PA_ENTRIES, data: null })
     .catch(() => {
       // No content script in this tab: a browser page, the Web Store, a PDF
@@ -436,7 +514,15 @@ function statusLabel (r: MSG_RESPONSE_C2PA_ENTRIES_PAYLOAD): { text: string, cls
     case 'error':           return { text: 'Invalid',     cls: 'status-error' }
     case 'ai-success':      return { text: 'AI (signed)', cls: 'status-ai-success' }
     case 'ai-error':        return { text: 'AI (error)',  cls: 'status-ai-error' }
-    case 'no-credentials':  return { text: 'No Creds',    cls: 'status-no-credentials' }
+    case 'no-credentials':  return { text: 'No label',    cls: 'status-no-credentials' }
+    case 'success-durable':    return { text: 'Trusted, backed up', cls: 'status-success' }
+    case 'warning-durable':    return { text: 'Untrusted, backed up', cls: 'status-warning' }
+    case 'error-durable':      return { text: 'Invalid, original on record', cls: 'status-error' }
+    case 'ai-success-durable': return { text: 'AI (signed), backed up', cls: 'status-ai-success' }
+    case 'stripped':           return { text: 'Recovered from registry', cls: 'status-recovered' }
+    case 'stripped-ai':        return { text: 'Recovered from registry: AI', cls: 'status-recovered-ai' }
+    case 'stripped-unknown':   return { text: 'Recovered from registry', cls: 'status-recovered' }
+    case 'unavailable':        return { text: 'Unchecked',   cls: 'status-unavailable' }
     default:                return { text: r.status,      cls: 'status-unknown' }
   }
 }
@@ -749,4 +835,33 @@ function openDiagramInTab (event: Event): void {
       console.debug('popup: could not open the provenance chain in a tab:', error)
     }
   })()
+}
+
+/**
+ * The legend under the results: every badge beside its meaning in plain words.
+ * Built from badgeArt.ts, the same source the page badge uses, so the picture
+ * and the words cannot drift apart.
+ */
+function renderBadgeLegend (): void {
+  const list = document.getElementById('badgeLegendList')
+  if (list == null) return
+  list.replaceChildren()
+  for (const { status } of BADGE_LEGEND) {
+    const { title, text } = explainBadge(status)
+    const row = document.createElement('div')
+    row.className = 'badge-legend-row'
+    const img = document.createElement('img')
+    img.src = badgeDataUrl(status, { iconOnly: isIconOnly() })
+    img.alt = ''
+    img.width = 28
+    img.height = 28
+    const words = document.createElement('div')
+    const name = document.createElement('strong')
+    name.textContent = title
+    const meaning = document.createElement('p')
+    meaning.textContent = text
+    words.append(name, meaning)
+    row.append(img, words)
+    list.append(row)
+  }
 }

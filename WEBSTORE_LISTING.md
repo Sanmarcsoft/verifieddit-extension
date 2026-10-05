@@ -50,7 +50,7 @@ The internet is now a mix of authentic media and synthetic media at industrial s
 - **Interactive provenance graph**: the chain of custody as a graph you can explore: expand any node for its detail, pan, zoom, fit to frame, or open it full screen. Covers multi-generation ingredient history, assertions, sensor telemetry, signer certificate, timestamp authority, and trust-list match.
 - **Right-click manual inspection** for images, videos, and audio files, even outside the auto-scan flow.
 - **Trust list management**: bring your own trust anchors, or use the bundled lists: the 30 anchors from the C2PA Conformance Program, the 22 official C2PA timestamp authorities, the 26 known-certificate anchors the Content Authenticity Initiative publishes (so mainstream cameras and editing software read as trusted out of the box), an AI trust list, and the Trusteddit anchors.
-- **100% local processing**: see Privacy below.
+- **Local verification engine**: all C2PA parsing and cryptographic validation runs locally in your browser via WebAssembly (see Privacy below).
 
 ### What it can read
 
@@ -78,13 +78,13 @@ Verifieddit verifies the authenticity and provenance of images, videos, and audi
 
 ## Privacy Policy (draft)
 
-> This draft is generated from a direct audit of the v1.1.0 source code. It is
+> This draft is generated from a direct audit of the source code. It is
 > intended to be reviewed against the published policy at
 > <https://www.verifieddit.com/privacy> (the URL referenced by the Chrome Web
 > Store listing), which is authoritative where the two differ.
 
-**Last updated:** 2026-08-03 (trust-anchor counts re-verified 2026-09-08 at v1.2.6)  
-**Applies to:** Verifieddit v1.1.0 Chrome extension  
+**Last updated:** 2026-09-12  
+**Applies to:** Verifieddit v1.3.0 Chrome extension  
 **Publisher:** SanMarcSoft LLC
 
 ### Single purpose
@@ -93,54 +93,55 @@ Verifieddit has one purpose: to verify the authenticity and provenance of images
 
 ### What data the extension handles
 
-Verifieddit is built to a **local-first** principle: all C2PA verification runs inside your browser and no media ever leaves your machine. Data reaches a SanMarcSoft server only when you click a link, never automatically. There are exactly two such links: **"Inspect on Verifieddit"** sends the URL of that one media file to `www.verifieddit.com` so the site can pre-fill its verifier, and **"Sign your own content with Trusteddit"** opens `www.trusteddit.com` with a parameter naming which part of the extension you clicked from. Specifically:
+Verifieddit is built to a **local-first** principle: all C2PA verification runs inside your browser and your media files never leave your machine. Data reaches an external server only when you click an external link, or when you explicitly enable optional features (the durable-credential check and anonymous usage statistics). Specifically:
 
 | Data category | Handling |
 |---|---|
-| **Media files (images, videos, audio)** on pages you visit | Verifieddit reads media bytes that your browser has already loaded for the page, and processes them inside your browser using locally-bundled WebAssembly (WASM). **Nothing is uploaded.** No copy of the media leaves your machine. |
+| **Media files (images, videos, audio)** on pages you visit | Verifieddit reads media bytes that your browser has already loaded for the page, and processes them inside your browser using locally-bundled WebAssembly (WASM). **Media files are never uploaded.** No copy of your media leaves your machine. |
 | **URLs of verified media** | Sent to `www.verifieddit.com` (as a `?url=` query parameter) **only** when you explicitly click "Inspect on Verifieddit", so the site can pre-fill its verifier. Never transmitted automatically; auto-scan does not trigger this. |
 | **Which extension surface a link was clicked from** | When you click "Sign your own content with Trusteddit", the opened URL carries `?src=` followed by a fixed word naming the surface, one of `extension-panel`, `extension-popup`, `extension-options`, `extension-context-menu`, `extension-release-notes`. It identifies a place in the interface, never you, your device, your session, or the media you were looking at. Disclosed by trusteddit.com's privacy policy §2.5. |
 | **A perceptual fingerprint of an image** (only if you switch on "Check durable credentials online") | For images whose credential declares a durable binding, Verifieddit can ask `manifests.sanmarcsoft.com` whether that credential is actually registered and recoverable. The request carries a short perceptual hash (pHash and dHash) computed in your browser, **never the image itself**, and nothing identifying you, your device or your session. Sent with `credentials: 'omit'`, so no cookies. **Off by default**; turn it on from the pillar in the panel or the Options tab, and off again the same way. |
-| **Verification results** | Computed and displayed in your browser only. Not transmitted. Not retained beyond the current page session. |
-| **User preferences** (auto-scan toggle, imported trust lists) | Stored locally in `chrome.storage.local`. Never synced to any server. Never transmitted. |
-| **Diagnostic state** (ephemeral init errors so the popup can show a banner if the C2PA engine fails to load) | Stored in `chrome.storage.session`, which is wiped automatically when the browser is closed. Never transmitted. |
-| **Analytics / telemetry** | **None.** The extension code base contains zero analytics SDKs, zero beacon URLs, zero tracking calls, and makes zero outbound HTTP requests to any analytics or telemetry endpoint. |
+| **Verification results** | Computed and displayed in your browser only. Not transmitted to any server, except as an aggregate outcome category (valid, invalid, none, error) if you opt in to anonymous usage statistics. |
+| **User preferences** (auto-scan toggle, imported trust lists, analytics consent) | Stored locally in `chrome.storage.local`. A locally generated random client UUID (`ga4ClientId`) is also stored locally. Never synced to any server. |
+| **Diagnostic and session state** (ephemeral init errors and GA4 session data) | Stored in `chrome.storage.session`, wiped automatically when the browser is closed. Session data expires after 30 minutes of inactivity. Never transmitted except as part of standard session lifetime management. |
+| **Analytics / telemetry** | **Opt-in anonymous usage statistics.** Off by default. When explicitly enabled by the user, the extension sends minimal, pseudonymous product events via the Google Analytics 4 Measurement Protocol (`https://www.google-analytics.com/mp/collect`). Sent data includes a random installation UUID (`crypto.randomUUID()`), session ID, event name, extension version, engagement time, and typed operational parameters (e.g. verification result category, media type). It never includes URLs, file names, page content, media data, media hashes, signer details, or account information. Google receives the request IP address as part of standard HTTPS transport. Can be disabled at any time in Options. |
 | **Cookies** | **None.** The extension does not set or read cookies. |
 | **`localStorage` / `sessionStorage`** | **Not used.** Only `chrome.storage.local` and `chrome.storage.session` are used, both isolated to the extension and never shared cross-origin. |
-| **Personal account information** | **None.** Verifieddit does not require, collect, or accept any account, email, name, or identifier. |
+| **Personal account information** | **None.** Verifieddit does not require, collect, or accept any account, email, name, or personal identifier. |
 
 ### External network requests
 
-The extension performs network requests only in the following narrow, user-initiated scenarios:
+The extension performs network requests only in the following narrow scenarios:
 
 1. **Fetching the bytes of a media element** that your browser is already displaying on the page you are visiting, to read its embedded credentials. This is a separate HTTP request from the extension's background context to the same URL the page loaded the media from. It does not carry your page-session cookies (cross-origin requests from the background do not include credentials), but the media's origin server does see your IP address. The retrieved bytes are processed locally in WebAssembly and discarded; nothing is uploaded.
 2. **Opening the Verifieddit inspector** when you explicitly click "Inspect on Verifieddit". Your browser navigates to `https://www.verifieddit.com/?url=<media-url>`; the URL of the media you inspected is included as a query parameter and processed by SanMarcSoft's website under its own privacy policy.
 3. **Opening Trusteddit** when you explicitly click "Sign your own content with Trusteddit". Your browser navigates to `https://www.trusteddit.com/?src=<surface>`, where `<surface>` is a fixed word naming the part of the extension you clicked from. No identifier of you, your device, your session, or the media you were viewing is included, and the link is never followed automatically.
 4. **Confirming a durable credential** only if you have switched on "Check durable credentials online", which is off until you do. For images whose credential declares a durable binding, Verifieddit asks `manifests.sanmarcsoft.com` whether it is registered, sending a perceptual hash of the image and nothing else. This is the extension's only request that is not started by a click, which is exactly why it is a choice rather than a default.
 5. **Refreshing a trust list** only if you have explicitly imported a trust list with a `download_url` field. The bundled default trust lists set no `download_url` and are never re-fetched. Imported lists are fetched only from the exact URL you provided, with credentials omitted.
+6. **Sending anonymous usage statistics** only if you have explicitly opted in (off by default). When enabled, sends minimal event telemetry via HTTPS POST to the Google Analytics 4 Measurement Protocol (`https://www.google-analytics.com/mp/collect`). Auto-scan events are throttled to at most once per tab per minute. Can be turned off at any time in Options, immediately halting all analytics requests.
 
-With "Check durable credentials online" left off, which is how it ships, the extension contacts a SanMarcSoft server only when you click one of the two links above. Switching it on adds the manifest-store lookup described in item 4, and nothing else.
+With default settings, the extension contacts an external server only when you click one of the links above. Opting in to "Check durable credentials online" enables the manifest-store lookup in item 4. Opting in to "Share anonymous usage statistics" enables the anonymous event telemetry in item 6.
 
 ### Data sharing
 
-We do not collect any data, and therefore we do not share, sell, license, lease, trade, or transfer any data to any third party.
+We do not sell, rent, lease, trade, or transfer user data to data brokers or advertisers. With default settings, no usage data is collected or transmitted. If you explicitly choose to share anonymous usage statistics, pseudonymous event metrics are transmitted to Google Analytics 4 solely to help us understand aggregate extension performance and feature usage. We do not share this data with any other third parties.
 
 ### Data retention
 
-Because we do not receive any data, there is no retention. Local browser state (preferences, trust list cache) is governed by your browser and remains under your control. You can clear it any time from the extension's options page or from Chrome's normal data-management settings.
+Local browser state (preferences, trust list cache, consent state, random installation UUID) is stored in your browser's local storage and managed by your browser. Session IDs in session storage expire after 30 minutes of inactivity. When anonymous usage statistics are enabled, aggregate metrics in Google Analytics 4 are retained according to standard GA4 retention schedules (e.g., 2 or 14 months). Because analytics data is pseudonymous under a random UUID and contains no account or identity information, there is no separate user account deletion path. Disabling analytics in Options immediately stops further telemetry. Uninstalling the extension removes all locally stored state.
 
 ### Compliance with Google Chrome Web Store policies
 
 - **Single Purpose policy**: every feature and permission in Verifieddit serves the single purpose of verifying media provenance. See "Single purpose" above.
-- **User Data policy**: Verifieddit's use of permissions is limited to providing the single user-facing feature. Data leaves the device only on your explicit click, and only in two forms: the URL of a media file you choose to inspect (the "Inspect on Verifieddit" link), and a fixed word naming which extension surface you clicked from (the Trusteddit link). Both are used solely to provide the feature on the receiving SanMarcSoft site; neither is sold, used for advertising, or transferred to other third parties. In the CWS Data Safety form this is declared as **Website content → App functionality**.
-- **Off-device data**: two user-initiated navigations (a media URL to verifieddit.com, a surface name to trusteddit.com) and, only after you opt in, a perceptual image hash to manifests.sanmarcsoft.com. Nothing else leaves the device, and none of it is sold, used for advertising, or shared with third parties.
+- **User Data policy**: Verifieddit's use of permissions is limited to providing the single user-facing feature. With default settings, data leaves the device only upon your explicit click. If you opt in to optional features, data is transmitted strictly for the declared feature: perceptual hashes to recover credentials (Website content → App functionality), interaction events (User activity → Analytics), and a random installation UUID (Personally identifiable information: User identifiers → Analytics). None of it is sold, used for advertising, or transferred to unauthorized third parties.
+- **Off-device data**: two user-initiated navigations (a media URL to verifieddit.com, a surface name to trusteddit.com) and two optional opt-in features: perceptual image hashes to manifests.sanmarcsoft.com (if durable credential check is enabled), and anonymous event metrics to Google Analytics 4 Measurement Protocol (if anonymous usage statistics is enabled). Nothing else leaves the device, and none of it is sold or used for advertising.
 - **Trust anchors**: the demo fixtures in the source repository are signed by a development key that is public in that repository. That key is not loaded as a trust anchor in any published build, so nothing signed with it can read as trusted to a user who installs from the Chrome Web Store.
 
 ### Permissions and what they actually do
 
 | Permission | Used for |
 |---|---|
-| `storage` | Save your auto-scan preference and a local cache of the loaded trust lists, both inside your own browser. |
+| `storage` | Save your auto-scan preference, consent state, random client ID, and a local cache of the loaded trust lists, all inside your own browser. |
 | `activeTab` | Scope verification work to the tab you are actively viewing when you click the extension icon or use the right-click context menu. |
 | `contextMenus` | Add "Verify with Verifieddit." to your right-click menu on images, videos, and audio elements. |
 | `alarms` | Schedule a periodic refresh (every 24 hours) of any custom trust list you have imported (bundled lists are never re-fetched). |

@@ -14,6 +14,16 @@
 
 <body>
     <div id="initErrorBanner" class="init-error-banner" hidden></div>
+    <div id="analyticsConsentBanner" class="consent-banner" hidden>
+        <div class="consent-banner-text">
+            Share anonymous usage statistics to help improve Verifieddit? No URLs or page content are ever sent.
+            <a href="#" id="consentBannerOptionsLink" class="consent-banner-link">Options</a>
+        </div>
+        <div class="consent-banner-actions">
+            <button type="button" id="consentBtnYes" class="consent-btn consent-btn-primary">Yes</button>
+            <button type="button" id="consentBtnNo" class="consent-btn consent-btn-secondary">No thanks</button>
+        </div>
+    </div>
     <div class="tab-bar" role="tablist">
         <button class="tab active" data-tab="validation">Validation</button>
         <button class="tab" data-tab="trustlists">Trust Lists</button>
@@ -29,6 +39,10 @@
                     Scanning this page for images, video and audio…
                 </div>
             </div>
+            <details id="badgeLegend" class="badge-legend">
+                <summary>What do the badges mean?</summary>
+                <div id="badgeLegendList"></div>
+            </details>
         </div>
 
         <div id="trustlists" class="tab-content">
@@ -119,9 +133,28 @@
                 of images that declare a durable credential to
                 <code>manifests.sanmarcsoft.com</code> to confirm the credential is
                 registered and recoverable. Fingerprints only, never the image, and
-                nothing identifying you or your device. With this off, such assets
-                still verify — their durable binding reads as declared rather than
+                nothing identifying you or your device. If the signed credentials name
+                a watermark, its name and value also go to
+                <code>api.verifieddit.com</code>, which asks the public registry that
+                owns it. When you right-click an image with no credentials and choose
+                Verify, the same fingerprint is sent to look for a label that was
+                removed. That never happens on its own. With this off, such assets
+                still verify: their durable binding reads as declared rather than
                 confirmed.
+            </p>
+            <br>
+            <toggle-switch label="Icon-only badges, no colour needed" id="toggleIconOnly"></toggle-switch>
+            <p class="option-note">
+                Off by default. For anyone who cannot tell the badge colours apart:
+                every badge becomes black on white and says its verdict with a shape.
+                A check means verified, a four-point spark means made with AI, a
+                triangle means the signer is unknown, a cross means changed after
+                signing. Nothing is sent anywhere.
+            </p>
+            <br>
+            <toggle-switch label="Share anonymous usage statistics" id="toggleAnalyticsConsent"></toggle-switch>
+            <p class="option-note">
+                Usage statistics are optional and off by default. Each event is signed by a key created on this device and sent to a relay operated by SanMarcSoft, stored in SanMarcSoft's self-hosted Umami in the EU. Events carry only the event name, its typed parameters, the extension version and the browser family (Chrome or Firefox). Nothing is sent to Google. IP addresses are not stored. Turning this off sends an erasure request and deletes the key.
             </p>
 
             <hr>

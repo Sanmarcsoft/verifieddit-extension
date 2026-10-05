@@ -15,7 +15,8 @@ export interface MSG_PAYLOAD {
 // manifest. It renders as a neutral-grey camera with a small red slash
 // to signal "checked, nothing found" — distinct from the transient
 // 'img' status used during auto-scan detection.
-export type VALIDATION_STATUS = 'success' | 'warning' | 'error' | 'audio' | 'img' | 'video' | 'none' | 'ai-success' | 'ai-error' | 'no-credentials'
+export type VALIDATION_STATUS = 'success' | 'warning' | 'error' | 'audio' | 'img' | 'video' | 'none' | 'ai-success' | 'ai-error' | 'no-credentials' | 'stripped'
+  | 'success-durable' | 'ai-success-durable' | 'warning-durable' | 'error-durable' | 'stripped-unrecovered' | 'unavailable' | 'stripped-ai' | 'stripped-unknown'
 
 export const MSG_VALIDATE_URL = 'MSG_VALIDATE_URL'
 export const MSG_C2PA_VALIDATE_URL = 'MSG_C2PA_VALIDATE_URL'
@@ -158,6 +159,14 @@ export const MANIFEST_STORE_PROBE_DEFAULT = false
 export const MSG_SET_MANIFEST_STORE_PROBE = 'setManifestStoreProbe'
 /** chrome.storage.local key backing MANIFEST_STORE_PROBE_DEFAULT. */
 export const MANIFEST_STORE_PROBE_KEY = 'manifestStoreProbe'
+
+/**
+ * Icon-only badges (#184): black-on-white badges that say the verdict by shape,
+ * for people who cannot tell the badge colours apart. A display preference:
+ * nothing leaves the browser. chrome.storage.local key and its default.
+ */
+export const ICON_ONLY_KEY = 'iconOnlyBadges'
+export const ICON_ONLY_DEFAULT = false
 
 export const TRUSTLIST_UPDATE_INTERVAL = 1440 /* 24 hours */
 export const LOCAL_TRUST_ANCHOR_LIST_NAME = 'Local Trust Anchors'

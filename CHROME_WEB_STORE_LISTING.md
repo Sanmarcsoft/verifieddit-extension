@@ -67,9 +67,10 @@ Content Credentials are a new open standard (C2PA) for proving where digital con
 - Auto-Scan Toggle: Enable or disable automatic scanning per your preference
 
 **Privacy-First:**
-- All processing happens locally in your browser using WebAssembly
+- All verification processing happens locally in your browser using WebAssembly
 - No media files are ever uploaded to any server
-- No analytics, tracking, or telemetry
+- Anonymous usage statistics are strictly opt-in and off by default
+- No advertising, tracking, or profiling
 - No account required
 
 **What It Can Read:**
@@ -94,7 +95,7 @@ https://www.verifieddit.com/privacy
 ## Permission Justifications
 
 ### storage
-Saves the user's auto-scan preference and a local cache of the loaded trust lists in the browser. Nothing is synced to a server.
+Saves the user's auto-scan preference and a local cache of the loaded trust lists in the browser. Also stores the analytics opt-in consent state (`analyticsConsent`). Ephemeral relay ticket data (`telemetryTicketData`) is stored in `chrome.storage.session`, while the non-extractable ECDSA signing key pair is stored in IndexedDB. Nothing is synced to a server. No new permission is required for analytics.
 
 ### activeTab
 Accesses the currently active tab when the user clicks the toolbar action or selects an item from the right-click context menu, scoped to that single interaction.
@@ -112,32 +113,75 @@ The opt-in for the manifest-store lookup is kept in `chrome.storage.local` under
 Hosts the C2PA WebAssembly verification engine in an offscreen document. A Manifest V3 service worker cannot run the WASM toolkit directly, so verification work is delegated to this document. It renders nothing to the user, performs no network calls of its own, and exists only for the duration of verification.
 
 ### Host Permissions: <all_urls>
-The extension needs access to all URLs because C2PA content credentials can appear on any website. The extension scans image, video, and audio elements on the current page to detect and verify cryptographic provenance data embedded in media files. Without broad host access, users would need to manually allowlist every website, defeating the purpose of automatic content credential detection.
+The extension needs access to all URLs because C2PA content credentials can appear on any website. The extension scans image, video, and audio elements on the current page to detect and verify cryptographic provenance data embedded in media files. Without broad host access, users would need to manually allowlist every website, defeating the purpose of automatic content credential detection. The existing `<all_urls>` host permission also covers outbound fetch requests to endpoints such as the telemetry relay when optional analytics is enabled (no data is sent to Google), so no additional host permission is required.
 
 ## Data Sent Off-Device
 
-Declare in the CWS Privacy tab as **Website content → App functionality**. Two
-user-initiated navigations, both plain link clicks, neither automatic:
+In the Chrome Web Store Developer Console Privacy tab, disclosures are declared
+under the following categories and purposes:
+
+1. **Website content → App functionality**:
+   - User-initiated click to inspect media (`verifieddit.com/?url=<media-url>`)
+   - Opt-in durable credential lookup (`manifests.sanmarcsoft.com/v1/matches/byBinding`) sending a perceptual hash
+   - Same opt-in: registry lookup (`api.verifieddit.com/api/v1/durable/resolve`) sending the watermark algorithm name and value read from the file's signed credentials
+2. **User activity → Analytics**:
+   - Opt-in interaction events (`extension_installed`, `extension_updated`, `verify_started`, `verify_completed`, `badge_scan`, `options_opened`, `consent_changed`)
+3. **Personally identifiable information: User identifiers → Analytics**:
+   - Opt-in per-install identifier (RFC 7638 thumbprint of an on-device ECDSA P-256 public key, generated locally and not derived from user or device identity)
+
+Outbound destinations:
 
 | Destination | When | What travels |
 |---|---|---|
 | `www.verifieddit.com/?url=<media-url>` | User clicks "Inspect on Verifieddit" | The URL of the one media file they chose to inspect |
 | `www.trusteddit.com/?src=<surface>` | User clicks "Sign your own content with Trusteddit" | A constant naming which extension surface the link was clicked from. No user, device, asset or session identifier |
 | `manifests.sanmarcsoft.com/v1/matches/byBinding` | **Only after the user opts in** to "Check durable credentials online" (off by default), for images whose credential declares a durable binding | A perceptual hash of the image (pHash + dHash). Never the image, never a user, device or session identifier. `credentials: 'omit'` |
+| `api.verifieddit.com/api/v1/durable/resolve` | **Only after the user opts in** to "Check durable credentials online" (the same switch, off by default), for files whose signed credentials name a watermark | The watermark's algorithm name and binding value, read from the signed credentials. Never the image or a hash of it, never a user, device or session identifier. `credentials: 'omit'`. The service forwards the two values to the public registry that owns the algorithm |
+| `manifests.sanmarcsoft.com/v1/matches/byBinding` and `/v1/manifests/{id}?format=json` (stripped-image recovery) | **Only after the user opts in** to "Check durable credentials online" AND right-clicks an image that has no credentials and chooses Verify. Never on automatic scan | A perceptual hash of that image (pHash + dHash), then the matched credential's public record id. Never the image, never a user, device or session identifier. `credentials: 'omit'` |
+| `manifests.sanmarcsoft.com/v1/matches/byBinding?alg=trustmark` and `/v1/manifests/{id}?format=json` (registry-record check) | **Only after the user opts in**, for a file whose signed credentials name a TrustMark watermark | The watermark binding value read from the signed credentials, then the matched record id. The file's hash is compared on the device and never sent. `credentials: 'omit'` |
+| `manifests.sanmarcsoft.com/v1/manifests/{id}` (recovered credential) | **Only after** an explicit right-click Verify found a registered match for an image with no credentials | The matched record id. The response is the registered credential, shown to the user marked as recovered |
+| Telemetry relay (configured by `TELEMETRY_RELAY_URL`) | **Only after the user opts in** to "Share anonymous usage statistics" (off by default) | Signed event payload with install ID (public key thumbprint), ticket, timestamp, extension version, browser family (Chrome or Firefox), signature, JWK, and typed event parameters (`source`, `result`, `has_durable_binding`, `media_type`, `previous_version`, `value`). Forwarded to self-hosted Umami in the EU (`analytics.sanmarcsoft.com`). `fetch` POST / DELETE. |
 
 The `src` value is drawn from a fixed set (`extension-panel`, `extension-popup`,
 `extension-options`, `extension-context-menu`, `extension-release-notes`) and is
 disclosed by the receiving sites: verifieddit.com privacy policy §2.8 and
 trusteddit.com privacy policy §2.5, both published before the parameter shipped.
 
-The manifest-store lookup is the extension's only request not begun by a click,
-which is why it ships off and is granted in context: the "Cloud-recoverable"
-pillar in the panel states what would be sent before anything is. Consent
-applies forward only; enabling it never re-checks media already on screen.
+The manifest-store lookup is off by default and is granted in context: the
+"Cloud-recoverable" pillar in the panel states what would be sent before anything
+is. Consent applies forward only; enabling it never re-checks media already on
+screen.
 
-Beyond these, the extension collects nothing, sends no analytics, and sets no
-cookies. Verified against the source: zero analytics SDKs, and no
-`document.cookie`, `localStorage` or `sessionStorage` anywhere in `src/`.
+Anonymous usage statistics are collected via a signed telemetry relay operated
+by SanMarcSoft (`src/analytics.ts`) and forwarded to self-hosted Umami in the
+EU (`https://analytics.sanmarcsoft.com`). No data is sent to Google. Collection
+is strictly **off by default** and transmits nothing unless the user explicitly
+opts in via the initial popup consent banner or the Options tab toggle. Each event
+is signed by an ECDSA P-256 key generated on the device for that install, with
+the private key held non-extractably in IndexedDB; the install identifier is the
+RFC 7638 thumbprint of the public key, not derived from user or device identity.
+IP addresses are not stored: the relay uses the client address only in memory,
+as a salted hash with a daily rotating salt, for rate limiting, and never
+forwards or logs it. Events carry only the event name, its typed parameters, the
+extension version, and the browser family (Chrome or Firefox). The exact seven
+events sent are `extension_installed`, `extension_updated` (`previous_version`),
+`verify_started` (`source`), `verify_completed` (`result`,
+`has_durable_binding`, `media_type`), `badge_scan`, `options_opened`, and
+`consent_changed` (`value`). It sends no URLs, page titles, page content, file
+names, or content of verified media.
+Auto-scan telemetry is throttled to at most one verify/scan event set per tab
+per minute. Users can turn off usage statistics at any time from the popup
+Options tab: doing so immediately stops outbound telemetry, sends one signed
+erasure request (`DELETE /v1/installs`) to the relay, and deletes the key, ticket,
+and install identifier from the browser. Erasure of already stored records in
+Umami is processed by SanMarcSoft from the relay's erasure queue (it is not
+instantaneous or automatic inside Umami). A build produced with an empty
+`TELEMETRY_RELAY_URL` contains no endpoint credentials and the analytics client
+is completely inert.
+
+Beyond these, the extension collects nothing and sets no cookies. Verified
+against the source: zero analytics SDKs, and no `document.cookie`,
+`localStorage` or `sessionStorage` anywhere in `src/`.
 
 ## Screenshots
 

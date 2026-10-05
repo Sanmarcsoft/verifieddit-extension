@@ -26,6 +26,11 @@ interface IconTextItem {
 
 type StatusTone = Verdict
 
+/** Codes that compare the manifest with the file's own bytes. Meaningless for a recovered manifest. */
+function isAssetBindingCode (code: string): boolean {
+  return /(dataHash|bmffHash|boxesHash|collectionHash|hardBindings|assertion\.hashedURI)/i.test(code)
+}
+
 // Fatal-code classification and the verdict rule live in src/verdict.ts so the
 // websites can be tested against the same definition. See that file for the reasoning.
 
@@ -173,6 +178,19 @@ export class C2paOverlay extends LitElement {
       }
       .status-badge.verified  { background: rgba(16, 185, 129, 0.14); color: var(--ok); }
       .status-badge.authentic { background: rgba(56, 189, 248, 0.14); color: var(--accent); }
+      .status-badge.recovered { background: rgba(96, 165, 250, 0.18); color: #93c5fd; }
+      .recovered-banner {
+        margin: 8px 0 10px;
+        padding: 8px 10px;
+        border: 1px solid rgba(96, 165, 250, 0.55);
+        border-left-width: 4px;
+        border-radius: 6px;
+        background: rgba(96, 165, 250, 0.10);
+        font-size: 11px;
+        line-height: 1.5;
+        color: #dbeafe;
+      }
+      .recovered-banner strong { display: block; color: #bfdbfe; margin-bottom: 2px; }
       .status-badge.invalid   { background: rgba(244, 63, 94, 0.14);  color: var(--bad); }
       .status-badge.unsigned  { background: rgba(245, 158, 11, 0.14); color: var(--warn); }
 
@@ -416,7 +434,10 @@ export class C2paOverlay extends LitElement {
   }
 
   private setStatus (c2paResult: C2paResult): StatusSummary {
-    const codes = c2paResult.manifestStore?.validationStatus ?? []
+    // A recovered manifest has no file to be bound to, so its "does the file match"
+    // codes say nothing about this copy. They are left out, and the panel says so.
+    const codes = (c2paResult.manifestStore?.validationStatus ?? [])
+      .filter((c) => c2paResult.recoveredFrom == null || !isAssetBindingCode(c))
     // Only genuine integrity failures make a credential "invalid". An untrusted
     // or expired signer is not a failure — it is signed, intact, just not in the
     // trust list (or past its cert validity).
@@ -559,8 +580,17 @@ export class C2paOverlay extends LitElement {
         <div class="header-left">
           <span class="brand">Content Credentials</span>
         </div>
-        <span class="status-badge ${tone}">${tone}</span>
+        <span class="status-badge ${c2paResult.recoveredFrom != null ? 'recovered' : tone}">${c2paResult.recoveredFrom != null ? 'recovered' : tone}</span>
       </div>
+
+      ${c2paResult.recoveredFrom != null
+        ? html`<div class="recovered-banner reveal" style="animation-delay:40ms" role="note">
+            <strong>Recovered from a registry.</strong>
+            These credentials are not in this file. Its own label was removed, and everything below comes from a registered picture that matches it
+            (${c2paResult.recoveredFrom.similarityScore}% match, ${c2paResult.recoveredFrom.registry}).
+            It describes the original. This copy may have been changed since.
+          </div>`
+        : nothing}
 
       <div class="title reveal" style="animation-delay:80ms">
         <div class="thumbnailFrame">
@@ -578,7 +608,7 @@ export class C2paOverlay extends LitElement {
         ? html`<c2pa-pillars class="reveal" style="animation-delay:${pillarsDelay}ms; display:block" .pillars=${pillars} .signerTrusted=${this.status?.trusted === true}></c2pa-pillars>`
         : nothing}
 
-      ${this.renderErrors(c2paResult.manifestStore.validationStatus)}
+      ${this.renderErrors(c2paResult.recoveredFrom != null ? c2paResult.manifestStore.validationStatus.filter((c: string) => !isAssetBindingCode(c)) : c2paResult.manifestStore.validationStatus)}
 
       <!--
         The provenance graph is the thing this extension does that a padlock
@@ -778,7 +808,7 @@ const PILLAR_DEFS: Array<{
     label: 'Cloud-recoverable',
     sub: 'manifest store · probe',
     needsConsent: true,
-    detail: 'Confirming this means asking manifests.sanmarcsoft.com whether a credential is actually registered for this image. That request sends a perceptual fingerprint of the image — a short hash, never the image itself, and nothing identifying you or your device. It is off until you turn it on.',
+    detail: 'Confirming this means asking manifests.sanmarcsoft.com whether a credential is actually registered for this image. That request sends a perceptual fingerprint of the image — a short hash, never the image itself, and nothing identifying you or your device. If the signed credentials name a watermark, its name and value are also sent to api.verifieddit.com, which asks the public registry that owns it. It is off until you turn it on.',
     icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>`
   }
 ]
@@ -907,6 +937,7 @@ export class C2paPillars extends LitElement {
         padding: 8px 10px;
       }
       .detail p { margin: 0; font-size: 10px; line-height: 1.5; color: #cbd5e1; }
+      .detail p.confirmed-by { margin-top: 6px; color: #86efac; font-weight: 600; }
       /* A request to send something off-device is marked as such, not slipped in. */
       .detail.consent {
         border-color: rgba(245, 158, 11, 0.4);
@@ -993,6 +1024,18 @@ export class C2paPillars extends LitElement {
           return html`
             <div class="detail ${needsOptIn ? 'consent' : ''}">
               <p>${def.detail}</p>
+              ${def.key === 'manifestStore' && this.pillars?.manifestStore === 'verified'
+                ? html`<p class="confirmed-by">${(this.pillars.confirmedBy ?? []).length > 0
+                    ? `Registered with: ${this.pillars.confirmedBy.join(', ')}.`
+                    : 'Confirmed by image fingerprint in the SanMarcSoft Manifest Store.'}</p>`
+                : nothing}
+              ${def.key === 'manifestStore' && this.pillars?.registryRecord != null
+                ? html`<p class="confirmed-by">Registry record: signed by ${this.pillars.registryRecord.signerCn ?? 'an unnamed signer'}${this.pillars.registryRecord.signedAt != null ? ` on ${this.pillars.registryRecord.signedAt.slice(0, 10)}` : ''}. ${this.pillars.registryRecord.sameFile === true
+                    ? 'This file is the registered original.'
+                    : this.pillars.registryRecord.sameFile === false
+                      ? 'This file DIFFERS from the registered original: it has been changed or re-saved since it was signed.'
+                      : 'The registry holds no file hash to compare.'}</p>`
+                : nothing}
               ${def.needsConsent === true
                 ? (needsOptIn
                     ? html`

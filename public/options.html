@@ -35,9 +35,32 @@
         of images that declare a durable credential to
         <code>manifests.sanmarcsoft.com</code> to confirm the credential is
         registered and recoverable. Fingerprints only, never the image, and
-        nothing identifying you or your device. With this off, such assets
+        nothing identifying you or your device. If the signed credentials name
+        a watermark, its name and value also go to
+        <code>api.verifieddit.com</code>, which asks the public registry that
+        owns it. When you right-click an image with no credentials and choose
+        Verify, the same fingerprint is sent to look for a label that was
+        removed. That never happens on its own. With this off, such assets
         still verify: their durable binding reads as declared rather than
         confirmed.
+    </p>
+
+    <br>
+
+    <toggle-switch label="Icon-only badges, no colour needed" id="toggleIconOnly"></toggle-switch>
+    <p class="option-note">
+        Off by default. For anyone who cannot tell the badge colours apart:
+        every badge becomes black on white and says its verdict with a shape.
+        A check means verified, a four-point spark means made with AI, a
+        triangle means the signer is unknown, a cross means changed after
+        signing. Nothing is sent anywhere.
+    </p>
+
+    <br>
+
+    <toggle-switch label="Share anonymous usage statistics" id="toggleAnalyticsConsent"></toggle-switch>
+    <p class="option-note">
+        Usage statistics are optional and off by default. Each event is signed by a key created on this device and sent to a relay operated by SanMarcSoft, stored in SanMarcSoft's self-hosted Umami in the EU. Events carry only the event name, its typed parameters, the extension version and the browser family (Chrome or Firefox). Nothing is sent to Google. IP addresses are not stored. Turning this off sends an erasure request and deletes the key.
     </p>
 
     <hr>

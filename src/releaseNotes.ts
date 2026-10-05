@@ -30,6 +30,77 @@ export const DEMO_URL = 'https://www.verifieddit.com/demo'
 
 export const RELEASE_NOTES: readonly ReleaseEntry[] = [
   {
+    tag: 'v1.4.1',
+    date: '2026-10-05',
+    summary: 'A removed label that is found again now shows everything it said, clearly marked as recovered, and the online check works in Chrome.',
+    fixes: [
+      {
+        title: 'Icon-only badges for anyone who cannot tell the colours apart',
+        howToVerify:
+          'Open the popup, go to Options and turn on "Icon-only badges, no colour needed". Every badge on the page and in the popup turns black on white and shows a shape: a check for verified, a four-point spark for made with AI, a triangle for an unknown signer, a cross for changed after signing. Turn it off and the colours return.'
+      },
+      {
+        title: 'Recovered credentials are shown in full, marked as recovered from a registry',
+        howToVerify:
+          'Turn on "Check durable credentials online", right-click an image whose credentials were removed and choose Verify. If a registered copy matches, click the badge: the panel shows the signer, date and history just as it would for a file that still carried them, under a banner saying they were recovered from a registry and describe the original, not this copy.'
+      },
+      {
+        title: 'A recovered AI-made image shows the AI colour, not green',
+        howToVerify:
+          'Recover the label of an image that was made with AI. Its badge is purple with a recovery arrow. If the details could not be read, the badge is blue.'
+      },
+      {
+        title: 'The online check now runs in Chrome when it is switched on',
+        howToVerify:
+          'In Chrome, switch the online check on and verify a signed image that declares a durable credential. "Cloud-recoverable" now confirms. Before, Chrome always behaved as if the switch were off.'
+      }
+    ]
+  },
+  {
+    tag: 'v1.4.0',
+    date: '2026-10-05',
+    summary: 'New badges that say more at a glance, a plain-language guide to them, and a way to find the label of an image whose credentials were removed.',
+    fixes: [
+      {
+        title: 'New badges: colour is the verdict, a lock means the label is backed up',
+        howToVerify:
+          'Look at the badge on a signed image. Green is checked and trusted, purple is made with AI and honestly labelled, yellow is signed by someone we do not know, red is changed after signing. A lock in the upper right means a public copy of the label exists. An image with no label shows a white badge with a red slash.'
+      },
+      {
+        title: 'What do the badges mean? One click, in plain words',
+        howToVerify:
+          'Open the extension. Under the results, click "What do the badges mean?" to see every badge beside a short explanation. Hovering over a badge on a page shows the same explanation.'
+      },
+      {
+        title: 'Find the label of an image whose credentials were removed',
+        howToVerify:
+          'Turn on "Check durable credentials online" in Options, then right-click an image and choose Verify. If its credentials were stripped but a public copy matches the picture, the badge shows a recovery arrow and tells you who signed the original and when. This is a strong hint, not proof.'
+      },
+      {
+        title: 'More registries are asked, and the registry record is compared with the file',
+        howToVerify:
+          'With the online check on, inspect a signed image and open "Cloud-recoverable". It names the registry that holds the label and says whether this file is the registered original or differs from it.'
+      }
+    ]
+  },
+  {
+    tag: 'v1.3.0',
+    date: '2026-10-05',
+    summary: 'Media signed with the newer timestamp format verifies correctly, and you can choose to share anonymous usage statistics.',
+    fixes: [
+      {
+        title: 'Newer timestamps are read, so a valid file no longer shows an expired-certificate error',
+        howToVerify:
+          'Verify a file whose signer uses the current timestamp format, such as media from a recent signing service. Earlier versions looked for the timestamp only in the older place, found none, saw that the signing certificate had since expired, and showed an error. The timestamp is now read from both places, and a file signed while its certificate was valid shows as verified.'
+      },
+      {
+        title: 'Anonymous usage statistics, off unless you turn them on',
+        howToVerify:
+          'Open the extension and look for "Share anonymous usage statistics". It is off by default and nothing is sent until you switch it on. If you do, each event is signed by a key created in your browser and sent to a relay SanMarcSoft operates in the EU, never to a third-party analytics service. No page addresses, media or personal identifiers are included, and your IP address is not stored. Switching it off sends one request to erase your statistics and deletes the key.'
+      }
+    ]
+  },
+  {
     tag: 'v1.2.6',
     date: '2026-09-08',
     summary: 'An expired certificate no longer looks like a broken file, and the third durable pillar can be verified again.',

@@ -14,8 +14,9 @@
  * surfaces cannot drift: whichever you change last wins, and reopening either
  * one reads the stored value back.
  */
-import { AUTO_SCAN_DEFAULT, MSG_AUTO_SCAN_UPDATED, MANIFEST_STORE_PROBE_DEFAULT, MANIFEST_STORE_PROBE_KEY } from './constants.js'
+import { AUTO_SCAN_DEFAULT, MSG_AUTO_SCAN_UPDATED, MANIFEST_STORE_PROBE_DEFAULT, MANIFEST_STORE_PROBE_KEY, ICON_ONLY_DEFAULT, ICON_ONLY_KEY } from './constants.js'
 import { type ToggleSwitch } from './components/toggle.js'
+import { getAnalyticsConsent, setAnalyticsConsent, options_opened } from './analytics.js'
 
 function wireAutoScan (): void {
   const toggle = document.getElementById('toggleAutoScan') as ToggleSwitch | null
@@ -50,6 +51,35 @@ function wireManifestStoreProbe (): void {
   })
 }
 
+function wireIconOnly (): void {
+  const toggle = document.getElementById('toggleIconOnly') as ToggleSwitch | null
+  if (toggle == null) return
+
+  chrome.storage.local.get(ICON_ONLY_KEY, (result) => {
+    toggle.checked = result[ICON_ONLY_KEY] ?? ICON_ONLY_DEFAULT
+  })
+
+  // A display preference. Open tabs follow it through chrome.storage.onChanged.
+  toggle.addEventListener('change', (event) => {
+    const checked = (event as CustomEvent).detail.checked
+    void chrome.storage.local.set({ [ICON_ONLY_KEY]: checked })
+  })
+}
+
+function wireAnalyticsConsent (): void {
+  const toggle = document.getElementById('toggleAnalyticsConsent') as ToggleSwitch | null
+  if (toggle == null) return
+
+  void getAnalyticsConsent().then((consent) => {
+    toggle.checked = consent === 'granted'
+  })
+
+  toggle.addEventListener('change', (event) => {
+    const checked = (event as CustomEvent).detail.checked
+    void setAnalyticsConsent(checked ? 'granted' : 'denied')
+  })
+}
+
 // Keep the page honest if the setting is changed from the popup while this
 // page is open, rather than showing a stale switch position.
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -62,7 +92,18 @@ chrome.storage.onChanged.addListener((changes, area) => {
     const toggle = document.getElementById('toggleManifestStoreProbe') as ToggleSwitch | null
     if (toggle != null) toggle.checked = changes[MANIFEST_STORE_PROBE_KEY].newValue ?? MANIFEST_STORE_PROBE_DEFAULT
   }
+  if (ICON_ONLY_KEY in changes) {
+    const toggle = document.getElementById('toggleIconOnly') as ToggleSwitch | null
+    if (toggle != null) toggle.checked = changes[ICON_ONLY_KEY].newValue ?? ICON_ONLY_DEFAULT
+  }
+  if ('analyticsConsent' in changes) {
+    const toggle = document.getElementById('toggleAnalyticsConsent') as ToggleSwitch | null
+    if (toggle != null) toggle.checked = changes.analyticsConsent.newValue === 'granted'
+  }
 })
 
+void options_opened()
 wireAutoScan()
 wireManifestStoreProbe()
+wireIconOnly()
+wireAnalyticsConsent()

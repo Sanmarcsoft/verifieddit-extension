@@ -83,7 +83,7 @@ const watch = {
   `target` inlines process.env.BROWSER_TARGET so browser-specific branches fold
   away at build time instead of merely being skipped at runtime. Firefox has no
   chrome.offscreen API at all, and AMO's validator reports every *textual*
-  reference to it as UNSUPPORTED_API even when the call is guarded — so the
+  reference to it as UNSUPPORTED_API even when the call is guarded - so the
   Gecko bundle has to be free of the identifier, not just of the behaviour.
 */
 const makePlugins = (target) => [
@@ -92,7 +92,7 @@ const makePlugins = (target) => [
     // #121: only inline an explicit allowlist of env vars. Spreading the whole
     // process.env would bake the build machine's secrets (tokens, paths) into
     // the public CRX. Never add a secret-bearing var here.
-    ...['NODE_ENV', 'AUTO_SCAN', 'TRUST_DEV_FIXTURES'].reduce((acc, key) => {
+    ...['NODE_ENV', 'AUTO_SCAN', 'TRUST_DEV_FIXTURES', 'TELEMETRY_RELAY_URL'].reduce((acc, key) => {
       acc[`process.env.${key}`] = JSON.stringify(process.env[key] ?? '')
       return acc
     }, {}),
@@ -154,7 +154,7 @@ const onwarn = (warning, warn) => {
   drops every bare `import './x'`. Our Lit components register themselves with
   `customElements.define` at module scope, and that registration IS the side
   effect. Drop the module and the custom tag is never defined: it still parses,
-  still accepts JS properties, and renders nothing at all — no shadow root, no
+  still accepts JS properties, and renders nothing at all: no shadow root, no
   error, no fallback. That is exactly how <c2pa-provenance-graph> shipped inert
   (#140): webComponents.js kept the template `<c2pa-provenance-graph .graph=…>`
   while every byte of provenanceDiagram.ts was shaken out of the bundle.
@@ -199,7 +199,7 @@ const backgroundC = {
   background.js (Firefox v3)
 */
 const backgroundFF = {
-  input: ['src/background.ts'],
+  input: ['src/background.ts', 'src/popup.ts', 'src/options.ts'],
   treeshake,
   output: {
     dir: 'dist/firefox',

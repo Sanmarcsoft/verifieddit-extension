@@ -1,5 +1,60 @@
 # CHANGELOG
 
+## v1.3.0
+
+- Added opt-in anonymous usage statistics via a signed telemetry relay (#183).
+  Telemetry is disabled by default and sends data only after the user explicitly
+  grants consent. No data is sent to Google Analytics or any third-party
+  analytics service: events are sent to a telemetry relay operated by
+  SanMarcSoft and stored in self-hosted Umami in the EU at
+  `analytics.sanmarcsoft.com`. `src/analytics.ts` implements a typed,
+  fire-and-forget client. Each event is signed with an on-device ECDSA P-256
+  key whose private key is non-extractable and kept in IndexedDB; the install
+  identifier is the RFC 7638 public key thumbprint, not derived from the user
+  or device. Events are authenticated by short-lived tickets issued by the
+  relay. Events carry only the event name, its typed parameters, the extension
+  version, and the browser family (Chrome or Firefox). Transmitted events are
+  strictly limited to seven: `extension_installed`, `extension_updated`
+  (`previous_version`), `verify_started` (`source`), `verify_completed`
+  (`result`, `has_durable_binding`, `media_type`), `badge_scan`,
+  `options_opened`, and `consent_changed` (`value`). No URLs, page content,
+  file names, or content of verified media (no media bytes, no media hashes, no
+  signer certificates, or personal identifiers) are ever collected or sent. IP
+  addresses are not stored: the relay uses the client IP only in memory, as a
+  salted hash with a daily rotating salt, for rate limiting, and never forwards
+  or logs it. The relay rate-limits requests per install and per hashed address,
+  and rejects a replayed signed request.
+
+- Consent UI and signed erasure flow added (#183). A first-run banner in the
+  popup (`src/popup.ts`) prompts users to allow or decline anonymous usage
+  statistics. A persistent toggle switch in both the popup Options tab and the
+  Firefox preferences page (`src/options.ts`) allows users to enable or disable
+  collection at any time. Disabling the setting immediately halts outbound
+  telemetry, sends one signed erasure request (`DELETE /v1/installs`) to the
+  relay, and deletes the key pair, ticket, and install identifier from the
+  browser. Erasure of stored records in Umami is processed by SanMarcSoft from
+  the relay's erasure queue. Storage key `analyticsConsent` records consent
+  status.
+
+- Auto-scan telemetry rate-limited (#183). Auto-scan events are throttled via
+  `shouldEmitScanEvent` in `src/analytics.ts` to at most one set of
+  `verify_started`, `verify_completed`, and `badge_scan` events per browser tab
+  per 60-second window, preventing page scanning from becoming a per-image
+  beacon.
+
+- Build-time relay configuration with an inert default (#183). The relay
+  endpoint `TELEMETRY_RELAY_URL` is inlined at build time by rollup via
+  `@rollup/plugin-replace` from the environment or `.env`. When built without a
+  relay URL or when empty, `isAnalyticsConfigured()` evaluates to `false` and the
+  client operates as an inert no-op that never calls `fetch` and never logs. The
+  stateless relay service is implemented in `relay/` (see `relay/README.md`).
+
+- Privacy and store documentation updated (#183). Disclosures reflecting opt-in
+  signed telemetry, IndexedDB key storage, salted hash rate limiting, and
+  relay architecture updated across `PRIVACY_POLICY.md`,
+  `CHROME_WEB_STORE_LISTING.md`, `FIREFOX_ADDON_LISTING.md`,
+  `AMO_REVIEWER_NOTES.md`, and `README.md`.
+
 ## v1.2.6
 
 - An expired signing certificate no longer reads as a broken file when a

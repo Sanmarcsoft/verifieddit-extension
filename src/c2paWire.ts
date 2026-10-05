@@ -21,11 +21,17 @@
  * exist, and wrote a spurious "C2PA engine failed to initialise" banner into
  * the popup while validation was in fact working via the offscreen document.
  */
+import { type RecoveredCredential } from './recovered'
+
 export interface C2paErrorWire {
   __c2paError: true
   name: string
   message: string
   url: string
+  /** A registered credential found for a stripped image (#184). JSON-safe. */
+  recovered?: RecoveredCredential | null
+  recoveryChecked?: boolean
+  recoveryDetail?: string
 }
 
 export function toC2paErrorWire (error: Error | { name?: string, message?: string, url?: string }, url: string): C2paErrorWire {
@@ -35,7 +41,10 @@ export function toC2paErrorWire (error: Error | { name?: string, message?: strin
     __c2paError: true,
     name: name !== '' ? name : 'Error',
     message: message !== '' ? message : 'unknown error',
-    url: (error as { url?: string }).url ?? url
+    url: (error as { url?: string }).url ?? url,
+    recovered: (error as { recovered?: RecoveredCredential | null }).recovered,
+    recoveryChecked: (error as { recoveryChecked?: boolean }).recoveryChecked,
+    recoveryDetail: (error as { recoveryDetail?: string }).recoveryDetail
   }
 }
 
@@ -43,9 +52,12 @@ export function isC2paErrorWire (value: unknown): value is C2paErrorWire {
   return typeof value === 'object' && value !== null && (value as C2paErrorWire).__c2paError === true
 }
 
-export function fromC2paErrorWire (wire: C2paErrorWire): Error & { url: string } {
-  const error = new Error(wire.message) as Error & { url: string }
+export function fromC2paErrorWire (wire: C2paErrorWire): Error & { url: string, recovered?: RecoveredCredential | null, recoveryChecked?: boolean, recoveryDetail?: string } {
+  const error = new Error(wire.message) as Error & { url: string, recovered?: RecoveredCredential | null, recoveryChecked?: boolean, recoveryDetail?: string }
   error.name = wire.name
   error.url = wire.url
+  error.recovered = wire.recovered
+  error.recoveryChecked = wire.recoveryChecked
+  error.recoveryDetail = wire.recoveryDetail
   return error
 }

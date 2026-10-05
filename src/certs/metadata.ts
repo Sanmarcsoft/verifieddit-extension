@@ -17,6 +17,9 @@ import { decode as tiffDecode } from './tiff'
 import { decode as mp3Decode } from './mp3'
 
 export function getManifestFromMetadata (type: string, buffer: Uint8Array): Uint8Array | null {
+  // A bare manifest store is already the JUMBF: nothing to dig out (#184, a
+  // credential recovered from a registry arrives this way).
+  if (type === 'application/c2pa' || type === 'application/x-c2pa-manifest-store') return buffer
   switch (type) {
     /* image                            */
     case MIME.JPEG:
