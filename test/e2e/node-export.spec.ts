@@ -163,6 +163,32 @@ test.describe('provenance copy and CSV export', () => {
     }
   })
 
+  // The panel is a cross-origin iframe: without clipboard-write delegated to it,
+  // Chrome refuses the Clipboard API and logs a permissions-policy violation in
+  // the extension's error pane on every Copy, even though the fallback copies.
+  test('Copy uses the Clipboard API without a permissions-policy violation', async () => {
+    test.setTimeout(180_000)
+    const { ctx, page } = await launch()
+    try {
+      const violations: string[] = []
+      const watch = (text: string): void => { if (/permissions policy violation/i.test(text) && /clipboard/i.test(text)) violations.push(text) }
+      page.on('console', (msg) => { watch(msg.text()) })
+      page.on('pageerror', (err) => { watch(String(err)) })
+
+      const frame = await openOverlay(ctx, page)
+      const allow = await page.evaluate(() => [...document.querySelectorAll('iframe')].find(f => f.className === 'c2paDialog')?.getAttribute('allow') ?? '')
+      expect(allow, 'the panel iframe must be allowed to write to the clipboard').toContain('clipboard-write')
+      expect(allow, 'and must keep its fullscreen permission').toContain('fullscreen')
+
+      await clickControl(page, frame, 'Copy provenance chain as CSV')
+      expect(await textOf(frame, 'Copy provenance chain as CSV')).toBe('Copied')
+      await page.waitForTimeout(500)
+      expect(violations, 'Copy must not log a clipboard permissions-policy violation').toEqual([])
+    } finally {
+      await ctx.close()
+    }
+  })
+
   test('toolbar CSV downloads a dated provenance file', async () => {
     test.setTimeout(180_000)
     const { ctx, page } = await launch()

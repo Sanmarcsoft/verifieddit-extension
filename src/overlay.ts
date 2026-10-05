@@ -26,7 +26,12 @@ export class C2paOverlay /* extends HTMLElement */ {
     // precedence over 'allowfullscreen'" into the extension's error pane for
     // every page the content script touches, so the legacy spelling is applied
     // only where `allow` is genuinely unavailable.
-    iframe.allow = 'fullscreen'
+    // clipboard-write (#189): the diagram's Copy buttons call the Clipboard API
+    // from inside this cross-origin frame. Without the delegation Chrome refuses
+    // it and logs a permissions-policy violation on every Copy; the fallback in
+    // exportActions.ts still copies, and stays for pages whose own policy forbids
+    // delegating it.
+    iframe.allow = 'fullscreen; clipboard-write'
     if (!('allow' in HTMLIFrameElement.prototype)) {
       iframe.allowFullscreen = true
     }
