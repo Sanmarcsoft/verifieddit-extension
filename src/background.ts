@@ -349,9 +349,15 @@ async function ensureOffscreen (): Promise<void> {
 // briefly before giving up.
 async function c2paValidateWithRetry (url: string, recover = false): Promise<C2paResult | C2paError> {
   await ensureOffscreen()
+  // The offscreen document cannot read chrome.storage, so the opt-in for the
+  // online durable check is read here and travels with the request. Read it
+  // fresh each time: the person may have just switched it.
+  const probe = await chrome.storage.local.get(MANIFEST_STORE_PROBE_KEY)
+    .then((r) => r?.[MANIFEST_STORE_PROBE_KEY] === true)
+    .catch(() => false)
   let last: C2paResult | C2paError | undefined
   for (let attempt = 0; attempt < 30; attempt++) {
-    const result = await c2paValidateUrl(url, recover).catch(() => undefined)
+    const result = await c2paValidateUrl(url, recover, probe).catch(() => undefined)
     last = result
     const notReady = result == null ||
       (result as C2paError)?.message === 'C2PA not initialized'

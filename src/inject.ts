@@ -7,7 +7,7 @@ import { type C2paError, type C2paResult } from './c2pa'
 // Value import: must come from the side-effect-free wire module, or the whole
 // WASM engine is inlined into every page this content script runs on.
 import { isC2paErrorWire, fromC2paErrorWire } from './c2paWire'
-import { recoveredNote, type RecoveredCredential } from './recovered'
+import { noLabelNote, type RecoveredCredential } from './recovered'
 import { withDurable } from './badgeArt'
 import { type ProvenanceGraph } from './provenanceTypes.js'
 import { type MediaElement } from './content'
@@ -194,7 +194,7 @@ async function handleValidationResult (mediaElement: MediaElement, c2paResult: C
         // A registered credential for a stripped image changes what we say,
         // not the badge: the file in hand still carries nothing verifiable.
         const recovered = (failure as { recovered?: RecoveredCredential | null }).recovered
-        ensureNoCredentialsIcon(mediaRecord, url, recovered != null ? recoveredNote(recovered) : NO_CREDENTIALS_HINT, recovered != null ? 'stripped' : 'no-credentials')
+        ensureNoCredentialsIcon(mediaRecord, url, noLabelNote({ recovered, checked: (failure as { recoveryChecked?: boolean }).recoveryChecked === true }), recovered != null ? 'stripped' : 'no-credentials')
       } else {
         // Assigning null runs CrIcon.remove() via the setter; this also
         // clears the neutral scanning badge auto-scan put there first.
@@ -222,12 +222,6 @@ function unavailableNote (detail: string): string {
     `Content Credentials are unknown. This is NOT a finding that the file is ` +
     `unsigned — the check itself failed. Details: ${detail}`
 }
-
-// Shown when nothing was recovered. It cannot tell "not registered" from
-// "online check is off", so it says how to look rather than guessing which.
-const NO_CREDENTIALS_HINT = NO_CREDENTIALS_NOTE +
-  ` If its credentials were stripped, a registered copy may still exist: turn on ` +
-  `"Check durable credentials online" in the extension's Options and verify again.`
 
 function ensureNoCredentialsIcon (mediaRecord: MediaRecord, url: string, note: string = NO_CREDENTIALS_NOTE, status: 'no-credentials' | 'stripped' = 'no-credentials'): void {
   // The click handler is re-bound on the existing-icon path too. Auto-scan

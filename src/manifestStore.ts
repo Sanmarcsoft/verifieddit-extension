@@ -62,9 +62,18 @@ export async function isProbeEnabled (): Promise<boolean> {
   }
 }
 
-export async function probeManifestStore (blob: Blob): Promise<boolean> {
+/**
+ * Whether the online check is on. `enabled` is the caller's answer and wins when
+ * given: in Chrome this code runs in an offscreen document, which cannot read
+ * chrome.storage, so the background reads the switch and passes it in.
+ */
+async function checkIsOn (enabled?: boolean): Promise<boolean> {
+  return enabled ?? await isProbeEnabled()
+}
+
+export async function probeManifestStore (blob: Blob, enabled?: boolean): Promise<boolean> {
   try {
-    if (!(await isProbeEnabled())) return false
+    if (!(await checkIsOn(enabled))) return false
     const imageData = await blobToImageData(blob)
     if (imageData == null) return false
     const phash = computePerceptualHash(imageData)
@@ -125,9 +134,9 @@ export function softBindingsOf (assertions: ReadonlyArray<{ label?: unknown, dat
  * these bindings. Empty when the user has not opted in, and on any failure:
  * an unanswered question confirms nothing.
  */
-export async function probeRegistries (bindings: readonly SoftBinding[]): Promise<string[]> {
+export async function probeRegistries (bindings: readonly SoftBinding[], enabled?: boolean): Promise<string[]> {
   try {
-    if (bindings.length === 0 || !(await isProbeEnabled())) return []
+    if (bindings.length === 0 || !(await checkIsOn(enabled))) return []
     const names = new Set<string>()
     for (const { alg, value } of bindings) {
       const params = new URLSearchParams({ alg, value })
@@ -162,9 +171,9 @@ export { recoveredNote, type RecoveredCredential } from './recovered'
 
 const MANIFEST_ID = /^[A-Za-z0-9][A-Za-z0-9:._-]{0,127}$/
 
-export async function recoverByFingerprint (fp: { phash: string, dhash: string }): Promise<RecoveredCredential | null> {
+export async function recoverByFingerprint (fp: { phash: string, dhash: string }, enabled?: boolean): Promise<RecoveredCredential | null> {
   try {
-    if (!(await isProbeEnabled())) return null
+    if (!(await checkIsOn(enabled))) return null
     const params = new URLSearchParams({ alg: 'phash', value: fp.phash, crossAlg: 'dhash', crossValue: fp.dhash })
     const response = await fetch(`${MANIFEST_STORE_URL}/matches/byBinding?${params.toString()}`, { credentials: 'omit' })
     if (!response.ok) return null
@@ -189,11 +198,11 @@ export async function recoverByFingerprint (fp: { phash: string, dhash: string }
 }
 
 /** Recovery for an image blob: fingerprints are computed here, on the device. */
-export async function recoverStripped (blob: Blob): Promise<RecoveredCredential | null> {
-  if (!(await isProbeEnabled())) return null
+export async function recoverStripped (blob: Blob, enabled?: boolean): Promise<RecoveredCredential | null> {
+  if (!(await checkIsOn(enabled))) return null
   const imageData = await blobToImageData(blob)
   if (imageData == null) return null
-  return await recoverByFingerprint({ phash: computePerceptualHash(imageData), dhash: computeDifferenceHash(imageData) })
+  return await recoverByFingerprint({ phash: computePerceptualHash(imageData), dhash: computeDifferenceHash(imageData) }, true)
 }
 
 /*
@@ -213,10 +222,10 @@ export interface RegistryRecord {
 
 const OUR_ALGS = /^(trustmark|com\.adobe\.trustmark\..+)$/
 
-export async function checkRegistryRecord (blob: Blob, bindings: readonly SoftBinding[]): Promise<RegistryRecord | null> {
+export async function checkRegistryRecord (blob: Blob, bindings: readonly SoftBinding[], enabled?: boolean): Promise<RegistryRecord | null> {
   try {
     const binding = bindings.find((b) => OUR_ALGS.test(b.alg))
-    if (binding == null || !(await isProbeEnabled())) return null
+    if (binding == null || !(await checkIsOn(enabled))) return null
     const params = new URLSearchParams({ alg: 'trustmark', value: binding.value })
     const response = await fetch(`${MANIFEST_STORE_URL}/matches/byBinding?${params.toString()}`, { credentials: 'omit' })
     if (!response.ok) return null

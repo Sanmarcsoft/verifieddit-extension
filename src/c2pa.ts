@@ -71,6 +71,8 @@ export interface C2paError extends Error {
   url: string
   /** Set on 'No Manifest' when a registered credential matches the stripped image (#184). */
   recovered?: RecoveredCredential | null
+  /** True when the registry was actually asked about a removed label. */
+  recoveryChecked?: boolean
 }
 
 // The wire helpers that flatten a C2paError for extension messaging live in
@@ -110,7 +112,7 @@ export async function init (): Promise<void> {
   chrome.runtime.onMessage.addListener(
     (request: MSG_PAYLOAD, sender, sendResponse) => {
       if (request.action === MSG_C2PA_VALIDATE_URL) {
-        void validateUrl(request.data as string, (request as { recover?: boolean }).recover === true).then(sendResponse)
+        void validateUrl(request.data as string, (request as { recover?: boolean }).recover === true, (request as { probe?: boolean }).probe).then(sendResponse)
         return AWAIT_ASYNC_RESPONSE
       }
     }
@@ -134,7 +136,7 @@ function safeProvenanceGraph (store: C2paRsStore, filename: string): ProvenanceG
   }
 }
 
-export async function validateUrl (url: string, recover = false): Promise<C2paResult | C2paError> {
+export async function validateUrl (url: string, recover = false, probe?: boolean): Promise<C2paResult | C2paError> {
   if (c2pa == null) {
     return new Error('C2PA not initialized') as C2paError
   }
@@ -159,8 +161,9 @@ export async function validateUrl (url: string, recover = false): Promise<C2paRe
   if (reader == null) {
     // The credentials may have been stripped rather than never present. On an
     // explicit Verify (never auto-scan) look the picture up in the registry.
-    const recovered = recover && blob.type.startsWith('image/') ? await recoverStripped(blob) : null
-    return { message: 'No manifest found', url, name: 'No Manifest', recovered } satisfies C2paError
+    const looked = recover && probe === true && blob.type.startsWith('image/')
+    const recovered = looked ? await recoverStripped(blob, true) : null
+    return { message: 'No manifest found', url, name: 'No Manifest', recovered, recoveryChecked: looked } satisfies C2paError
   }
 
   const store: C2paRsStore = await reader.manifestStore()
@@ -196,15 +199,15 @@ export async function validateUrl (url: string, recover = false): Promise<C2paRe
   // path because the decoded image bytes are available.
   let manifestStoreVerified = false
   if (hasSoftBinding(assertionLabels) && blob.type.startsWith('image/')) {
-    manifestStoreVerified = await probeManifestStore(blob)
+    manifestStoreVerified = await probeManifestStore(blob, probe)
   }
   // Our store is one registry among several (#184). Ask the registry that owns
   // each declared watermark algorithm too. Same opt-in; only the algorithm and
   // binding value from the signed claim are sent, so this works for any media.
   const declaredBindings = hasSoftBinding(assertionLabels) ? softBindingsOf(activeManifest.assertions) : []
-  const durableRegistries = await probeRegistries(declaredBindings)
+  const durableRegistries = await probeRegistries(declaredBindings, probe)
   // And does our registry's record agree with this file? (same opt-in)
-  const registryRecord = await checkRegistryRecord(blob, declaredBindings)
+  const registryRecord = await checkRegistryRecord(blob, declaredBindings, probe)
   if (durableRegistries.length > 0) manifestStoreVerified = true
 
   // AI generation is a claim the producer signed about the CONTENT, so it is

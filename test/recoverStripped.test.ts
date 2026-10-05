@@ -137,3 +137,35 @@ describe('checkRegistryRecord — does the registry agree with the file in hand?
     expect(await checkRegistryRecord(blob, binding)).toBeNull()
   })
 })
+
+describe('the opt-in can be passed in by the caller', () => {
+  // In Chrome the engine runs in an offscreen document, which has no
+  // chrome.storage: reading the switch there always failed closed, so the online
+  // check never ran even when it was on. The background reads the switch and
+  // passes it with each request.
+  it('runs when the caller says the check is on, even if storage cannot be read here', async () => {
+    ;(globalThis as Record<string, unknown>).chrome = {}
+    const { recoverByFingerprint, probeRegistries } = await loadFresh()
+    expect(await recoverByFingerprint(fingerprints, true)).not.toBeNull()
+    calls = []
+    await probeRegistries([{ alg: 'trustmark', value: '4b60d881' }], true)
+    expect(calls.length).toBe(1)
+  })
+
+  it('does not run when the caller says the check is off, even if storage says on', async () => {
+    storage.manifestStoreProbe = true
+    const { recoverByFingerprint, probeRegistries } = await loadFresh()
+    expect(await recoverByFingerprint(fingerprints, false)).toBeNull()
+    expect(await probeRegistries([{ alg: 'trustmark', value: '4b60d881' }], false)).toEqual([])
+    expect(calls).toEqual([])
+  })
+})
+
+describe('the no-label note says whether we looked', () => {
+  it('tells apart "looked and found nothing" from "the online check is off"', async () => {
+    const { noLabelNote } = await import('../src/recovered')
+    expect(noLabelNote({ recovered: null, checked: true })).toMatch(/looked for a copy.*found none/i)
+    expect(noLabelNote({ recovered: null, checked: false })).toMatch(/turn on/i)
+    expect(noLabelNote({ recovered: { registry: 'R', manifestId: 'm', similarityScore: 97, signerCn: 's', signedAt: '2026-10-05', filename: null }, checked: true })).toMatch(/not proof/i)
+  })
+})

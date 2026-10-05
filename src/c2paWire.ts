@@ -30,6 +30,7 @@ export interface C2paErrorWire {
   url: string
   /** A registered credential found for a stripped image (#184). JSON-safe. */
   recovered?: RecoveredCredential | null
+  recoveryChecked?: boolean
 }
 
 export function toC2paErrorWire (error: Error | { name?: string, message?: string, url?: string }, url: string): C2paErrorWire {
@@ -40,7 +41,8 @@ export function toC2paErrorWire (error: Error | { name?: string, message?: strin
     name: name !== '' ? name : 'Error',
     message: message !== '' ? message : 'unknown error',
     url: (error as { url?: string }).url ?? url,
-    recovered: (error as { recovered?: RecoveredCredential | null }).recovered
+    recovered: (error as { recovered?: RecoveredCredential | null }).recovered,
+    recoveryChecked: (error as { recoveryChecked?: boolean }).recoveryChecked
   }
 }
 
@@ -48,10 +50,11 @@ export function isC2paErrorWire (value: unknown): value is C2paErrorWire {
   return typeof value === 'object' && value !== null && (value as C2paErrorWire).__c2paError === true
 }
 
-export function fromC2paErrorWire (wire: C2paErrorWire): Error & { url: string, recovered?: RecoveredCredential | null } {
-  const error = new Error(wire.message) as Error & { url: string, recovered?: RecoveredCredential | null }
+export function fromC2paErrorWire (wire: C2paErrorWire): Error & { url: string, recovered?: RecoveredCredential | null, recoveryChecked?: boolean } {
+  const error = new Error(wire.message) as Error & { url: string, recovered?: RecoveredCredential | null, recoveryChecked?: boolean }
   error.name = wire.name
   error.url = wire.url
   error.recovered = wire.recovered
+  error.recoveryChecked = wire.recoveryChecked
   return error
 }
