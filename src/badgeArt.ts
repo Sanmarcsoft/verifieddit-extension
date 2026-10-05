@@ -31,7 +31,7 @@ export type BadgeStatus =
   | 'ai-success' | 'ai-success-durable'
   | 'warning' | 'warning-durable'
   | 'error' | 'error-durable' | 'ai-error'
-  | 'stripped' | 'stripped-unrecovered'
+  | 'stripped' | 'stripped-ai' | 'stripped-unknown' | 'stripped-unrecovered'
   | 'no-credentials' | 'unavailable'
 
 type Glyph = 'lock' | 'recover' | 'question' | 'alert'
@@ -58,6 +58,8 @@ const FILL: Record<BadgeStatus, string> = {
   'error-durable': COLOURS.red,
   'ai-error': COLOURS.red,
   stripped: COLOURS.green,
+  'stripped-ai': COLOURS.purple,
+  'stripped-unknown': COLOURS.blue,
   'stripped-unrecovered': COLOURS.blue,
   'no-credentials': '#FFFFFF',
   unavailable: COLOURS.slate
@@ -65,10 +67,15 @@ const FILL: Record<BadgeStatus, string> = {
 
 function glyphOf (status: BadgeStatus): Glyph | null {
   if (status.endsWith('-durable')) return 'lock'
-  if (status === 'stripped') return 'recover'
+  if (status === 'stripped' || status === 'stripped-ai' || status === 'stripped-unknown') return 'recover'
   if (status === 'stripped-unrecovered') return 'question'
   if (status === 'unavailable') return 'alert'
   return null
+}
+
+/** The badge for a recovered credential: its colour follows what the original says. */
+export function recoveredStatus (aiGenerated: boolean | null | undefined): 'stripped' | 'stripped-ai' | 'stripped-unknown' {
+  return aiGenerated === true ? 'stripped-ai' : aiGenerated === false ? 'stripped' : 'stripped-unknown'
 }
 
 /** The durable variant of a verdict, when there is one. */
@@ -120,6 +127,8 @@ const EXPLAIN: Record<BadgeStatus, { title: string, text: string }> = {
   'error-durable': { title: 'Changed after signing, original on record', text: 'This file is not the same as when it was signed.' + LOCK },
   'ai-error': { title: 'Changed after signing', text: 'This file was labelled as made with AI, but it has changed since it was signed. Do not rely on its label.' },
   stripped: { title: 'Label removed, copy found', text: 'The label is gone from this file, but a public copy matches the picture. Treat it as a strong hint, not proof: this copy may have been changed.' },
+  'stripped-ai': { title: 'Label removed, copy found: made with AI', text: 'The label is gone from this file, but a public copy matches the picture and says it was made with AI. Treat it as a strong hint, not proof.' },
+  'stripped-unknown': { title: 'Label removed, copy found', text: 'The label is gone from this file, but a public copy matches the picture. We could not read the details. Treat it as a strong hint, not proof.' },
   'stripped-unrecovered': { title: 'Label removed, no copy found', text: 'This file once carried a label, but it was removed and we could not find a copy.' },
   'no-credentials': { title: 'No label', text: 'This file carries no Content Credentials. That does not mean it is fake: most files have none.' },
   unavailable: { title: 'We could not check', text: 'Something went wrong on our side, so we could not check this file. This says nothing about the file itself.' }
@@ -138,6 +147,7 @@ export const BADGE_LEGEND: ReadonlyArray<{ status: BadgeStatus }> = [
   { status: 'warning' },
   { status: 'error' },
   { status: 'stripped' },
+  { status: 'stripped-ai' },
   { status: 'stripped-unrecovered' },
   { status: 'no-credentials' },
   { status: 'unavailable' }

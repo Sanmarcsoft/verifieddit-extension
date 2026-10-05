@@ -31,7 +31,7 @@ import { type MediaElement } from './mediaRecord'
 // full strength, with a recovery arrow. It is still not a verdict on the file in
 // hand, so it is never green.
 
-const BADGE_STATUSES: BadgeStatus[] = ['success', 'success-durable', 'ai-success', 'ai-success-durable', 'warning', 'warning-durable', 'error', 'error-durable', 'ai-error', 'stripped', 'stripped-unrecovered', 'no-credentials', 'unavailable']
+const BADGE_STATUSES: BadgeStatus[] = ['success', 'success-durable', 'ai-success', 'ai-success-durable', 'warning', 'warning-durable', 'error', 'error-durable', 'ai-error', 'stripped', 'stripped-ai', 'stripped-unknown', 'stripped-unrecovered', 'no-credentials', 'unavailable']
 
 // Verdict badges come from badgeArt.ts (#184, art/badges.pen "Badge system v3"),
 // which also holds each badge's plain-language explanation. The three media
@@ -200,6 +200,6 @@ export class CrIcon {
   }
 
   private static validateStatus (status: unknown): status is VALIDATION_STATUS {
-    return ['success', 'warning', 'error', 'img', 'video', 'audio', 'none', 'ai-success', 'ai-error', 'no-credentials', 'stripped', 'success-durable', 'ai-success-durable', 'warning-durable', 'error-durable', 'stripped-unrecovered', 'unavailable'].includes(status as string)
+    return ['success', 'warning', 'error', 'img', 'video', 'audio', 'none', 'ai-success', 'ai-error', 'no-credentials', 'stripped', 'success-durable', 'ai-success-durable', 'warning-durable', 'error-durable', 'stripped-unrecovered', 'unavailable', 'stripped-ai', 'stripped-unknown'].includes(status as string)
   }
 }

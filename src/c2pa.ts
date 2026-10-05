@@ -53,6 +53,12 @@ export interface C2paResult extends ExtensionC2paResult {
   durableRegistries: string[]
   /** Our registry's record for this file's binding, compared with the file (#184). */
   registryRecord: RegistryRecord | null
+  /**
+   * Set when these credentials were NOT in the file but recovered from a registry
+   * for a picture that matches it. Everything shown is then about the registered
+   * original, not a check of the copy in hand.
+   */
+  recoveredFrom: RecoveredCredential | null
   // Whether the asset DECLARES AI generation, read from the IPTC
   // digitalSourceType in its own c2pa.actions assertion. Never inferred from
   // who signed it — see aiDetection.ts.
@@ -136,6 +142,35 @@ function safeProvenanceGraph (store: C2paRsStore, filename: string): ProvenanceG
   }
 }
 
+const REGISTERED_MANIFEST_URL = 'https://manifests.sanmarcsoft.com/v1/manifests'
+const REGISTERED_MANIFEST_MAX_BYTES = 20 * 1024 * 1024
+
+/**
+ * The registered manifest for a recovered credential, read with the same engine
+ * as an embedded one. null on any failure: the caller then falls back to the
+ * summary note, and never shows metadata it could not actually read.
+ */
+async function registeredStore (manifestId: string): Promise<{ store: C2paRsStore, blob: Blob } | null> {
+  try {
+    if (c2pa == null) return null
+    const controller = new AbortController()
+    const timer = setTimeout(() => { controller.abort() }, 10000)
+    const response = await fetch(`${REGISTERED_MANIFEST_URL}/${encodeURIComponent(manifestId)}`, { credentials: 'omit', signal: controller.signal })
+    clearTimeout(timer)
+    if (!response.ok) return null
+    const bytes = await response.blob()
+    if (bytes.size === 0 || bytes.size > REGISTERED_MANIFEST_MAX_BYTES) return null
+    const blob = new Blob([bytes], { type: 'application/c2pa' })
+    const reader = await c2pa.reader.fromBlob('application/c2pa', blob)
+    if (reader == null) return null
+    const store: C2paRsStore = await reader.manifestStore()
+    if (store.active_manifest == null || store.manifests?.[store.active_manifest] == null) return null
+    return { store, blob }
+  } catch {
+    return null
+  }
+}
+
 export async function validateUrl (url: string, recover = false, probe?: boolean): Promise<C2paResult | C2paError> {
   if (c2pa == null) {
     return new Error('C2PA not initialized') as C2paError
@@ -163,6 +198,16 @@ export async function validateUrl (url: string, recover = false, probe?: boolean
     // explicit Verify (never auto-scan) look the picture up in the registry.
     const looked = recover && probe === true && blob.type.startsWith('image/')
     const recovered = looked ? await recoverStripped(blob, true) : null
+    if (recovered != null) {
+      const registered = await registeredStore(recovered.manifestId)
+      if (registered != null) {
+        const result = await buildResult(registered.store, registered.blob, url, probe, recovered).catch(() => null)
+        if (result != null) {
+          recovered.aiGenerated = result.aiGeneration !== 'none'
+          return result
+        }
+      }
+    }
     return { message: 'No manifest found', url, name: 'No Manifest', recovered, recoveryChecked: looked } satisfies C2paError
   }
 
@@ -171,18 +216,29 @@ export async function validateUrl (url: string, recover = false, probe?: boolean
   if (store.active_manifest == null || store.manifests?.[store.active_manifest] == null) {
     return { message: 'No manifest found', url, name: 'No Manifest' } satisfies C2paError
   }
+  return await buildResult(store, blob, url, probe, null)
+}
+
+/**
+ * Build the full result from a manifest store. `recoveredFrom` is set when the
+ * store did not come out of the file in hand but out of a registry, for an image
+ * whose own credentials were removed (#184): the same metadata is shown, flagged
+ * as recovered, and nothing is probed again.
+ */
+async function buildResult (store: C2paRsStore, blob: Blob, url: string, probe: boolean | undefined, recoveredFrom: RecoveredCredential | null): Promise<C2paResult> {
+  const activeLabel = store.active_manifest as string
 
   const serializedResult = await serializeC2paStore(store, blob, url)
 
   // Re-parse the raw bytes for the COSE signature (certificate chain + RFC 3161
   // timestamp). This preserves the offline trust + timestamp verification path.
   const sourceBytes = new Uint8Array(await blob.arrayBuffer())
-  const cose = await extractC2paManifest(blob.type, sourceBytes)
+  const cose = await extractC2paManifest(blob.type, sourceBytes).catch(() => null)
 
   // Source the soft-binding signal from the VALIDATED, claim-bound assertions of
   // the ACTIVE manifest (issue #113) — never raw JUMBF box labels, which an
   // attacker can add outside the signed claim to forge a durable verdict.
-  const activeManifest: Manifest = store.manifests[store.active_manifest]
+  const activeManifest = store.manifests?.[activeLabel] as Manifest
   const assertionLabels: string[] = (activeManifest.assertions ?? [])
     .map((a) => a?.label)
     .filter((label): label is string => typeof label === 'string')
@@ -197,17 +253,18 @@ export async function validateUrl (url: string, recover = false, probe?: boolean
   // and recoverable. Only computed fingerprints are sent (privacy); failure
   // fails closed to 'declared'. Done here in the offscreen/background validate
   // path because the decoded image bytes are available.
-  let manifestStoreVerified = false
-  if (hasSoftBinding(assertionLabels) && blob.type.startsWith('image/')) {
+  // A recovered store came from the registry: that is the confirmation.
+  let manifestStoreVerified = recoveredFrom != null
+  if (recoveredFrom == null && hasSoftBinding(assertionLabels) && blob.type.startsWith('image/')) {
     manifestStoreVerified = await probeManifestStore(blob, probe)
   }
   // Our store is one registry among several (#184). Ask the registry that owns
   // each declared watermark algorithm too. Same opt-in; only the algorithm and
   // binding value from the signed claim are sent, so this works for any media.
   const declaredBindings = hasSoftBinding(assertionLabels) ? softBindingsOf(activeManifest.assertions) : []
-  const durableRegistries = await probeRegistries(declaredBindings, probe)
+  const durableRegistries = recoveredFrom != null ? [recoveredFrom.registry] : await probeRegistries(declaredBindings, probe)
   // And does our registry's record agree with this file? (same opt-in)
-  const registryRecord = await checkRegistryRecord(blob, declaredBindings, probe)
+  const registryRecord = recoveredFrom != null ? null : await checkRegistryRecord(blob, declaredBindings, probe)
   if (durableRegistries.length > 0) manifestStoreVerified = true
 
   // AI generation is a claim the producer signed about the CONTENT, so it is
@@ -226,6 +283,7 @@ export async function validateUrl (url: string, recover = false, probe?: boolean
     manifestStoreVerified,
     durableRegistries,
     registryRecord,
+    recoveredFrom,
     // Built from the raw store — the flattened ExtensionC2paResult has already
     // dropped relationships, per-ingredient validation, and assertion payloads.
     // The diagram is a display affordance walking attacker-supplied structure;

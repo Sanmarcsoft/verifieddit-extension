@@ -492,7 +492,15 @@ function statusLabel (r: MSG_RESPONSE_C2PA_ENTRIES_PAYLOAD): { text: string, cls
     case 'error':           return { text: 'Invalid',     cls: 'status-error' }
     case 'ai-success':      return { text: 'AI (signed)', cls: 'status-ai-success' }
     case 'ai-error':        return { text: 'AI (error)',  cls: 'status-ai-error' }
-    case 'no-credentials':  return { text: 'No Creds',    cls: 'status-no-credentials' }
+    case 'no-credentials':  return { text: 'No label',    cls: 'status-no-credentials' }
+    case 'success-durable':    return { text: 'Trusted, backed up', cls: 'status-success' }
+    case 'warning-durable':    return { text: 'Untrusted, backed up', cls: 'status-warning' }
+    case 'error-durable':      return { text: 'Invalid, original on record', cls: 'status-error' }
+    case 'ai-success-durable': return { text: 'AI (signed), backed up', cls: 'status-ai-success' }
+    case 'stripped':           return { text: 'Recovered from registry', cls: 'status-recovered' }
+    case 'stripped-ai':        return { text: 'Recovered from registry: AI', cls: 'status-recovered-ai' }
+    case 'stripped-unknown':   return { text: 'Recovered from registry', cls: 'status-recovered' }
+    case 'unavailable':        return { text: 'Unchecked',   cls: 'status-unavailable' }
     default:                return { text: r.status,      cls: 'status-unknown' }
   }
 }

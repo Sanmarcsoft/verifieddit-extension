@@ -666,3 +666,7 @@
   line-height: 1.45;
   color: #475569;
 }
+
+/* Recovered from a registry (#184): not a verdict on the file in hand. */
+.status-recovered { background: #1d6fd6; }
+.status-recovered-ai { background: #7c3aed; }

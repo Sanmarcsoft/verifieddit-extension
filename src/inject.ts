@@ -8,7 +8,7 @@ import { type C2paError, type C2paResult } from './c2pa'
 // WASM engine is inlined into every page this content script runs on.
 import { isC2paErrorWire, fromC2paErrorWire } from './c2paWire'
 import { noLabelNote, type RecoveredCredential } from './recovered'
-import { withDurable } from './badgeArt'
+import { withDurable, recoveredStatus } from './badgeArt'
 import { type ProvenanceGraph } from './provenanceTypes.js'
 import { type MediaElement } from './content'
 import { CrIcon } from './icon'
@@ -194,7 +194,7 @@ async function handleValidationResult (mediaElement: MediaElement, c2paResult: C
         // A registered credential for a stripped image changes what we say,
         // not the badge: the file in hand still carries nothing verifiable.
         const recovered = (failure as { recovered?: RecoveredCredential | null }).recovered
-        ensureNoCredentialsIcon(mediaRecord, url, noLabelNote({ recovered, checked: (failure as { recoveryChecked?: boolean }).recoveryChecked === true }), recovered != null ? 'stripped' : 'no-credentials')
+        ensureNoCredentialsIcon(mediaRecord, url, noLabelNote({ recovered, checked: (failure as { recoveryChecked?: boolean }).recoveryChecked === true }), recovered != null ? recoveredStatus(recovered.aiGenerated) : 'no-credentials')
       } else {
         // Assigning null runs CrIcon.remove() via the setter; this also
         // clears the neutral scanning badge auto-scan put there first.
@@ -223,7 +223,7 @@ function unavailableNote (detail: string): string {
     `unsigned — the check itself failed. Details: ${detail}`
 }
 
-function ensureNoCredentialsIcon (mediaRecord: MediaRecord, url: string, note: string = NO_CREDENTIALS_NOTE, status: 'no-credentials' | 'stripped' = 'no-credentials'): void {
+function ensureNoCredentialsIcon (mediaRecord: MediaRecord, url: string, note: string = NO_CREDENTIALS_NOTE, status: 'no-credentials' | 'stripped' | 'stripped-ai' | 'stripped-unknown' = 'no-credentials'): void {
   // The click handler is re-bound on the existing-icon path too. Auto-scan
   // creates a neutral 'img' badge first and wires it to open the C2PA overlay;
   // upgrading only the artwork left that stale handler in place, so a faded
@@ -438,6 +438,13 @@ function hasFatalValidation (codes: string[] | undefined | null): boolean {
 }
 
 function getC2PAStatus(c2pa: C2paResult): VALIDATION_STATUS {
+
+  // Recovered from a registry (#184): these credentials describe the registered
+  // original, not this copy, so the badge is the recovery badge, coloured by
+  // what the original says, never a verdict on the file in hand.
+  if (c2pa.recoveredFrom != null) {
+    return recoveredStatus(c2pa.aiGeneration !== 'none') as VALIDATION_STATUS
+  }
 
   // AI status comes from what the asset DECLARES about its own content (the
   // IPTC digitalSourceType in its c2pa.actions assertion), not from which
@@ -1047,7 +1054,9 @@ function setIcon (mediaRecord: MediaRecord): void {
 
   // If C2PA data is available, get the status and update/create the icon
   // The lock is added when a registry confirmed the credential (durable).
-  const c2paStatus = withDurable(getC2PAStatus(mediaRecord.state.c2pa), mediaRecord.state.c2pa.durablePillars?.manifestStore === 'verified') as VALIDATION_STATUS;
+  const c2paStatus = (mediaRecord.state.c2pa.recoveredFrom != null
+    ? getC2PAStatus(mediaRecord.state.c2pa)
+    : withDurable(getC2PAStatus(mediaRecord.state.c2pa), mediaRecord.state.c2pa.durablePillars?.manifestStore === 'verified')) as VALIDATION_STATUS;
 
   if (mediaRecord.icon == null) {
     // This case handles non-image media or images where C2PA data arrived before onEnterViewport's load listener.

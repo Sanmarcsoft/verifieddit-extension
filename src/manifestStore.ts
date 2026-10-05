@@ -190,7 +190,8 @@ export async function recoverByFingerprint (fp: { phash: string, dhash: string }
       similarityScore: typeof best.similarityScore === 'number' ? best.similarityScore : 0,
       signerCn: text(meta.signerCn),
       signedAt: text(meta.signedAt),
-      filename: text(meta.filename)
+      filename: text(meta.filename),
+      aiGenerated: null
     }
   } catch {
     return null

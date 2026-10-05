@@ -26,6 +26,11 @@ interface IconTextItem {
 
 type StatusTone = Verdict
 
+/** Codes that compare the manifest with the file's own bytes. Meaningless for a recovered manifest. */
+function isAssetBindingCode (code: string): boolean {
+  return /(dataHash|bmffHash|boxesHash|collectionHash|hardBindings|assertion\.hashedURI)/i.test(code)
+}
+
 // Fatal-code classification and the verdict rule live in src/verdict.ts so the
 // websites can be tested against the same definition. See that file for the reasoning.
 
@@ -173,6 +178,19 @@ export class C2paOverlay extends LitElement {
       }
       .status-badge.verified  { background: rgba(16, 185, 129, 0.14); color: var(--ok); }
       .status-badge.authentic { background: rgba(56, 189, 248, 0.14); color: var(--accent); }
+      .status-badge.recovered { background: rgba(96, 165, 250, 0.18); color: #93c5fd; }
+      .recovered-banner {
+        margin: 8px 0 10px;
+        padding: 8px 10px;
+        border: 1px solid rgba(96, 165, 250, 0.55);
+        border-left-width: 4px;
+        border-radius: 6px;
+        background: rgba(96, 165, 250, 0.10);
+        font-size: 11px;
+        line-height: 1.5;
+        color: #dbeafe;
+      }
+      .recovered-banner strong { display: block; color: #bfdbfe; margin-bottom: 2px; }
       .status-badge.invalid   { background: rgba(244, 63, 94, 0.14);  color: var(--bad); }
       .status-badge.unsigned  { background: rgba(245, 158, 11, 0.14); color: var(--warn); }
 
@@ -416,7 +434,10 @@ export class C2paOverlay extends LitElement {
   }
 
   private setStatus (c2paResult: C2paResult): StatusSummary {
-    const codes = c2paResult.manifestStore?.validationStatus ?? []
+    // A recovered manifest has no file to be bound to, so its "does the file match"
+    // codes say nothing about this copy. They are left out, and the panel says so.
+    const codes = (c2paResult.manifestStore?.validationStatus ?? [])
+      .filter((c) => c2paResult.recoveredFrom == null || !isAssetBindingCode(c))
     // Only genuine integrity failures make a credential "invalid". An untrusted
     // or expired signer is not a failure — it is signed, intact, just not in the
     // trust list (or past its cert validity).
@@ -559,8 +580,17 @@ export class C2paOverlay extends LitElement {
         <div class="header-left">
           <span class="brand">Content Credentials</span>
         </div>
-        <span class="status-badge ${tone}">${tone}</span>
+        <span class="status-badge ${c2paResult.recoveredFrom != null ? 'recovered' : tone}">${c2paResult.recoveredFrom != null ? 'recovered' : tone}</span>
       </div>
+
+      ${c2paResult.recoveredFrom != null
+        ? html`<div class="recovered-banner reveal" style="animation-delay:40ms" role="note">
+            <strong>Recovered from a registry.</strong>
+            These credentials are not in this file. Its own label was removed, and everything below comes from a registered picture that matches it
+            (${c2paResult.recoveredFrom.similarityScore}% match, ${c2paResult.recoveredFrom.registry}).
+            It describes the original. This copy may have been changed since.
+          </div>`
+        : nothing}
 
       <div class="title reveal" style="animation-delay:80ms">
         <div class="thumbnailFrame">
@@ -578,7 +608,7 @@ export class C2paOverlay extends LitElement {
         ? html`<c2pa-pillars class="reveal" style="animation-delay:${pillarsDelay}ms; display:block" .pillars=${pillars} .signerTrusted=${this.status?.trusted === true}></c2pa-pillars>`
         : nothing}
 
-      ${this.renderErrors(c2paResult.manifestStore.validationStatus)}
+      ${this.renderErrors(c2paResult.recoveredFrom != null ? c2paResult.manifestStore.validationStatus.filter((c: string) => !isAssetBindingCode(c)) : c2paResult.manifestStore.validationStatus)}
 
       <!--
         The provenance graph is the thing this extension does that a padlock

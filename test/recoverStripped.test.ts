@@ -59,7 +59,8 @@ describe('recoverByFingerprint', () => {
       similarityScore: 97,
       signerCn: 'sign.trusteddit.com',
       signedAt: '2026-10-05 10:16:33+00:00',
-      filename: 'durable-test.png'
+      filename: 'durable-test.png',
+      aiGenerated: null
     })
   })
 
@@ -87,7 +88,8 @@ describe('recoverByFingerprint', () => {
 describe('recoveredNote', () => {
   it('says the credentials were removed, who signed the original, and that it is a lead', async () => {
     const { recoveredNote } = await loadFresh()
-    const note = recoveredNote({ registry: 'SanMarcSoft Manifest Store', manifestId: 'm', similarityScore: 97, signerCn: 'sign.trusteddit.com', signedAt: '2026-10-05 10:16:33+00:00', filename: 'durable-test.png' })
+    const note = recoveredNote({ registry: 'SanMarcSoft Manifest Store', manifestId: 'm', similarityScore: 97, signerCn: 'sign.trusteddit.com', signedAt: '2026-10-05 10:16:33+00:00', filename: 'durable-test.png', aiGenerated: true })
+    expect(note).toContain('made with AI')
     expect(note).toContain('removed')
     expect(note).toContain('sign.trusteddit.com')
     expect(note).toContain('2026-10-05')
@@ -166,6 +168,6 @@ describe('the no-label note says whether we looked', () => {
     const { noLabelNote } = await import('../src/recovered')
     expect(noLabelNote({ recovered: null, checked: true })).toMatch(/looked for a copy.*found none/i)
     expect(noLabelNote({ recovered: null, checked: false })).toMatch(/turn on/i)
-    expect(noLabelNote({ recovered: { registry: 'R', manifestId: 'm', similarityScore: 97, signerCn: 's', signedAt: '2026-10-05', filename: null }, checked: true })).toMatch(/not proof/i)
+    expect(noLabelNote({ recovered: { registry: 'R', manifestId: 'm', similarityScore: 97, signerCn: 's', signedAt: '2026-10-05', filename: null, aiGenerated: null }, checked: true })).toMatch(/not proof/i)
   })
 })

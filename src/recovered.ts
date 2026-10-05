@@ -10,6 +10,11 @@ export interface RecoveredCredential {
   signerCn: string | null
   signedAt: string | null
   filename: string | null
+  /**
+   * Whether the registered original says it was made with AI. null when the
+   * registered manifest could not be read: unknown, which is not the same as no.
+   */
+  aiGenerated: boolean | null
 }
 
 export function recoveredNote (r: RecoveredCredential): string {
@@ -17,6 +22,7 @@ export function recoveredNote (r: RecoveredCredential): string {
   const when = r.signedAt != null ? ` on ${r.signedAt.slice(0, 10)}` : ''
   return 'This image\'s Content Credentials were removed, but a registered credential matches it. ' +
     `The original was signed by ${who}${when} (${r.similarityScore}% match, ${r.registry}). ` +
+    (r.aiGenerated === true ? 'Its label says it was made with AI. ' : '') +
     'This is a lead, not proof: this copy may have been changed since it was signed.'
 }
 

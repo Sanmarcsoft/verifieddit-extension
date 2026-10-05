@@ -5,7 +5,7 @@
  *  Run with:  bun test test/badgeArt.test.ts
  */
 import { describe, it, expect } from 'bun:test'
-import { badgeSvg, explainBadge, BADGE_LEGEND, withDurable, COLOURS } from '../src/badgeArt'
+import { badgeSvg, explainBadge, BADGE_LEGEND, withDurable, recoveredStatus, COLOURS } from '../src/badgeArt'
 
 describe('badgeSvg', () => {
   it('fills the teardrop with the verdict colour and keeps the CR letters', () => {
@@ -38,6 +38,17 @@ describe('badgeSvg', () => {
     expect(svg).toContain('fill="#FFFFFF"')
     expect(svg).toContain(COLOURS.slash)
     expect(svg).toContain('data-part="slash"')
+  })
+
+  it('colours a recovered credential by what the original says: purple for AI, never green by default', () => {
+    expect(recoveredStatus(true)).toBe('stripped-ai')
+    expect(recoveredStatus(false)).toBe('stripped')
+    // Unknown is not "not AI": it must not borrow the verified green.
+    expect(recoveredStatus(null)).toBe('stripped-unknown')
+    expect(badgeSvg('stripped-ai')).toContain(COLOURS.purple)
+    expect(badgeSvg('stripped-unknown')).toContain(COLOURS.blue)
+    expect(badgeSvg('stripped-unknown')).not.toContain(COLOURS.green)
+    for (const st of ['stripped', 'stripped-ai', 'stripped-unknown'] as const) expect(badgeSvg(st)).toContain('data-glyph="recover"')
   })
 
   it('marks a recovered credential with the recovery arrow', () => {

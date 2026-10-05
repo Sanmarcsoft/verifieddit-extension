@@ -30,6 +30,28 @@ export const DEMO_URL = 'https://www.verifieddit.com/demo'
 
 export const RELEASE_NOTES: readonly ReleaseEntry[] = [
   {
+    tag: 'v1.4.1',
+    date: '2026-10-05',
+    summary: 'A removed label that is found again now shows everything it said, clearly marked as recovered, and the online check works in Chrome.',
+    fixes: [
+      {
+        title: 'Recovered credentials are shown in full, marked as recovered from a registry',
+        howToVerify:
+          'Turn on "Check durable credentials online", right-click an image whose credentials were removed and choose Verify. If a registered copy matches, click the badge: the panel shows the signer, date and history just as it would for a file that still carried them, under a banner saying they were recovered from a registry and describe the original, not this copy.'
+      },
+      {
+        title: 'A recovered AI-made image shows the AI colour, not green',
+        howToVerify:
+          'Recover the label of an image that was made with AI. Its badge is purple with a recovery arrow. If the details could not be read, the badge is blue.'
+      },
+      {
+        title: 'The online check now runs in Chrome when it is switched on',
+        howToVerify:
+          'In Chrome, switch the online check on and verify a signed image that declares a durable credential. "Cloud-recoverable" now confirms. Before, Chrome always behaved as if the switch were off.'
+      }
+    ]
+  },
+  {
     tag: 'v1.4.0',
     date: '2026-10-05',
     summary: 'New badges that say more at a glance, a plain-language guide to them, and a way to find the label of an image whose credentials were removed.',
