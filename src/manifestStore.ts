@@ -88,7 +88,9 @@ export async function probeManifestStore (blob: Blob): Promise<boolean> {
  * claim: no image, no fingerprint computed from pixels, no identifier.
  */
 const REGISTRY_HUB_URL = 'https://api.verifieddit.com/api/v1/durable'
-const SOFT_BINDING_LABEL = /^c2pa\.soft-binding/
+// The spec spells it with a hyphen; our own signer currently writes an underscore
+// and nests the value (verifieddit-www#495). Read both until the signer is fixed.
+const SOFT_BINDING_LABEL = /^c2pa\.soft[-_]binding/
 const ALG_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{2,99}$/
 const MAX_BINDINGS = 4
 const MAX_VALUE_LENGTH = 2048
@@ -108,8 +110,8 @@ export function softBindingsOf (assertions: ReadonlyArray<{ label?: unknown, dat
     const data = a.data as { alg?: unknown, blocks?: unknown } | null | undefined
     const alg = data?.alg
     if (typeof alg !== 'string' || !ALG_PATTERN.test(alg) || !Array.isArray(data?.blocks)) continue
-    for (const block of data.blocks as Array<{ value?: unknown }>) {
-      const value = block?.value
+    for (const block of data.blocks as Array<{ value?: unknown, binding?: { binding_key?: unknown } }>) {
+      const value = block?.value ?? block?.binding?.binding_key
       if (typeof value !== 'string' || value === '' || value.length > MAX_VALUE_LENGTH) continue
       if (out.length < MAX_BINDINGS) out.push({ alg, value })
     }

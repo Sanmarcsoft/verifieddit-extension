@@ -49,6 +49,13 @@ describe('softBindingsOf — reads bindings from signed assertions only', () => 
     ])
   })
 
+  it('also reads the shape our own signer writes today (underscore label, binding_key)', async () => {
+    const { softBindingsOf } = await loadFresh()
+    expect(softBindingsOf([
+      { label: 'c2pa.soft_binding', data: { alg: 'trustmark', alg_version: '0.9.0', blocks: [{ block_type: 'full_image', binding: { binding_key: '4b60d881', model_type: 'Q' } }] } }
+    ])).toEqual([{ alg: 'trustmark', value: '4b60d881' }])
+  })
+
   it('ignores malformed assertions and caps how many bindings it will ask about', async () => {
     const { softBindingsOf } = await loadFresh()
     expect(softBindingsOf(null)).toEqual([])
