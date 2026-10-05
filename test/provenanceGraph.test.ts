@@ -359,7 +359,7 @@ describe('a composite with two credentialed ingredients', () => {
 
   it('draws the composite and both sources as their own credentialed nodes', () => {
     expect(manifests.map((n) => n.kind).sort()).toEqual(['current', 'origin', 'origin'])
-    expect(manifests.filter((n) => n.kind === 'origin').map((n) => n.label).sort()).toEqual(['dev-a-base.jpg', 'dev-b-added.jpg'])
+    expect(manifests.filter((n) => n.kind === 'origin').map((n) => n.label).sort()).toEqual(['a-base.jpg', 'b-added.jpg'])
     expect(graph.nodes.some((n) => n.kind === 'ingredient')).toBe(false)
   })
 
@@ -367,8 +367,8 @@ describe('a composite with two credentialed ingredients', () => {
     const current = manifests.find((n) => n.kind === 'current')!
     const edge = (label: string): string | undefined => graph.edges.find((e) => e.target === current.id && e.label === label)?.source
     const byId = new Map(graph.nodes.map((n) => [n.id, n]))
-    expect(byId.get(edge('parent')!)?.label).toBe('dev-a-base.jpg')
-    expect(byId.get(edge('added')!)?.label).toBe('dev-b-added.jpg')
+    expect(byId.get(edge('parent')!)?.label).toBe('a-base.jpg')
+    expect(byId.get(edge('added')!)?.label).toBe('b-added.jpg')
     expect(byId.get(edge('parent')!)?.relationship).toBe('parentOf')
     expect(byId.get(edge('added')!)?.relationship).toBe('componentOf')
   })
@@ -382,5 +382,7 @@ describe('a composite with two credentialed ingredients', () => {
       expect(graph.edges.filter((e) => e.source === source.id && e.label === 'asserts').length).toBeGreaterThan(0)
     }
     expect(manifests.find((n) => n.kind === 'current')!.ingredientCount).toBe(2)
+    // The composite itself is signed by our PKI, like its sources.
+    expect(JSON.stringify(manifests.find((n) => n.kind === 'current')!.signer)).toContain('Trusteddit')
   })
 })

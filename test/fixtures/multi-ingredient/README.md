@@ -2,13 +2,15 @@
 
 `composite.jpg` is `a-base.jpg` with its contrast changed and `b-added.jpg` pasted in.
 
-- `a-base.jpg` and `b-added.jpg` are signed by the Trusteddit signing service on the
-  development lane (trusted, durable, declared as generated artwork).
-- `composite.jpg` is signed with c2pa-node's public test signer, because the signing
-  service cannot attach ingredient files yet (trusteddit-pki-services#434). Its signer
-  is therefore untrusted; its two ingredients carry their own Trusteddit credentials,
-  `a-base.jpg` as `parentOf` and `b-added.jpg` as `componentOf`.
-- `composite.store.json` is the manifest store c2patool 0.26.7 reads from
-  `composite.jpg`, with thumbnails and certificate chains removed.
+All three are signed by the Trusteddit signing service on the development lane
+(trusted, timestamped, durable, declared as generated artwork). The composite was
+signed with its two sources uploaded as ingredient files
+(trusteddit-pki-services#434), so each source keeps its own credentials inside it:
+`a-base.jpg` as `parentOf`, `b-added.jpg` as `componentOf`, with `c2pa.opened` and
+`c2pa.placed` actions naming them.
 
-Replace `composite.jpg` with one signed by our own PKI once #434 ships.
+`composite.store.json` is the manifest store c2patool 0.26.7 reads from
+`composite.jpg`, with thumbnails and certificate chains removed.
+
+To regenerate: `SignMedia.ts sign a-base.jpg b-added.jpg --lane=development`, then
+`SignMedia.ts sign composite.jpg --lane=development --parent=a-base.jpg --ingredient=b-added.jpg`.

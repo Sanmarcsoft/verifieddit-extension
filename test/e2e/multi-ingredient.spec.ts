@@ -37,6 +37,13 @@ test('a composite shows its edited source and its added source in the panel', as
     // One badge per image: the composite and each of its two sources.
     await expect.poll(async () => await page.evaluate(() => document.querySelectorAll('div[c2pa-icon]').length), { timeout: 45_000 }).toBe(3)
 
+    // All three are signed by Trusteddit and declared as generated artwork, so every
+    // badge is the trusted AI badge: none reads "signer not known" or "changed".
+    // Polled: a badge is a neutral placeholder until its file has been checked.
+    const fills = async (): Promise<Array<string | undefined>> => await page.evaluate(() => [...document.querySelectorAll('div[c2pa-icon]')]
+      .map((el) => (decodeURIComponent((el as HTMLElement).style.backgroundImage).match(/data-part="pin" fill="([^"]+)"/) ?? [])[1]))
+    await expect.poll(fills, { timeout: 30_000 }).toEqual(['#A78BFA', '#A78BFA', '#A78BFA'])
+
     // The composite is the first image on the page; its badge is the nearest one.
     await page.evaluate(() => {
       const r = document.getElementById('composite')!.getBoundingClientRect()
@@ -62,9 +69,9 @@ test('a composite shows its edited source and its added source in the panel', as
       walk(document)
       return out.join(' ')
     })
-    await expect.poll(async () => (await panelText()).includes('dev-b-added.jpg'), { timeout: 15_000 }).toBe(true)
+    await expect.poll(async () => (await panelText()).includes('b-added.jpg'), { timeout: 15_000 }).toBe(true)
     const text = await panelText()
-    expect(text).toContain('dev-a-base.jpg')
+    expect(text).toContain('a-base.jpg')
     expect(text).toContain('parentOf')
     expect(text).toContain('componentOf')
     await page.screenshot({ path: 'test/e2e/results/multi-ingredient-panel.png' })
