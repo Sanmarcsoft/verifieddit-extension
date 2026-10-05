@@ -3,6 +3,7 @@
  *  Licensed under the MIT license.
  */
 
+import { badgeSvg, explainBadge, isBadgeStatus, type BadgeStatus } from './badgeArt'
 import { CR_ICON_SIZE, CR_ICON_Z_INDEX, type VALIDATION_STATUS, CR_ICON_MARGIN_RIGHT, CR_ICON_MARGIN_TOP, CR_ICON_AUDIO_MARGIN_TOP, CR_ICON_AUDIO_MARGIN_RIGHT } from './constants'
 import { type MediaElement } from './mediaRecord'
 
@@ -16,40 +17,32 @@ import { type MediaElement } from './mediaRecord'
 // Fix: use raw '#' hex in the template literals so encodeURIComponent
 // produces a valid data URL, and bake a status-appropriate contrast colour
 // into every path so nothing is left to inheritance.
-const SVG_CR_SUCCESS = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 41 41"><path fill="#2a8a3c" stroke="#1f6a2c" stroke-width="2" d="M1.56 18c0-9.08 7.361-16.44 16.441-16.44s16.443 7.362 16.443 16.442V34.44H18C8.92 34.44 1.56 27.08 1.56 18Z" /><path fill="#ffffff" d="M13.665 26.483c-4.07 0-6.61-3.189-6.61-6.973 0-3.785 2.54-6.973 6.61-6.973 3.292 0 5.522 2.152 6.118 4.951h-3.318c-.441-1.244-1.478-1.996-2.8-1.996-2.048 0-3.396 1.607-3.396 4.018s1.348 4.018 3.396 4.018c1.374 0 2.437-.804 2.852-2.126h3.292c-.545 2.878-2.8 5.08-6.144 5.08M21.12 26.12V12.9h3.11v1.426c.726-.96 1.866-1.582 3.577-1.582h.804v3.06h-.83c-1.166 0-1.892.258-2.436.75-.622.52-.985 1.375-.985 2.67v6.896z" /></svg>`
-const SVG_CR_WARNING = `<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" viewBox="0 0 157 141" overflow="hidden"><path fill="#f0a500" stroke="#8a5e00" stroke-width="6" d="M5.37 61.9c0-31.22 25.31-56.53 56.54-56.53s56.54 25.31 56.54 56.54v56.53H61.9c-31.22 0-56.53-25.31-56.53-56.54Z" /><path fill="#1a1a1a" d="M46.99 91.08C33 91.08 24.26 80.11 24.26 67.1c0-13.02 8.74-23.98 22.73-23.98 11.33 0 18.99 7.39 21.04 17.02H56.62c-1.51-4.28-5.08-6.86-9.63-6.86-7.04 0-11.67 5.52-11.67 13.82 0 8.29 4.63 13.81 11.67 13.81 4.73 0 8.38-2.76 9.81-7.31h11.32c-1.87 9.9-9.63 17.48-21.13 17.48M72.63 89.83V44.36h10.7v4.91c2.49-3.3 6.42-5.44 12.3-5.44h2.76v10.52h-2.85c-4.01 0-6.51.89-8.38 2.58-2.14 1.79-3.39 4.73-3.39 9.18v23.72z" /><path fill="#c83232" stroke="#7a1f1f" stroke-width="3" d="m152.444 124.167-32.99-54.542c-1.266-2.166-4.557-2.166-5.823 0l-33.075 54.542c-1.265 2.165.338 4.812 2.953 4.812h65.981c2.616 0 4.22-2.647 2.954-4.812" /><path fill="#ffffff" d="m114.531 82.458 5.062.001v28.072h-5.062zm2.531 39.302c-2.362 0-4.219-1.764-4.219-4.01s1.857-4.01 4.22-4.01 4.218 1.764 4.218 4.01-1.856 4.01-4.219 4.01" /></svg>`
-const SVG_CR_ERROR = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 41 41"><path fill="#c83232" stroke="#7a1f1f" stroke-width="2" d="M1.56 18c0-9.08 7.361-16.44 16.441-16.44s16.443 7.362 16.443 16.442V34.44H18C8.92 34.44 1.56 27.08 1.56 18Z" /><path fill="#ffffff" d="M13.665 26.483c-4.07 0-6.61-3.189-6.61-6.973 0-3.785 2.54-6.973 6.61-6.973 3.292 0 5.522 2.152 6.118 4.951h-3.318c-.441-1.244-1.478-1.996-2.8-1.996-2.048 0-3.396 1.607-3.396 4.018s1.348 4.018 3.396 4.018c1.374 0 2.437-.804 2.852-2.126h3.292c-.545 2.878-2.8 5.08-6.144 5.08M21.12 26.12V12.9h3.11v1.426c.726-.96 1.866-1.582 3.577-1.582h.804v3.06h-.83c-1.166 0-1.892.258-2.436.75-.622.52-.985 1.375-.985 2.67v6.896z" /><rect x="25" y="25" width="16" height="16" rx="1.5" ry="1.5" fill="#1a1a1a" /><path d="m28 28 10.4 10.4M28 38.4 38.4 28" stroke="#ffffff" stroke-width="2" stroke-linecap="round" fill="none" /></svg>`
 
-const SVG_CR_AI_SUCCESS = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 41 41"><path fill="#2a8a3c" stroke="#1f6a2c" stroke-width="2" d="M1.56 18c0-9.08 7.361-16.44 16.441-16.44s16.443 7.362 16.443 16.442V34.44H18C8.92 34.44 1.56 27.08 1.56 18Z" /><path fill="#ffffff" d="M13.665 26.483c-4.07 0-6.61-3.189-6.61-6.973 0-3.785 2.54-6.973 6.61-6.973 3.292 0 5.522 2.152 6.118 4.951h-3.318c-.441-1.244-1.478-1.996-2.8-1.996-2.048 0-3.396 1.607-3.396 4.018s1.348 4.018 3.396 4.018c1.374 0 2.437-.804 2.852-2.126h3.292c-.545 2.878-2.8 5.08-6.144 5.08M21.12 26.12V12.9h3.11v1.426c.726-.96 1.866-1.582 3.577-1.582h.804v3.06h-.83c-1.166 0-1.892.258-2.436.75-.622.52-.985 1.375-.985 2.67v6.896z" /><rect x="25" y="25" width="10" height="10" rx="1.5" ry="1.5" fill="#1a1a1a" /></svg>`
-const SVG_CR_AI_ERROR = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 41 41"><path fill="#c83232" stroke="#7a1f1f" stroke-width="2" d="M1.56 18c0-9.08 7.361-16.44 16.441-16.44s16.443 7.362 16.443 16.442V34.44H18C8.92 34.44 1.56 27.08 1.56 18Z" /><path fill="#ffffff" d="M13.665 26.483c-4.07 0-6.61-3.189-6.61-6.973 0-3.785 2.54-6.973 6.61-6.973 3.292 0 5.522 2.152 6.118 4.951h-3.318c-.441-1.244-1.478-1.996-2.8-1.996-2.048 0-3.396 1.607-3.396 4.018s1.348 4.018 3.396 4.018c1.374 0 2.437-.804 2.852-2.126h3.292c-.545 2.878-2.8 5.08-6.144 5.08M21.12 26.12V12.9h3.11v1.426c.726-.96 1.866-1.582 3.577-1.582h.804v3.06h-.83c-1.166 0-1.892.258-2.436.75-.622.52-.985 1.375-.985 2.67v6.896z" /><rect x="25" y="25" width="16" height="16" rx="1.5" ry="1.5" fill="#1a1a1a" /><path d="m28 28 10.4 10.4M28 38.4 38.4 28" stroke="#ffffff" stroke-width="2" stroke-linecap="round" fill="none" /></svg>`
 
 // rc11.7 / #86 — "checked, no credentials found". Neutral grey camera
 // silhouette with a red circle-with-slash overlay in the lower-right so
 // users can tell "we verified and this image carries no cryptographic
 // provenance" apart from "we haven't verified yet" (the transient img
 // state during scan) and from "has credentials, trust unknown" (warning).
-const SVG_CR_NO_CREDENTIALS = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 41 41"><path fill="#888888" stroke="#555555" stroke-width="2" d="M1.56 18c0-9.08 7.361-16.44 16.441-16.44s16.443 7.362 16.443 16.442V34.44H18C8.92 34.44 1.56 27.08 1.56 18Z" /><path fill="#ffffff" d="M9 13h5l1.5-2h6l1.5 2h4v10h-18v-10z" /><circle fill="#ffffff" cx="18" cy="18" r="3.5" /><circle fill="none" stroke="#c83232" stroke-width="3" cx="31" cy="30" r="7" /><line stroke="#c83232" stroke-width="3" stroke-linecap="round" x1="26" y1="25" x2="36" y2="35" /></svg>`
 
 // #184 — "credentials were stripped, and a registered credential matches this
 // picture". Deliberately NOT the grey slashed camera: that says "nothing here",
 // this says "something was here, and we found where it is registered". Blue,
 // full strength, with a recovery arrow. It is still not a verdict on the file in
 // hand, so it is never green.
-const SVG_CR_STRIPPED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 41 41"><path fill="#1d6fd6" stroke="#0f4a96" stroke-width="2" d="M1.56 18c0-9.08 7.361-16.44 16.441-16.44s16.443 7.362 16.443 16.442V34.44H18C8.92 34.44 1.56 27.08 1.56 18Z"/><path fill="none" stroke="#ffffff" stroke-width="3.2" stroke-linecap="round" d="M26 18.5a8 8 0 1 1-2.6-5.9"/><path fill="#ffffff" d="M25.6 6.6v7.6h-7.6z"/></svg>`
 
+const BADGE_STATUSES: BadgeStatus[] = ['success', 'success-durable', 'ai-success', 'ai-success-durable', 'warning', 'warning-durable', 'error', 'error-durable', 'ai-error', 'stripped', 'stripped-unrecovered', 'no-credentials', 'unavailable']
+
+// Verdict badges come from badgeArt.ts (#184, art/badges.pen "Badge system v3"),
+// which also holds each badge's plain-language explanation. The three media
+// placeholders are the only entries that are not verdicts.
 const imageSources: { [key in VALIDATION_STATUS]: string } = {
-  success: SVG_CR_SUCCESS,
-  warning: SVG_CR_WARNING,
-  error: SVG_CR_ERROR,
   img: chrome.runtime.getURL('icons/camera.svg'),
   video: chrome.runtime.getURL('icons/video.svg'),
   audio: chrome.runtime.getURL('icons/audio.svg'),
   none: '',
-  'ai-success': SVG_CR_AI_SUCCESS,
-  'ai-error': SVG_CR_AI_ERROR,
-  'no-credentials': SVG_CR_NO_CREDENTIALS,
-  stripped: SVG_CR_STRIPPED
-}
+  ...Object.fromEntries(BADGE_STATUSES.map((st) => [st, badgeSvg(st)]))
+} as { [key in VALIDATION_STATUS]: string }
 
 // The "no credentials" verdict is a real finding, but a weaker one than any
 // verdict about a signature: nothing was cryptographically checked because
@@ -57,7 +50,8 @@ const imageSources: { [key in VALIDATION_STATUS]: string } = {
 // visual weight as a trusted or invalid badge. Held at partial opacity in both
 // the in-page overlay and the popup so the eye reads it as "we looked, there is
 // nothing here" rather than as a judgement on the file's authenticity.
-export const CR_ICON_NO_CREDENTIALS_OPACITY = '0.55'
+// v3: no credentials is drawn at full strength (white, red outline, red slash).
+export const CR_ICON_NO_CREDENTIALS_OPACITY = '1'
 
 /**
  * The badge art for a status, as a data URL. Exported so the popup renders the
@@ -100,7 +94,11 @@ export class CrIcon {
     if (this._crDiv == null) {
       throw new Error('Icon not created')
     }
-    this._crDiv.title = `Click to view C2PA metadata: ${url}`
+    // Hover says what the badge means, in plain words; the click shows the detail.
+    const status = this._status
+    this._crDiv.title = isBadgeStatus(status)
+      ? `${explainBadge(status).title}. ${explainBadge(status).text} Click for details.`
+      : `Click to view Content Credentials: ${url}`
   }
 
   public remove (): void {
@@ -201,6 +199,6 @@ export class CrIcon {
   }
 
   private static validateStatus (status: unknown): status is VALIDATION_STATUS {
-    return ['success', 'warning', 'error', 'img', 'video', 'audio', 'none', 'ai-success', 'ai-error', 'no-credentials', 'stripped'].includes(status as string)
+    return ['success', 'warning', 'error', 'img', 'video', 'audio', 'none', 'ai-success', 'ai-error', 'no-credentials', 'stripped', 'success-durable', 'ai-success-durable', 'warning-durable', 'error-durable', 'stripped-unrecovered', 'unavailable'].includes(status as string)
   }
 }

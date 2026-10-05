@@ -8,6 +8,7 @@ import { type C2paError, type C2paResult } from './c2pa'
 // WASM engine is inlined into every page this content script runs on.
 import { isC2paErrorWire, fromC2paErrorWire } from './c2paWire'
 import { recoveredNote, type RecoveredCredential } from './recovered'
+import { withDurable } from './badgeArt'
 import { type ProvenanceGraph } from './provenanceTypes.js'
 import { type MediaElement } from './content'
 import { CrIcon } from './icon'
@@ -252,14 +253,14 @@ function ensureVerificationFailedIcon (mediaRecord: MediaRecord, url: string, de
   const note = unavailableNote(detail)
 
   if (mediaRecord.icon != null) {
-    mediaRecord.icon.status = 'error'
+    mediaRecord.icon.status = 'unavailable'
     mediaRecord.icon.setMetadataLink(url)
     mediaRecord.icon.onClick = () => { showNoCredentialsToast(note, url) }
     mediaRecord.icon.show()
     return
   }
   mediaRecord.onReady = (mr: MediaRecord): void => {
-    mr.icon = new CrIcon(mr.element, 'error')
+    mr.icon = new CrIcon(mr.element, 'unavailable')
     mr.icon.setMetadataLink(url)
     mr.icon.onClick = () => { showNoCredentialsToast(note, url) }
   }
@@ -1051,7 +1052,8 @@ function setIcon (mediaRecord: MediaRecord): void {
   }
 
   // If C2PA data is available, get the status and update/create the icon
-  const c2paStatus = getC2PAStatus(mediaRecord.state.c2pa);
+  // The lock is added when a registry confirmed the credential (durable).
+  const c2paStatus = withDurable(getC2PAStatus(mediaRecord.state.c2pa), mediaRecord.state.c2pa.durablePillars?.manifestStore === 'verified') as VALIDATION_STATUS;
 
   if (mediaRecord.icon == null) {
     // This case handles non-image media or images where C2PA data arrived before onEnterViewport's load listener.

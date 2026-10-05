@@ -633,3 +633,36 @@
     padding: 1px 4px;
     border-radius: 3px;
 }
+
+/* Badge legend (#184): one click from the first tab, plain words beside each badge. */
+.badge-legend {
+  margin: 12px 0 4px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 8px;
+}
+.badge-legend summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  color: #0f172a;
+}
+.badge-legend-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 10px;
+}
+.badge-legend-row img {
+  flex: none;
+}
+.badge-legend-row strong {
+  display: block;
+  font-size: 13px;
+  color: #0f172a;
+}
+.badge-legend-row p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #475569;
+}

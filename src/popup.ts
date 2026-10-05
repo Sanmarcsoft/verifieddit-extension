@@ -11,6 +11,7 @@ import { AUTO_SCAN_DEFAULT, MSG_AUTO_SCAN_UPDATED, MSG_REQUEST_C2PA_ENTRIES, TRU
 import { getAnalyticsConsent, setAnalyticsConsent, options_opened } from './analytics.js'
 import { type C2paEntryDetails, type MSG_RESPONSE_C2PA_ENTRIES_PAYLOAD, type MSG_RESPONSE_C2PA_SUMMARY_PAYLOAD } from './inject.js'
 import { crIconDataUrl } from './icon.js'
+import { BADGE_LEGEND, badgeDataUrl, explainBadge } from './badgeArt'
 // Side-effect import: registers <c2pa-provenance-graph>. rollup's
 // moduleSideEffects predicate keeps src/ modules, so this survives the build
 // (see rollup.config.js — a bare import here was silently dropped before).
@@ -221,6 +222,7 @@ async function renderAnalyticsConsentBanner (): Promise<void> {
 }
 
 document.addEventListener('DOMContentLoaded', function (): void {
+  renderBadgeLegend()
   populateBuildInfo()
   renderWhatsNew()
   void renderInitErrorBanner()
@@ -803,4 +805,32 @@ function openDiagramInTab (event: Event): void {
       console.debug('popup: could not open the provenance chain in a tab:', error)
     }
   })()
+}
+
+/**
+ * The legend under the results: every badge beside its meaning in plain words.
+ * Built from badgeArt.ts, the same source the page badge uses, so the picture
+ * and the words cannot drift apart.
+ */
+function renderBadgeLegend (): void {
+  const list = document.getElementById('badgeLegendList')
+  if (list == null) return
+  for (const { status } of BADGE_LEGEND) {
+    const { title, text } = explainBadge(status)
+    const row = document.createElement('div')
+    row.className = 'badge-legend-row'
+    const img = document.createElement('img')
+    img.src = badgeDataUrl(status)
+    img.alt = ''
+    img.width = 28
+    img.height = 28
+    const words = document.createElement('div')
+    const name = document.createElement('strong')
+    name.textContent = title
+    const meaning = document.createElement('p')
+    meaning.textContent = text
+    words.append(name, meaning)
+    row.append(img, words)
+    list.append(row)
+  }
 }
