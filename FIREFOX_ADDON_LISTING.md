@@ -176,6 +176,9 @@ Both halves are load-bearing and both are truthful:
   choice rather than a default. With the same switch on, when a file's signed
   credentials name a watermark, its algorithm name and value are sent to
   `api.verifieddit.com`, which asks the public registry that owns it (#184).
+  On an explicit right-click Verify of an image with no credentials, and only
+  then, the same perceptual hashes are sent to look for a credential that was
+  stripped; this never runs during automatic scanning.
 - **`optional: ["technicalAndInteraction"]`**: anonymous usage statistics via
   a signed telemetry relay operated by SanMarcSoft and forwarded to self-hosted
   Umami in the EU at `analytics.sanmarcsoft.com` (`src/analytics.ts`). No data

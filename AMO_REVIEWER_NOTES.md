@@ -106,7 +106,11 @@ for no functional benefit.
   is viewing. The same switch also allows one request to
   `api.verifieddit.com/api/v1/durable/resolve` carrying the watermark algorithm
   name and value read from the file's signed credentials (`probeRegistries` in
-  `src/manifestStore.ts`); no image data and no identifier.
+  `src/manifestStore.ts`); no image data and no identifier. On an explicit
+  right-click Verify of an image with no credentials (never on auto-scan),
+  `recoverStripped` sends the same perceptual hashes to
+  `manifests.sanmarcsoft.com` to look for a stripped credential, and on a match
+  fetches that credential's public JSON record.
 - **Optional: technicalAndInteraction.** Anonymous usage statistics via a signed
   telemetry relay operated by SanMarcSoft and stored in self-hosted Umami in the
   EU at `analytics.sanmarcsoft.com` (`src/analytics.ts`). No data is sent to

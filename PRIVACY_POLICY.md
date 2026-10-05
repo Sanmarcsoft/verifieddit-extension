@@ -66,6 +66,7 @@ This is the complete list. There is nothing else.
 | 3.3 | A fixed surface name | Only when you click a link to Trusteddit or Verifieddit | The site you are opening | `?src=` plus one of five fixed words: `extension-panel`, `extension-popup`, `extension-options`, `extension-context-menu`, `extension-release-notes` |
 | 3.4 | Two perceptual hashes of one image | Only if you switched the durable-credential check on | manifests.sanmarcsoft.com | A pHash and a dHash computed on your device, sent without cookies |
 | 3.4b | A watermark's algorithm name and value, read from the file's signed credentials | Only if you switched the durable-credential check on | api.verifieddit.com, which forwards those two values to the public registry that owns the watermark | Sent without cookies; no image, no hash of the image, no identifier |
+| 3.4c | Two perceptual hashes of an image that has no credentials | Only if the durable-credential check is on AND you right-click that image and choose Verify | manifests.sanmarcsoft.com | Same two hashes as 3.4, sent without cookies; never during automatic scanning |
 | 3.5 | A request for an updated trust list | Only for a trust list you imported from a URL yourself | An allowlisted host | Nothing about you. Sent with credentials omitted. |
 | 3.6 | A request for a trust list you typed in | Only when you paste a URL into the trust-list importer and click Fetch | The host you typed | Nothing about you. Sent with credentials omitted. |
 | 3.7 | Anonymous usage statistics | Only if you opted in to share usage statistics (off by default) | Telemetry relay operated by SanMarcSoft, forwarded to self-hosted Umami in the EU (`analytics.sanmarcsoft.com`) | Signed event payload with install ID (public key thumbprint), ticket, timestamp, extension version, browser family (Chrome or Firefox), signature, JWK, and event parameters. No URLs, file names, media content, or personal data. |
@@ -97,7 +98,15 @@ watermark's algorithm name and its value, both read from the signed credentials
 on your device, and nothing else. Our service passes those two values to the
 public registry that owns that watermark (for example Trufo, or our own manifest
 store) and returns whether a credential is registered. No image and no hash of
-your image is involved in this second request. Turning it
+your image is involved in this second request.
+
+There is one case where the fingerprint of an image *without* credentials is
+sent: when you right-click that image and choose Verify. The extension then
+asks our manifest store whether a credential registered for that picture exists,
+so that a label someone removed can be found again. This happens only on that
+explicit click, only with the switch on, and never during automatic scanning.
+If a match is found, the extension also fetches that credential's public record
+(signer, date) from the same store. Turning it
 on applies from that moment forward and never re-examines anything you looked at
 earlier. With it off, such files still verify normally; the durable binding is
 simply reported as *declared* rather than *confirmed*.
