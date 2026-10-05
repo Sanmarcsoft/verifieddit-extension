@@ -194,7 +194,7 @@ async function handleValidationResult (mediaElement: MediaElement, c2paResult: C
         // A registered credential for a stripped image changes what we say,
         // not the badge: the file in hand still carries nothing verifiable.
         const recovered = (failure as { recovered?: RecoveredCredential | null }).recovered
-        ensureNoCredentialsIcon(mediaRecord, url, noLabelNote({ recovered, checked: (failure as { recoveryChecked?: boolean }).recoveryChecked === true }), recovered != null ? recoveredStatus(recovered.aiGenerated) : 'no-credentials')
+        ensureNoCredentialsIcon(mediaRecord, url, noLabelNote({ recovered, checked: (failure as { recoveryChecked?: boolean }).recoveryChecked === true, detail: (failure as { recoveryDetail?: string }).recoveryDetail }), recovered != null ? recoveredStatus(recovered.aiGenerated) : 'no-credentials')
       } else {
         // Assigning null runs CrIcon.remove() via the setter; this also
         // clears the neutral scanning badge auto-scan put there first.
@@ -1077,5 +1077,14 @@ function setIcon (mediaRecord: MediaRecord): void {
   // Icon already exists (created in onEnterViewport or previously here), update its status
   mediaRecord.icon.status = c2paStatus as VALIDATION_STATUS;
   mediaRecord.icon.setMetadataLink(mediaRecord.src); // Update the metadata link
+  // Re-bind the click: this icon may have been created as a "no label" badge,
+  // whose click shows a note. Left alone, a badge upgraded to real credentials
+  // kept showing that note instead of opening the panel.
+  mediaRecord.icon.onClick = async () => {
+    const offsets = await getOffsets(mediaRecord.element)
+    if (mediaRecord.state.c2pa != null) {
+      openOverlay(mediaRecord.state.c2pa, { x: offsets.x + offsets.width, y: offsets.y })
+    }
+  }
   mediaRecord.icon.show(); // Explicitly ensure icon is visible
 }

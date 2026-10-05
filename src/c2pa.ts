@@ -79,6 +79,8 @@ export interface C2paError extends Error {
   recovered?: RecoveredCredential | null
   /** True when the registry was actually asked about a removed label. */
   recoveryChecked?: boolean
+  /** Why the recovered credential's details could not be shown, when they could not. */
+  recoveryDetail?: string
 }
 
 // The wire helpers that flatten a C2paError for extension messaging live in
@@ -150,24 +152,24 @@ const REGISTERED_MANIFEST_MAX_BYTES = 20 * 1024 * 1024
  * as an embedded one. null on any failure: the caller then falls back to the
  * summary note, and never shows metadata it could not actually read.
  */
-async function registeredStore (manifestId: string): Promise<{ store: C2paRsStore, blob: Blob } | null> {
+async function registeredStore (manifestId: string): Promise<{ store: C2paRsStore, blob: Blob } | { error: string }> {
   try {
-    if (c2pa == null) return null
+    if (c2pa == null) return { error: 'engine not ready' }
     const controller = new AbortController()
     const timer = setTimeout(() => { controller.abort() }, 10000)
     const response = await fetch(`${REGISTERED_MANIFEST_URL}/${encodeURIComponent(manifestId)}`, { credentials: 'omit', signal: controller.signal })
     clearTimeout(timer)
-    if (!response.ok) return null
+    if (!response.ok) return { error: `registry answered ${response.status}` }
     const bytes = await response.blob()
-    if (bytes.size === 0 || bytes.size > REGISTERED_MANIFEST_MAX_BYTES) return null
+    if (bytes.size === 0 || bytes.size > REGISTERED_MANIFEST_MAX_BYTES) return { error: `unexpected size ${bytes.size}` }
     const blob = new Blob([bytes], { type: 'application/c2pa' })
     const reader = await c2pa.reader.fromBlob('application/c2pa', blob)
-    if (reader == null) return null
+    if (reader == null) return { error: 'the registered credential could not be read' }
     const store: C2paRsStore = await reader.manifestStore()
-    if (store.active_manifest == null || store.manifests?.[store.active_manifest] == null) return null
+    if (store.active_manifest == null || store.manifests?.[store.active_manifest] == null) return { error: 'the registered credential is empty' }
     return { store, blob }
-  } catch {
-    return null
+  } catch (error: unknown) {
+    return { error: error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 160) : 'unknown error' }
   }
 }
 
@@ -198,17 +200,22 @@ export async function validateUrl (url: string, recover = false, probe?: boolean
     // explicit Verify (never auto-scan) look the picture up in the registry.
     const looked = recover && probe === true && blob.type.startsWith('image/')
     const recovered = looked ? await recoverStripped(blob, true) : null
+    let recoveryDetail: string | undefined
     if (recovered != null) {
       const registered = await registeredStore(recovered.manifestId)
-      if (registered != null) {
-        const result = await buildResult(registered.store, registered.blob, url, probe, recovered).catch(() => null)
-        if (result != null) {
+      if ('error' in registered) {
+        recoveryDetail = registered.error
+      } else {
+        try {
+          const result = await buildResult(registered.store, registered.blob, url, probe, recovered)
           recovered.aiGenerated = result.aiGeneration !== 'none'
           return result
+        } catch (error: unknown) {
+          recoveryDetail = error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 160) : 'unknown error'
         }
       }
     }
-    return { message: 'No manifest found', url, name: 'No Manifest', recovered, recoveryChecked: looked } satisfies C2paError
+    return { message: 'No manifest found', url, name: 'No Manifest', recovered, recoveryChecked: looked, recoveryDetail } satisfies C2paError
   }
 
   const store: C2paRsStore = await reader.manifestStore()

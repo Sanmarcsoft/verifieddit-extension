@@ -34,8 +34,12 @@ const NO_LABEL = 'No embedded content credentials were found for this image. ' +
  * label and found none" and "we did not look because the online check is off"
  * are different facts, and the person can only act on the second.
  */
-export function noLabelNote (r: { recovered: RecoveredCredential | null | undefined, checked: boolean }): string {
-  if (r.recovered != null) return recoveredNote(r.recovered)
+export function noLabelNote (r: { recovered: RecoveredCredential | null | undefined, checked: boolean, detail?: string }): string {
+  if (r.recovered != null) {
+    // Normally the full credential opens in the panel. This note is the fallback
+    // when its details could not be loaded, and it says so rather than hiding it.
+    return recoveredNote(r.recovered) + (r.detail != null && r.detail !== '' ? ` Its full details could not be shown (${r.detail}).` : '')
+  }
   return r.checked
     ? `${NO_LABEL} We also looked for a copy of a label that might have been removed, and found none.`
     : `${NO_LABEL} If its credentials were removed, a copy may still exist: turn on "Check durable credentials online" in the extension's Options and verify again.`
