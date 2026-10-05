@@ -29,12 +29,17 @@ async function launch (): Promise<{ ctx: BrowserContext, page: Page }> {
 }
 
 /** What right-click, "Verify with Verifieddit" does: fire the menu's click in the service worker. */
-async function verifyViaContextMenu (ctx: BrowserContext): Promise<void> {
+async function verifyViaContextMenu (ctx: BrowserContext): Promise<string> {
   const sw = ctx.serviceWorkers()[0]
-  await sw.evaluate(async (srcUrl) => {
-    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true })
-    // @ts-expect-error dispatch exists on extension events
-    chrome.contextMenus.onClicked.dispatch({ menuItemId: 'verify', srcUrl, frameId: 0, mediaType: 'image', editable: false, pageUrl: tab?.url }, tab)
+  return await sw.evaluate(async (srcUrl) => {
+    // Headless Chrome has no "last focused window", so find the tab by its address.
+    const tabs = await chrome.tabs.query({})
+    const tab = tabs.find((t) => (t.url ?? '').includes('/durable/'))
+    const events = chrome.contextMenus.onClicked as unknown as { dispatch?: (info: unknown, tab: unknown) => void }
+    if (tab == null) return `no tab among ${tabs.length}`
+    if (typeof events.dispatch !== 'function') return 'no dispatch on contextMenus.onClicked'
+    events.dispatch({ menuItemId: 'verify', srcUrl, frameId: 0, mediaType: 'image', editable: false, pageUrl: tab.url }, tab)
+    return `dispatched to tab ${String(tab.id)}`
   }, IMG_URL)
 }
 
@@ -69,7 +74,7 @@ test.describe('recovering a stripped image', () => {
         await page.goto(PAGE_URL, { waitUntil: 'load' })
         await page.bringToFront()
         await page.waitForTimeout(2_000)
-        await verifyViaContextMenu(ctx)
+        console.log(`[recovered ${label}] trigger: ${await verifyViaContextMenu(ctx)}`)
         await page.waitForFunction(() => document.querySelector('div[c2pa-icon]') != null, { timeout: 45_000 }).catch(() => {})
         await page.waitForTimeout(2_000)
         const b = await badge(page)
