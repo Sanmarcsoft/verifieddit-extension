@@ -30,6 +30,33 @@ export const DEMO_URL = 'https://www.verifieddit.com/demo'
 
 export const RELEASE_NOTES: readonly ReleaseEntry[] = [
   {
+    tag: 'v1.4.0',
+    date: '2026-10-05',
+    summary: 'New badges that say more at a glance, a plain-language guide to them, and a way to find the label of an image whose credentials were removed.',
+    fixes: [
+      {
+        title: 'New badges: colour is the verdict, a lock means the label is backed up',
+        howToVerify:
+          'Look at the badge on a signed image. Green is checked and trusted, purple is made with AI and honestly labelled, yellow is signed by someone we do not know, red is changed after signing. A lock in the upper right means a public copy of the label exists. An image with no label shows a white badge with a red slash.'
+      },
+      {
+        title: 'What do the badges mean? One click, in plain words',
+        howToVerify:
+          'Open the extension. Under the results, click "What do the badges mean?" to see every badge beside a short explanation. Hovering over a badge on a page shows the same explanation.'
+      },
+      {
+        title: 'Find the label of an image whose credentials were removed',
+        howToVerify:
+          'Turn on "Check durable credentials online" in Options, then right-click an image and choose Verify. If its credentials were stripped but a public copy matches the picture, the badge shows a recovery arrow and tells you who signed the original and when. This is a strong hint, not proof.'
+      },
+      {
+        title: 'More registries are asked, and the registry record is compared with the file',
+        howToVerify:
+          'With the online check on, inspect a signed image and open "Cloud-recoverable". It names the registry that holds the label and says whether this file is the registered original or differs from it.'
+      }
+    ]
+  },
+  {
     tag: 'v1.3.0',
     date: '2026-10-05',
     summary: 'Media signed with the newer timestamp format verifies correctly, and you can choose to share anonymous usage statistics.',
