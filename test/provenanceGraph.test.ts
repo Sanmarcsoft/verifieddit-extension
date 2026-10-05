@@ -348,3 +348,39 @@ describe('visibleSubgraph', () => {
     expect(opened.edges.filter((e) => e.label === 'sensor').length).toBe(2)
   })
 })
+
+// A real composite (#184): one credentialed image edited, a second credentialed
+// image added. The store is what c2patool reads from test/fixtures/multi-ingredient.
+describe('a composite with two credentialed ingredients', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const store = require('./fixtures/multi-ingredient/composite.store.json')
+  const graph = buildProvenanceGraph(store, 'composite.jpg')!
+  const manifests = graph.nodes.filter((n) => n.hasManifest)
+
+  it('draws the composite and both sources as their own credentialed nodes', () => {
+    expect(manifests.map((n) => n.kind).sort()).toEqual(['current', 'origin', 'origin'])
+    expect(manifests.filter((n) => n.kind === 'origin').map((n) => n.label).sort()).toEqual(['dev-a-base.jpg', 'dev-b-added.jpg'])
+    expect(graph.nodes.some((n) => n.kind === 'ingredient')).toBe(false)
+  })
+
+  it('says which source was edited and which was added', () => {
+    const current = manifests.find((n) => n.kind === 'current')!
+    const edge = (label: string): string | undefined => graph.edges.find((e) => e.target === current.id && e.label === label)?.source
+    const byId = new Map(graph.nodes.map((n) => [n.id, n]))
+    expect(byId.get(edge('parent')!)?.label).toBe('dev-a-base.jpg')
+    expect(byId.get(edge('added')!)?.label).toBe('dev-b-added.jpg')
+    expect(byId.get(edge('parent')!)?.relationship).toBe('parentOf')
+    expect(byId.get(edge('added')!)?.relationship).toBe('componentOf')
+  })
+
+  it('keeps each source valid and carrying its own signer and assertions', () => {
+    for (const source of manifests.filter((n) => n.kind === 'origin')) {
+      expect(source.validationState).toBe('valid')
+      expect(source.signer).not.toBeNull()
+      expect(source.assertions).toContain('c2pa.soft_binding')
+      // Each source's assertions hang off that source, not off the composite.
+      expect(graph.edges.filter((e) => e.source === source.id && e.label === 'asserts').length).toBeGreaterThan(0)
+    }
+    expect(manifests.find((n) => n.kind === 'current')!.ingredientCount).toBe(2)
+  })
+})
