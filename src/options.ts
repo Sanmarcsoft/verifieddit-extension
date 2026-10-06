@@ -14,7 +14,7 @@
  * surfaces cannot drift: whichever you change last wins, and reopening either
  * one reads the stored value back.
  */
-import { AUTO_SCAN_DEFAULT, MSG_AUTO_SCAN_UPDATED, MANIFEST_STORE_PROBE_DEFAULT, MANIFEST_STORE_PROBE_KEY, VIDEO_UPLOAD_RECOVERY_DEFAULT, VIDEO_UPLOAD_RECOVERY_KEY, ICON_ONLY_DEFAULT, ICON_ONLY_KEY } from './constants.js'
+import { AUTO_SCAN_DEFAULT, MSG_AUTO_SCAN_UPDATED, MANIFEST_STORE_PROBE_DEFAULT, MANIFEST_STORE_PROBE_KEY, ICON_ONLY_DEFAULT, ICON_ONLY_KEY } from './constants.js'
 import { type ToggleSwitch } from './components/toggle.js'
 import { getAnalyticsConsent, setAnalyticsConsent, options_opened } from './analytics.js'
 
@@ -48,22 +48,6 @@ function wireManifestStoreProbe (): void {
   toggle.addEventListener('change', (event) => {
     const checked = (event as CustomEvent).detail.checked
     void chrome.storage.local.set({ [MANIFEST_STORE_PROBE_KEY]: checked })
-  })
-}
-
-// Sending a video to Verifieddit to look for a removed credential (#195). The
-// file leaves the browser, so it is its own switch and stays off until asked for.
-function wireVideoUploadRecovery (): void {
-  const toggle = document.getElementById('toggleVideoUploadRecovery') as ToggleSwitch | null
-  if (toggle == null) return
-
-  chrome.storage.local.get(VIDEO_UPLOAD_RECOVERY_KEY, (result) => {
-    toggle.checked = result[VIDEO_UPLOAD_RECOVERY_KEY] ?? VIDEO_UPLOAD_RECOVERY_DEFAULT
-  })
-
-  toggle.addEventListener('change', (event) => {
-    const checked = (event as CustomEvent).detail.checked
-    void chrome.storage.local.set({ [VIDEO_UPLOAD_RECOVERY_KEY]: checked })
   })
 }
 
@@ -108,10 +92,6 @@ chrome.storage.onChanged.addListener((changes, area) => {
     const toggle = document.getElementById('toggleManifestStoreProbe') as ToggleSwitch | null
     if (toggle != null) toggle.checked = changes[MANIFEST_STORE_PROBE_KEY].newValue ?? MANIFEST_STORE_PROBE_DEFAULT
   }
-  if (VIDEO_UPLOAD_RECOVERY_KEY in changes) {
-    const toggle = document.getElementById('toggleVideoUploadRecovery') as ToggleSwitch | null
-    if (toggle != null) toggle.checked = changes[VIDEO_UPLOAD_RECOVERY_KEY].newValue ?? VIDEO_UPLOAD_RECOVERY_DEFAULT
-  }
   if (ICON_ONLY_KEY in changes) {
     const toggle = document.getElementById('toggleIconOnly') as ToggleSwitch | null
     if (toggle != null) toggle.checked = changes[ICON_ONLY_KEY].newValue ?? ICON_ONLY_DEFAULT
@@ -125,6 +105,5 @@ chrome.storage.onChanged.addListener((changes, area) => {
 void options_opened()
 wireAutoScan()
 wireManifestStoreProbe()
-wireVideoUploadRecovery()
 wireIconOnly()
 wireAnalyticsConsent()

@@ -69,7 +69,7 @@ This is the complete list. There is nothing else.
 | 3.4c | Two perceptual hashes of an image that has no credentials | Only if the durable-credential check is on AND you right-click that image and choose Verify | manifests.sanmarcsoft.com | Same two hashes as 3.4, sent without cookies; never during automatic scanning |
 | 3.4d | A watermark's binding value, read from the file's signed credentials, then the id of the matching record | Only if the durable-credential check is on, for a file whose credentials name a TrustMark watermark | manifests.sanmarcsoft.com | Used to fetch that credential's public record (signer, date, file hash) and compare it with the file on your device. The file and its hash are never sent |
 | 3.4e | The id of a recovered credential | Only after 3.4c found a match | manifests.sanmarcsoft.com | Fetches the full registered credential so it can be shown to you, marked as recovered |
-| 3.4f | A video file (MP4, up to 25 MB) that has no credentials | Only if the durable-credential check is on AND "Send videos I verify to Verifieddit" is on AND you right-click that video and choose Verify | api.verifieddit.com | The video itself, sent without cookies. The service reads the invisible watermark in its frames, looks for a registered credential, and deletes the file as soon as it has been read |
+| 3.4f | Two perceptual hashes of one frame of a video that has no credentials, and two of the centre of that frame | Only if the durable-credential check is on AND you right-click that video and choose Verify | manifests.sanmarcsoft.com | Four 16-character hashes computed on your device from the frame at half the video's duration, sent without cookies. The video and the frame never leave your browser |
 | 3.5 | A request for an updated trust list | Only for a trust list you imported from a URL yourself | An allowlisted host | Nothing about you. Sent with credentials omitted. |
 | 3.6 | A request for a trust list you typed in | Only when you paste a URL into the trust-list importer and click Fetch | The host you typed | Nothing about you. Sent with credentials omitted. |
 | 3.7 | Anonymous usage statistics | Only if you opted in to share usage statistics (off by default) | Telemetry relay operated by SanMarcSoft, forwarded to self-hosted Umami in the EU (`analytics.sanmarcsoft.com`) | Signed event payload with install ID (public key thumbprint), ticket, timestamp, extension version, browser family (Chrome or Firefox), signature, JWK, and event parameters. No URLs, file names, media content, or personal data. |
@@ -111,16 +111,13 @@ explicit click, only with the switch on, and never during automatic scanning.
 If a match is found, the extension also fetches that credential's public record
 (signer, date) from the same store.
 
-A video is different, and has its own switch. A video's durable credential is an
-invisible watermark in its frames, and reading it takes a model far too large to
-run in a browser. So a removed video label can only be found by sending the
-video itself to `api.verifieddit.com`. That is a bigger thing to send than a
-fingerprint, so it is governed by a second switch, "Send videos I verify to
-Verifieddit", which is off by default and does nothing unless the first switch is
-also on. With both on, the video is sent only when you right-click a video that
-has no credentials and choose Verify: never during automatic scanning, never for
-a video that already carries credentials, and never above 25 MB. The service
-reads the watermark, answers, and deletes the file. Turning the first switch
+A video is checked the same way as a picture, and nothing more is sent. Your
+browser takes one frame, the one at half the video's duration, removes any black
+bars, and computes the same kind of fingerprint from it and from its centre. Only
+those short hashes go to our manifest store. The video itself never leaves your
+browser, and neither does the frame. This also happens only on an explicit
+right-click Verify with the switch on, never during automatic scanning. Turning
+the switch
 on applies from that moment forward and never re-examines anything you looked at
 earlier. With it off, such files still verify normally; the durable binding is
 simply reported as *declared* rather than *confirmed*.

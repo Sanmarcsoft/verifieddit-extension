@@ -35,6 +35,26 @@ export const RELEASE_NOTES: readonly ReleaseEntry[] = [
     summary: 'A removed label that is found again now shows everything it said, clearly marked as recovered, and the online check works in Chrome.',
     fixes: [
       {
+        title: 'Large videos are verified without being downloaded into memory',
+        howToVerify:
+          'Verify a signed video of a gigabyte or more. Its credential is read at once from its own part of the file. Right-click it and choose Verify to have the whole file checked against the credential as it streams. Until that is done, the panel says "Contents not checked" and the badge is amber, never green.'
+      },
+      {
+        title: 'A video whose label was removed can be found again, without leaving your browser',
+        howToVerify:
+          'Turn on "Check durable credentials online", right-click a video that has no credentials and choose Verify. One frame is fingerprinted in your browser and only that fingerprint is sent. If a signed video matches, its credential opens marked as recovered. The video itself is never sent.'
+      },
+      {
+        title: 'When several registered records match a recovered picture, all of them are listed',
+        howToVerify:
+          'Recover the label of a picture that was signed more than once. The panel names the record it shows and lists the others with their dates.'
+      },
+      {
+        title: 'The provenance diagram no longer draws labels on top of each other',
+        howToVerify:
+          'Open the diagram for a picture made from two signed sources. The finished picture sits between its sources and every line label can be read.'
+      },
+      {
         title: 'Icon-only badges for anyone who cannot tell the colours apart',
         howToVerify:
           'Open the popup, go to Options and turn on "Icon-only badges, no colour needed". Every badge on the page and in the popup turns black on white and shows a shape: a check for verified, a four-point spark for made with AI, a triangle for an unknown signer, a cross for changed after signing. Turn it off and the colours return.'

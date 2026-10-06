@@ -179,14 +179,13 @@ Both halves are load-bearing and both are truthful:
   On an explicit right-click Verify of an image with no credentials, and only
   then, the same perceptual hashes are sent to look for a credential that was
   stripped; this never runs during automatic scanning.
-  A second switch, also **off by default** and inert unless the first is on,
-  covers video (`recoverVideoByUpload` in `src/manifestStore.ts`). A video's
-  durable credential is a watermark in its frames that only our service can
-  read, so on an explicit right-click Verify of an MP4 with no credentials
-  (never on auto-scan, never above 25 MB) the video file itself is sent to
-  `api.verifieddit.com/api/v1/verify`, without cookies. The service reads the
-  watermark, answers, and deletes the file. This is the one case where media
-  bytes leave the browser, and it is disclosed in the UI next to the switch.
+  Video is handled the same way, in the browser (`recoverVideoByFingerprint`
+  in `src/manifestStore.ts`, `src/videoFrame.ts`). On an explicit right-click
+  Verify of a video with no credentials (never on auto-scan), the add-on reads
+  the frame at half the video's duration in a detached, muted `<video>`
+  element, removes black bars, and sends perceptual hashes of that frame and of
+  its centre to `manifests.sanmarcsoft.com`. The video and the frame never
+  leave the browser; no media bytes are sent anywhere by this add-on.
 - **`optional: ["technicalAndInteraction"]`**: anonymous usage statistics via
   a signed telemetry relay operated by SanMarcSoft and forwarded to self-hosted
   Umami in the EU at `analytics.sanmarcsoft.com` (`src/analytics.ts`). No data

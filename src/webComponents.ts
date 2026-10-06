@@ -11,6 +11,8 @@ import { claimsDurability, type DurablePillars } from './durableCredentials'
 import { buildExpiryEvidence, classifyExpiry, expiryReason, type ExpiryVerdict } from './signatureValidity'
 import { computeVerdict, durabilityApplies, isFatalValidationCode, type Verdict } from './verdict'
 import { MSG_L3_INSPECT_URL, TRUSTEDDIT_LINK, taggedLink, MSG_SET_MANIFEST_STORE_PROBE, MANIFEST_STORE_PROBE_KEY, MANIFEST_STORE_PROBE_DEFAULT } from './constants'
+import { screenReaderSummary } from './recovered'
+import { contentsNote } from './bigMedia'
 import './provenanceDiagram'
 
 /*
@@ -460,7 +462,8 @@ export class C2paOverlay extends LitElement {
     const trusted = c2paResult.trustList != null
     const signed = (c2paResult.certChain?.length ?? 0) > 0 ||
       (c2paResult.manifestStore?.manifests?.length ?? 0) > 0
-    const tone: StatusTone = computeVerdict({ codes, signed, trusted })
+    // Contents that were not checked cap the verdict: never 'verified' (verdict.ts).
+    const tone: StatusTone = computeVerdict({ codes, signed, trusted, contentsUnchecked: c2paResult.contentsCheck?.state === 'not-checked' })
     return { errors, trusted, tone, expired, expiry }
   }
 
@@ -568,13 +571,20 @@ export class C2paOverlay extends LitElement {
     // #128/#129: a plain-text, screen-reader summary in THIS shadow root (not the
     // nested typewriter). Makes the verdict announceable via aria-live and keeps
     // the signer + trust state available to overlay.shadowRoot.textContent.
-    const srSummary = `${mediaType} signed by ${this.signer ?? 'unknown'}. ` +
-      (trusted
-        ? expiredReason != null
-            ? `Signer in trust list ${this.trustList ?? ''}, but the ${expiredReason}. The file itself is intact.`
-            : `Trusted: ${this.trustList ?? ''}.`
-        : 'Signer unknown to your trust list.') +
-      (hasErrors ? ' Validation errors present.' : '')
+    // A file verified in pieces says what was done with its contents (#197).
+    const contents = c2paResult.contentsCheck != null ? contentsNote(c2paResult.contentsCheck) : null
+    // A recovered credential is announced as recovered, never as this file
+    // being signed (recovered.ts screenReaderSummary).
+    const srSummary = screenReaderSummary({
+      mediaType,
+      signer: this.signer,
+      trusted,
+      trustList: this.trustList,
+      expiredReason,
+      hasErrors,
+      recovered: c2paResult.recoveredFrom,
+      contents: contents
+    })
 
     return html`
     <div id="card">
@@ -583,9 +593,12 @@ export class C2paOverlay extends LitElement {
         <div class="header-left">
           <span class="brand">Content Credentials</span>
         </div>
-        <span class="status-badge ${c2paResult.recoveredFrom != null ? 'recovered' : tone}">${c2paResult.recoveredFrom != null ? 'recovered' : tone}</span>
+        <span class="status-badge ${c2paResult.recoveredFrom != null ? 'recovered' : tone}">${c2paResult.recoveredFrom != null ? 'recovered' : c2paResult.contentsCheck?.state === 'not-checked' ? 'contents not checked' : tone}</span>
       </div>
 
+      ${contents != null
+        ? html`<div class="recovered-banner reveal" style="animation-delay:40ms" role="note" data-contents-check=${c2paResult.contentsCheck?.state ?? ''}>${contents}</div>`
+        : nothing}
       ${c2paResult.recoveredFrom != null
         ? html`<div class="recovered-banner reveal" style="animation-delay:40ms" role="note">
             <strong>Recovered from a registry.</strong>

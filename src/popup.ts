@@ -3,11 +3,13 @@
  *  Licensed under the MIT license.
  */
 
+import { CONTENTS_NOT_CHECKED } from './recovered'
+import { isWebLink } from './fetchGuard'
 import { type TrustListInfo, getTrustListInfos, removeTrustList, addTSATrustFile, addTrustFile } from './trustlistProxy.js'
 import packageManifest from '../package.json'
 import { BUILD_INFO } from './build-info'
 import { familyTag } from './releaseTag.js'
-import { AUTO_SCAN_DEFAULT, MSG_AUTO_SCAN_UPDATED, MSG_REQUEST_C2PA_ENTRIES, TRUSTEDDIT_LINK, taggedLink, MSG_RESPONSE_C2PA_ENTRIES, MSG_RESPONSE_C2PA_SUMMARY, VIDEO_UPLOAD_RECOVERY_DEFAULT, VIDEO_UPLOAD_RECOVERY_KEY, MANIFEST_STORE_PROBE_DEFAULT, MANIFEST_STORE_PROBE_KEY, ICON_ONLY_DEFAULT, ICON_ONLY_KEY } from './constants.js'
+import { AUTO_SCAN_DEFAULT, MSG_AUTO_SCAN_UPDATED, MSG_REQUEST_C2PA_ENTRIES, TRUSTEDDIT_LINK, taggedLink, MSG_RESPONSE_C2PA_ENTRIES, MSG_RESPONSE_C2PA_SUMMARY, MANIFEST_STORE_PROBE_DEFAULT, MANIFEST_STORE_PROBE_KEY, ICON_ONLY_DEFAULT, ICON_ONLY_KEY } from './constants.js'
 import { getAnalyticsConsent, setAnalyticsConsent, options_opened } from './analytics.js'
 import { type C2paEntryDetails, type MSG_RESPONSE_C2PA_ENTRIES_PAYLOAD, type MSG_RESPONSE_C2PA_SUMMARY_PAYLOAD } from './inject.js'
 import { crIconDataUrl, iconOnlyReady, isIconOnly } from './icon.js'
@@ -134,7 +136,10 @@ async function renderTrustListsTab (): Promise<void> {
     const summary = `<p class="trustlists-summary"><b>${tlis.length}</b> trust list${tlis.length === 1 ? '' : 's'} loaded · <b>${totalEntities}</b> entit${totalEntities === 1 ? 'y' : 'ies'} total</p>`
     const rows = tlis.map((tli) => {
       const displayName = esc(tli.name ?? '(unnamed list)')
-      const website = tli.website?.length > 0 ? `<a href="${esc(tli.website)}" target="_blank" rel="noopener">${esc(tli.website)}</a>` : '<span class="detail-dim">no website</span>'
+      // A trust list names its own website; only a plain web address becomes a link.
+      const website = isWebLink(tli.website)
+        ? `<a href="${esc(tli.website)}" target="_blank" rel="noopener">${esc(tli.website)}</a>`
+        : tli.website?.length > 0 ? esc(tli.website) : '<span class="detail-dim">no website</span>'
       const lastUpdated = tli.last_updated != null && tli.last_updated !== ''
         ? esc(tli.last_updated.slice(0, 10))
         : '<span class="detail-dim">unknown</span>'
@@ -279,18 +284,6 @@ document.addEventListener('DOMContentLoaded', function (): void {
     const checked = (event as CustomEvent).detail.checked
     void chrome.storage.local.set({ [MANIFEST_STORE_PROBE_KEY]: checked })
   })
-
-  // Sending a video to Verifieddit to look for a removed credential (#195).
-  const videoUploadToggle = document.getElementById('toggleVideoUploadRecovery') as ToggleSwitch | null
-  if (videoUploadToggle != null) {
-    chrome.storage.local.get(VIDEO_UPLOAD_RECOVERY_KEY, (result) => {
-      videoUploadToggle.checked = result[VIDEO_UPLOAD_RECOVERY_KEY] ?? VIDEO_UPLOAD_RECOVERY_DEFAULT
-    })
-    videoUploadToggle.addEventListener('change', (event) => {
-      const checked = (event as CustomEvent).detail.checked
-      void chrome.storage.local.set({ [VIDEO_UPLOAD_RECOVERY_KEY]: checked })
-    })
-  }
 
   // Icon-only badges: a display preference, nothing leaves the browser. The
   // legend and the rows already listed are redrawn so the change is seen at once.
@@ -520,6 +513,8 @@ function statusLabel (r: MSG_RESPONSE_C2PA_ENTRIES_PAYLOAD): { text: string, cls
   // failure but is a different claim, so it gets its own label. "Unchecked"
   // says we could not look; "Invalid" would say the file is broken.
   if (r.kind === 'unavailable') return { text: 'Unchecked', cls: 'status-unavailable' }
+  // Amber because its contents were not checked (a large file), not because of who signed it.
+  if (r.kind === 'credentials' && r.detail === CONTENTS_NOT_CHECKED) return { text: CONTENTS_NOT_CHECKED, cls: 'status-warning' }
   switch (r.status) {
     case 'success':         return { text: 'Trusted',     cls: 'status-success' }
     case 'warning':         return { text: 'Untrusted',   cls: 'status-warning' }
@@ -778,7 +773,7 @@ async function displayTrustListInfos (): Promise<void> {
     tlis.forEach((tli, index) => {
       const safeName = esc(tli.name ?? '')
       const safeWebsite = esc(tli.website ?? '')
-      const listItem = (tli.website.length > 0)
+      const listItem = isWebLink(tli.website)
         ? `<li><a href="${safeWebsite}" target="_blank" rel="noopener">${safeName}</a>`
         : `<li>${safeName}`
       listHtml += `${listItem} (<a href="#" class="delete-link" data-index="${index}">delete</a>)</li>`

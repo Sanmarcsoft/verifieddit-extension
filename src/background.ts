@@ -27,7 +27,7 @@ import {
 import {
   MSG_GET_ID, MSG_L3_INSPECT_URL, MSG_REMOTE_INSPECT_URL, MSG_FORWARD_TO_CONTENT, REMOTE_VALIDATION_LINK,
   MSG_VALIDATE_URL, AWAIT_ASYNC_RESPONSE, MSG_C2PA_RESULT_FROM_CONTEXT, AUTO_SCAN_DEFAULT, MSG_AUTO_SCAN_UPDATED,
-  MSG_SET_MANIFEST_STORE_PROBE, MANIFEST_STORE_PROBE_KEY, VIDEO_UPLOAD_RECOVERY_KEY, MSG_OPEN_OVERLAY, PORT_OVERLAY_FRAME, MSG_RELAY_READY,
+  MSG_SET_MANIFEST_STORE_PROBE, MANIFEST_STORE_PROBE_KEY, MSG_OPEN_OVERLAY, PORT_OVERLAY_FRAME, MSG_RELAY_READY, MSG_CLAIM_OVERLAY_FRAME, MSG_RELAY_CLAIMED,
   TRUSTLIST_UPDATE_INTERVAL, MSG_REQUEST_C2PA_ENTRIES
 } from './constants'
 import { sendMessageToAllTabs } from './utils'
@@ -115,7 +115,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   void verify_started('context_menu')
 
   // The user asked: this is the one path that may look a stripped image up (#184).
-  void validateUrl(url, true).then(c2paResult => {
+  void validateUrl(url, true, info.frameUrl ?? info.pageUrl ?? tab?.url).then(c2paResult => {
     emitVerifyCompleted(c2paResult, mapMediaType(info.mediaType))
 
     // A thrown Error used to be dropped here with a bare `return`, so when the
@@ -149,6 +149,8 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
  * map would only preserve stale handles; the frames reconnect on their side.
  */
 const overlayFramePorts = new Map<number, chrome.runtime.Port>()
+/** Ports that have connected but that no content script has claimed, by nonce. */
+const unclaimedOverlayPorts = new Map<string, { tabId: number, port: chrome.runtime.Port }>()
 
 chrome.runtime.onConnect.addListener(port => {
   if (port.name !== PORT_OVERLAY_FRAME) return
@@ -156,8 +158,9 @@ chrome.runtime.onConnect.addListener(port => {
   // Tell the frame what we resolved, including when we resolved nothing. A port
   // that connects but cannot be routed looks identical to a healthy one from the
   // frame's side, and that ambiguity is what made #149 so hard to see.
+  const nonce = crypto.randomUUID()
   try {
-    port.postMessage({ action: MSG_RELAY_READY, data: { tabId: tabId ?? null } })
+    port.postMessage({ action: MSG_RELAY_READY, data: { tabId: tabId ?? null, nonce } })
   } catch { /* frame torn down between connect and now */ }
   if (tabId == null) {
     // Without a tab we cannot route a payload back, and guessing would risk
@@ -165,8 +168,12 @@ chrome.runtime.onConnect.addListener(port => {
     console.debug('background: overlay-frame port with no tab id, ignoring')
     return
   }
-  overlayFramePorts.set(tabId, port)
+  // Not routed yet. iframe.html is web-accessible, so this port may belong to a
+  // copy a page framed for itself. It is routed only once the content script
+  // claims its nonce (MSG_CLAIM_OVERLAY_FRAME below).
+  unclaimedOverlayPorts.set(nonce, { tabId, port })
   port.onDisconnect.addListener(() => {
+    unclaimedOverlayPorts.delete(nonce)
     // Only clear our own entry — a reconnect may already have replaced it.
     if (overlayFramePorts.get(tabId) === port) overlayFramePorts.delete(tabId)
   })
@@ -177,11 +184,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const action = message.action
   const data = message.data
 
+  // The content script vouches for the panel frame it created. Only then is
+  // that frame's port routed. The nonce must belong to a port in the same tab.
+  if (action === MSG_CLAIM_OVERLAY_FRAME) {
+    const claimed = typeof data === 'string' ? unclaimedOverlayPorts.get(data) : undefined
+    // Only the top page's content script may claim: the extension runs in every
+    // frame, and a frame inside the page must not take the page's channel.
+    if (claimed != null && tabId != null && claimed.tabId === tabId && sender.frameId === 0) {
+      unclaimedOverlayPorts.delete(data as string)
+      overlayFramePorts.set(tabId, claimed.port)
+      // Tell the frame, so it stops asking and so the state can be observed.
+      try { claimed.port.postMessage({ action: MSG_RELAY_CLAIMED, data: { tabId } }) } catch { /* frame gone */ }
+    } else if (tabId != null && typeof data === 'string' && overlayFramePorts.get(tabId) != null && sender.frameId === 0) {
+      // A repeat of a claim already honoured (the frame asks until it hears
+      // back, and the first answer may have crossed with the next question).
+      try { overlayFramePorts.get(tabId)?.postMessage({ action: MSG_RELAY_CLAIMED, data: { tabId } }) } catch { /* frame gone */ }
+    }
+    return
+  }
+
+  // Some requests are honoured only from the extension's own pages (popup,
+  // options, the panel frame), never on the say-so of a script in a web page.
+  const fromOwnPage = typeof sender.url === 'string' && sender.url.startsWith(chrome.runtime.getURL(''))
+
   if (action === MSG_GET_ID) {
     sendResponse({ tab: tabId, frame: sender.frameId })
   }
 
-  if (action === MSG_L3_INSPECT_URL) {
+  // Opening a tab is asked for only by the panel's own Inspect button.
+  if (action === MSG_L3_INSPECT_URL && fromOwnPage) {
     // Open verifieddit.com with the image URL pre-populated via ?url=.
     // (#74) Replaces the upstream "paste into Microsoft Content Integrity's
     // HTMLInputElement via MutationObserver" dance, which was tied to
@@ -225,7 +256,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       void badge_scan()
     }
     // Flatten Errors before they cross the port — see C2paErrorWire in c2pa.ts.
-    void validateUrl(data as string)
+    // The page asking decides what may be fetched for it (fetchGuard.ts).
+    void validateUrl(data as string, false, sender.url ?? sender.tab?.url)
       .then((result) => {
         if (shouldEmit) {
           // media_type is not known on this path (the content script sends only a URL)
@@ -236,7 +268,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return AWAIT_ASYNC_RESPONSE
   }
 
-  if (action === MSG_AUTO_SCAN_UPDATED) {
+  if (action === MSG_AUTO_SCAN_UPDATED && fromOwnPage) {
     void chrome.storage.local.set({ autoScan: data })
     void sendMessageToAllTabs({ action: MSG_AUTO_SCAN_UPDATED, data })
   }
@@ -244,13 +276,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Consent for the manifest-store probe, given from the overlay or the popup.
   // Stored only; nothing is probed retroactively, so turning it on never
   // reaches the network for media the user already looked at.
-  if (action === MSG_SET_MANIFEST_STORE_PROBE) {
+  if (action === MSG_SET_MANIFEST_STORE_PROBE && fromOwnPage) {
     void chrome.storage.local.set({ [MANIFEST_STORE_PROBE_KEY]: data === true })
   }
 })
 
-async function validateUrl (url: string, recover = false): Promise<C2paResult | C2paError> {
-  const c2paResult = await c2paValidateWithRetry(url, recover);
+async function validateUrl (url: string, recover = false, pageUrl?: string): Promise<C2paResult | C2paError> {
+  const c2paResult = await c2paValidateWithRetry(url, recover, pageUrl);
 
   if (c2paResult instanceof Error) {
     // rc11.6 / #83 — removed the anonymous cross-origin verifieddit.com
@@ -347,7 +379,7 @@ async function ensureOffscreen (): Promise<void> {
 // The offscreen document initializes c2pa asynchronously on load, so a request
 // that arrives first may get "C2PA not initialized" (or no listener yet); retry
 // briefly before giving up.
-async function c2paValidateWithRetry (url: string, recover = false): Promise<C2paResult | C2paError> {
+async function c2paValidateWithRetry (url: string, recover = false, pageUrl?: string): Promise<C2paResult | C2paError> {
   await ensureOffscreen()
   // The offscreen document cannot read chrome.storage, so the opt-in for the
   // online durable check is read here and travels with the request. Read it
@@ -355,14 +387,9 @@ async function c2paValidateWithRetry (url: string, recover = false): Promise<C2p
   const probe = await chrome.storage.local.get(MANIFEST_STORE_PROBE_KEY)
     .then((r) => r?.[MANIFEST_STORE_PROBE_KEY] === true)
     .catch(() => false)
-  // The second switch (#195): may a video be sent to Verifieddit to look for
-  // a removed credential. Only consulted on an explicit Verify.
-  const upload = recover && await chrome.storage.local.get(VIDEO_UPLOAD_RECOVERY_KEY)
-    .then((r) => r?.[VIDEO_UPLOAD_RECOVERY_KEY] === true)
-    .catch(() => false)
   let last: C2paResult | C2paError | undefined
   for (let attempt = 0; attempt < 30; attempt++) {
-    const result = await c2paValidateUrl(url, recover, probe, upload).catch(() => undefined)
+    const result = await c2paValidateUrl(url, recover, probe, pageUrl).catch(() => undefined)
     last = result
     const notReady = result == null ||
       (result as C2paError)?.message === 'C2PA not initialized'

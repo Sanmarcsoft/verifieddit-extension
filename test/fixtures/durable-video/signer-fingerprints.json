@@ -1,0 +1,16 @@
+{
+  "file": "scene.mp4",
+  "computedBy": "signing-api lib/fingerprint.py",
+  "phash": "f4db616d10f14e38",
+  "dhash": "4441697d24368686",
+  "variants": {
+    "centre": {
+      "phash": "86d26b4cb1ccb473",
+      "dhash": "caecece66467770b"
+    },
+    "vertical": {
+      "phash": "cab27f5e08364b31",
+      "dhash": "38098d83c36124c3"
+    }
+  }
+}

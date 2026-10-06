@@ -251,3 +251,19 @@ describe('durabilityApplies', () => {
     expect(durabilityApplies('unsigned')).toBe(false)
   })
 })
+
+// Forge pass 5, FINDING-01: a file whose contents were not checked must never read as fully verified.
+describe('computeVerdict with unchecked contents', () => {
+  it('a trusted signer with unchecked contents is not "verified"', async () => {
+    const { computeVerdict } = await import('../src/verdict')
+    expect(computeVerdict({ codes: [], signed: true, trusted: true })).toBe('verified')
+    expect(computeVerdict({ codes: [], signed: true, trusted: true, contentsUnchecked: true })).toBe('authentic')
+    expect(computeVerdict({ codes: [], signed: true, trusted: false, contentsUnchecked: true })).toBe('authentic')
+  })
+
+  it('a real failure still wins, and unsigned stays unsigned', async () => {
+    const { computeVerdict } = await import('../src/verdict')
+    expect(computeVerdict({ codes: ['assertion.bmffHash.mismatch'], signed: true, trusted: true, contentsUnchecked: true })).toBe('invalid')
+    expect(computeVerdict({ codes: [], signed: false, trusted: false, contentsUnchecked: true })).toBe('unsigned')
+  })
+})

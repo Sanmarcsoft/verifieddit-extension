@@ -60,6 +60,18 @@ export const PORT_OVERLAY_FRAME = 'overlay-frame'
 // routable" from "connected but the background dropped me", which are the two
 // ways this relay fails and are otherwise indistinguishable from the outside.
 export const MSG_RELAY_READY = 'MSG_RELAY_READY'
+/**
+ * The panel frame proves which frame it is (Forge F3). iframe.html is
+ * web-accessible, so any page can frame a copy and connect on the relay port.
+ * The background therefore routes nothing to a port until the content script
+ * claims it: the frame posts the nonce it was given to its parent, the content
+ * script accepts it only from the window of the iframe IT created, and tells
+ * the background. A page cannot make our frame post another frame's nonce.
+ */
+export const OVERLAY_HELLO_KEY = 'vdOverlayHello'
+export const MSG_CLAIM_OVERLAY_FRAME = 'MSG_CLAIM_OVERLAY_FRAME'
+/** Background to the panel frame: your port has been claimed and is now routed. */
+export const MSG_RELAY_CLAIMED = 'MSG_RELAY_CLAIMED'
 // Mirrors relay state onto <html data-vd-relay> so a WebDriver probe can read
 // it from inside the frame. Diagnostic only — nothing branches on it.
 export const RELAY_STATE_ATTR = 'vdRelay'
@@ -159,17 +171,6 @@ export const MANIFEST_STORE_PROBE_DEFAULT = false
 export const MSG_SET_MANIFEST_STORE_PROBE = 'setManifestStoreProbe'
 /** chrome.storage.local key backing MANIFEST_STORE_PROBE_DEFAULT. */
 export const MANIFEST_STORE_PROBE_KEY = 'manifestStoreProbe'
-
-/**
- * Sending a video to Verifieddit to look for a removed credential (#195). A
- * video's durable credential is a watermark in its frames that only the service
- * can read, so the file itself leaves the browser. That is a larger disclosure
- * than the fingerprint lookup, so it has its own switch, off by default, and it
- * only ever applies on top of MANIFEST_STORE_PROBE_KEY and an explicit Verify.
- */
-export const VIDEO_UPLOAD_RECOVERY_DEFAULT = false
-/** chrome.storage.local key backing VIDEO_UPLOAD_RECOVERY_DEFAULT. */
-export const VIDEO_UPLOAD_RECOVERY_KEY = 'videoUploadRecovery'
 
 /**
  * Icon-only badges (#184): black-on-white badges that say the verdict by shape,
