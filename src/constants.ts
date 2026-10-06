@@ -161,6 +161,17 @@ export const MSG_SET_MANIFEST_STORE_PROBE = 'setManifestStoreProbe'
 export const MANIFEST_STORE_PROBE_KEY = 'manifestStoreProbe'
 
 /**
+ * Sending a video to Verifieddit to look for a removed credential (#195). A
+ * video's durable credential is a watermark in its frames that only the service
+ * can read, so the file itself leaves the browser. That is a larger disclosure
+ * than the fingerprint lookup, so it has its own switch, off by default, and it
+ * only ever applies on top of MANIFEST_STORE_PROBE_KEY and an explicit Verify.
+ */
+export const VIDEO_UPLOAD_RECOVERY_DEFAULT = false
+/** chrome.storage.local key backing VIDEO_UPLOAD_RECOVERY_DEFAULT. */
+export const VIDEO_UPLOAD_RECOVERY_KEY = 'videoUploadRecovery'
+
+/**
  * Icon-only badges (#184): black-on-white badges that say the verdict by shape,
  * for people who cannot tell the badge colours apart. A display preference:
  * nothing leaves the browser. chrome.storage.local key and its default.

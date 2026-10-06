@@ -143,6 +143,18 @@
                 confirmed.
             </p>
             <br>
+            <toggle-switch label="Send videos I verify to Verifieddit" id="toggleVideoUploadRecovery"></toggle-switch>
+            <p class="option-note">
+                Off by default, and it only works with the switch above on. A video's
+                durable credential is an invisible watermark in its frames that only the
+                Verifieddit service can read. With this on, when you right-click a video
+                that has no credentials and choose Verify, the video file itself (MP4, up
+                to 25 MB) is sent to <code>api.verifieddit.com</code>, which reads the
+                watermark and looks for a registered credential. The file is deleted as soon as it has been read, and
+                nothing identifying you or your device is sent with it. It never happens
+                on its own, and never for a video you did not choose to verify.
+            </p>
+            <br>
             <toggle-switch label="Icon-only badges, no colour needed" id="toggleIconOnly"></toggle-switch>
             <p class="option-note">
                 Off by default. For anyone who cannot tell the badge colours apart:

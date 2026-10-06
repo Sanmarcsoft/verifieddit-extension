@@ -18,7 +18,7 @@
  * Endpoint contract mirrors verifieddit-www/src/utils/manifestStoreClient.ts.
  */
 import { computeDifferenceHash, computePerceptualHash } from './perceptualHash'
-import { MANIFEST_STORE_PROBE_DEFAULT, MANIFEST_STORE_PROBE_KEY } from './constants'
+import { MANIFEST_STORE_PROBE_DEFAULT, MANIFEST_STORE_PROBE_KEY, VIDEO_UPLOAD_RECOVERY_DEFAULT, VIDEO_UPLOAD_RECOVERY_KEY } from './constants'
 import { type OtherMatch, type RecoveredCredential } from './recovered'
 
 const MANIFEST_STORE_URL = 'https://manifests.sanmarcsoft.com/v1'
@@ -236,6 +236,80 @@ export async function recoverStripped (blob: Blob, enabled?: boolean): Promise<R
   const imageData = await blobToImageData(blob)
   if (imageData == null) return null
   return await recoverByFingerprint({ phash: computePerceptualHash(imageData), dhash: computeDifferenceHash(imageData) }, true)
+}
+
+/*
+ * Recovery of a stripped video (#195). A video's durable credential is a
+ * watermark hidden in its frames. Reading it takes a model far too large to run
+ * in a browser, so the video is sent to the Verifieddit service, which reads the
+ * watermark and asks the registry. The file itself leaves the device, which a
+ * fingerprint lookup never does, so this needs a second switch on top of the
+ * online check, and like every recovery it runs only on an explicit Verify.
+ */
+const VIDEO_VERIFY_URL = 'https://api.verifieddit.com/api/v1/verify'
+/** The service skips recovery above this size, so sending more would disclose a file for nothing. */
+export const VIDEO_RECOVERY_MAX_BYTES = 25 * 1024 * 1024
+/** Reading a watermark takes the service tens of seconds for a short clip. */
+const VIDEO_RECOVERY_TIMEOUT_MS = 120_000
+
+export interface VideoRecovery {
+  credential: RecoveredCredential | null
+  /** True only when the service looked and gave an answer, found or not. */
+  checked: boolean
+  /** Why nothing was looked up, when there is a reason worth telling. */
+  detail?: string
+}
+
+async function videoUploadIsOn (enabled?: boolean): Promise<boolean> {
+  if (enabled != null) return enabled
+  try {
+    const stored = await chrome.storage.local.get(VIDEO_UPLOAD_RECOVERY_KEY)
+    return stored?.[VIDEO_UPLOAD_RECOVERY_KEY] ?? VIDEO_UPLOAD_RECOVERY_DEFAULT
+  } catch {
+    return VIDEO_UPLOAD_RECOVERY_DEFAULT
+  }
+}
+
+/**
+ * `on.lookups` and `on.upload` are the caller's reading of the two switches and
+ * win when given: in Chrome this runs in an offscreen document, which cannot
+ * read chrome.storage, so the background reads them and passes them in.
+ */
+export async function recoverVideoByUpload (blob: Blob, on: { lookups?: boolean, upload?: boolean } = {}): Promise<VideoRecovery> {
+  const notChecked: VideoRecovery = { credential: null, checked: false }
+  try {
+    if (blob.type !== 'video/mp4') return notChecked
+    if (!(await checkIsOn(on.lookups)) || !(await videoUploadIsOn(on.upload))) return notChecked
+    if (blob.size > VIDEO_RECOVERY_MAX_BYTES) {
+      return { ...notChecked, detail: 'this video is too large to look up (the limit is 25 MB).' }
+    }
+    const form = new FormData()
+    form.append('file', blob, 'video.mp4')
+    const response = await fetch(VIDEO_VERIFY_URL, { method: 'POST', body: form, credentials: 'omit', signal: AbortSignal.timeout(VIDEO_RECOVERY_TIMEOUT_MS) })
+    const unanswered: VideoRecovery = { ...notChecked, detail: 'the Verifieddit service could not look it up just now.' }
+    if (!response.ok) return unanswered
+    const data = await response.json() as { durable?: { recovery?: { status?: unknown, manifestId?: unknown, similarityScore?: unknown, signerCn?: unknown, signedAt?: unknown } | null } | null } | null
+    const r = data?.durable?.recovery
+    if (r?.status === 'not-found') return { credential: null, checked: true }
+    if (r?.status !== 'recovered' || typeof r.manifestId !== 'string' || !MANIFEST_ID.test(r.manifestId)) return unanswered
+    const text = (v: unknown): string | null => typeof v === 'string' && v !== '' ? v.slice(0, 200) : null
+    return {
+      checked: true,
+      credential: {
+        registry: 'SanMarcSoft Manifest Store',
+        manifestId: r.manifestId,
+        similarityScore: typeof r.similarityScore === 'number' ? r.similarityScore : 0,
+        signerCn: text(r.signerCn),
+        signedAt: text(r.signedAt),
+        filename: null,
+        aiGenerated: null,
+        otherMatches: [],
+        medium: 'video'
+      }
+    }
+  } catch {
+    return { ...notChecked, detail: 'the Verifieddit service could not look it up just now.' }
+  }
 }
 
 /*

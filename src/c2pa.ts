@@ -13,7 +13,7 @@ import { AWAIT_ASYNC_RESPONSE, MSG_C2PA_VALIDATE_URL, type MSG_PAYLOAD } from '.
 import { type TrustListMatch } from './trustlistProxy.js'
 import { type DurablePillars, hasSoftBinding } from './durableCredentials.js'
 import { sniffMediaType } from './recovered.js'
-import { probeManifestStore, probeRegistries, softBindingsOf, recoverStripped, checkRegistryRecord, type RecoveredCredential, type RegistryRecord } from './manifestStore.js'
+import { probeManifestStore, probeRegistries, softBindingsOf, recoverStripped, recoverVideoByUpload, checkRegistryRecord, type RecoveredCredential, type RegistryRecord } from './manifestStore.js'
 import { buildProvenanceGraph } from './provenanceGraph.js'
 import { type ProvenanceGraph } from './provenanceTypes.js'
 import { detectAiGeneration, type AiGeneration } from './aiDetection.js'
@@ -82,6 +82,8 @@ export interface C2paError extends Error {
   recoveryChecked?: boolean
   /** Why the recovered credential's details could not be shown, when they could not. */
   recoveryDetail?: string
+  /** 'video' when the file with no credentials is a video (#195): its recovery has its own switch and words. */
+  recoveryMedium?: 'video'
 }
 
 // The wire helpers that flatten a C2paError for extension messaging live in
@@ -121,7 +123,7 @@ export async function init (): Promise<void> {
   chrome.runtime.onMessage.addListener(
     (request: MSG_PAYLOAD, sender, sendResponse) => {
       if (request.action === MSG_C2PA_VALIDATE_URL) {
-        void validateUrl(request.data as string, (request as { recover?: boolean }).recover === true, (request as { probe?: boolean }).probe).then(sendResponse)
+        void validateUrl(request.data as string, (request as { recover?: boolean }).recover === true, (request as { probe?: boolean }).probe, (request as { upload?: boolean }).upload).then(sendResponse)
         return AWAIT_ASYNC_RESPONSE
       }
     }
@@ -177,7 +179,7 @@ async function registeredStore (manifestId: string): Promise<{ store: C2paRsStor
   }
 }
 
-export async function validateUrl (url: string, recover = false, probe?: boolean): Promise<C2paResult | C2paError> {
+export async function validateUrl (url: string, recover = false, probe?: boolean, upload?: boolean): Promise<C2paResult | C2paError> {
   if (c2pa == null) {
     return new Error('C2PA not initialized') as C2paError
   }
@@ -202,9 +204,18 @@ export async function validateUrl (url: string, recover = false, probe?: boolean
   if (reader == null) {
     // The credentials may have been stripped rather than never present. On an
     // explicit Verify (never auto-scan) look the picture up in the registry.
-    const looked = recover && probe === true && blob.type.startsWith('image/')
-    const recovered = looked ? await recoverStripped(blob, true) : null
+    let looked = recover && probe === true && blob.type.startsWith('image/')
+    let recovered = looked ? await recoverStripped(blob, true) : null
     let recoveryDetail: string | undefined
+    // A video is looked up by sending it to Verifieddit (#195): only on an
+    // explicit Verify, and only when both switches are on.
+    const recoveryMedium = blob.type.startsWith('video/') ? 'video' as const : undefined
+    if (recover && blob.type === 'video/mp4') {
+      const video = await recoverVideoByUpload(blob, { lookups: probe === true, upload: upload === true })
+      recovered = video.credential
+      looked = video.checked
+      recoveryDetail = video.detail
+    }
     if (recovered != null) {
       const registered = await registeredStore(recovered.manifestId)
       if ('error' in registered) {
@@ -219,7 +230,7 @@ export async function validateUrl (url: string, recover = false, probe?: boolean
         }
       }
     }
-    return { message: 'No manifest found', url, name: 'No Manifest', recovered, recoveryChecked: looked, recoveryDetail } satisfies C2paError
+    return { message: 'No manifest found', url, name: 'No Manifest', recovered, recoveryChecked: looked, recoveryDetail, recoveryMedium } satisfies C2paError
   }
 
   const store: C2paRsStore = await reader.manifestStore()

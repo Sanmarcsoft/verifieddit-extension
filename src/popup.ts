@@ -7,7 +7,7 @@ import { type TrustListInfo, getTrustListInfos, removeTrustList, addTSATrustFile
 import packageManifest from '../package.json'
 import { BUILD_INFO } from './build-info'
 import { familyTag } from './releaseTag.js'
-import { AUTO_SCAN_DEFAULT, MSG_AUTO_SCAN_UPDATED, MSG_REQUEST_C2PA_ENTRIES, TRUSTEDDIT_LINK, taggedLink, MSG_RESPONSE_C2PA_ENTRIES, MSG_RESPONSE_C2PA_SUMMARY, MANIFEST_STORE_PROBE_DEFAULT, MANIFEST_STORE_PROBE_KEY, ICON_ONLY_DEFAULT, ICON_ONLY_KEY } from './constants.js'
+import { AUTO_SCAN_DEFAULT, MSG_AUTO_SCAN_UPDATED, MSG_REQUEST_C2PA_ENTRIES, TRUSTEDDIT_LINK, taggedLink, MSG_RESPONSE_C2PA_ENTRIES, MSG_RESPONSE_C2PA_SUMMARY, VIDEO_UPLOAD_RECOVERY_DEFAULT, VIDEO_UPLOAD_RECOVERY_KEY, MANIFEST_STORE_PROBE_DEFAULT, MANIFEST_STORE_PROBE_KEY, ICON_ONLY_DEFAULT, ICON_ONLY_KEY } from './constants.js'
 import { getAnalyticsConsent, setAnalyticsConsent, options_opened } from './analytics.js'
 import { type C2paEntryDetails, type MSG_RESPONSE_C2PA_ENTRIES_PAYLOAD, type MSG_RESPONSE_C2PA_SUMMARY_PAYLOAD } from './inject.js'
 import { crIconDataUrl, iconOnlyReady, isIconOnly } from './icon.js'
@@ -279,6 +279,18 @@ document.addEventListener('DOMContentLoaded', function (): void {
     const checked = (event as CustomEvent).detail.checked
     void chrome.storage.local.set({ [MANIFEST_STORE_PROBE_KEY]: checked })
   })
+
+  // Sending a video to Verifieddit to look for a removed credential (#195).
+  const videoUploadToggle = document.getElementById('toggleVideoUploadRecovery') as ToggleSwitch | null
+  if (videoUploadToggle != null) {
+    chrome.storage.local.get(VIDEO_UPLOAD_RECOVERY_KEY, (result) => {
+      videoUploadToggle.checked = result[VIDEO_UPLOAD_RECOVERY_KEY] ?? VIDEO_UPLOAD_RECOVERY_DEFAULT
+    })
+    videoUploadToggle.addEventListener('change', (event) => {
+      const checked = (event as CustomEvent).detail.checked
+      void chrome.storage.local.set({ [VIDEO_UPLOAD_RECOVERY_KEY]: checked })
+    })
+  }
 
   // Icon-only badges: a display preference, nothing leaves the browser. The
   // legend and the rows already listed are redrawn so the change is seen at once.
