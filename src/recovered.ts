@@ -21,6 +21,8 @@ export interface RecoveredCredential {
    * it carried, so the reader is told this credential is one of several.
    */
   otherMatches: OtherMatch[]
+  /** Set for a video (#195), whose credential is recovered from a watermark the service reads. Absent means an image. */
+  medium?: 'video'
 }
 
 export interface OtherMatch {
@@ -35,7 +37,7 @@ export function recoveredNote (r: RecoveredCredential): string {
   const when = r.signedAt != null ? ` on ${r.signedAt.slice(0, 10)}` : ''
   // A result recovered by an older build, or relayed from one, has no list.
   const others = r.otherMatches?.length ?? 0
-  return 'This image\'s Content Credentials were removed, but a registered credential matches it. ' +
+  return `This ${r.medium ?? 'image'}'s Content Credentials were removed, but a registered credential matches it. ` +
     `The original was signed by ${who}${when} (${r.similarityScore}% match, ${r.registry}). ` +
     (r.aiGenerated === true ? 'Its label says it was made with AI. ' : '') +
     (others > 0
@@ -44,23 +46,30 @@ export function recoveredNote (r: RecoveredCredential): string {
     'This is a lead, not proof: this copy may have been changed since it was signed.'
 }
 
-const NO_LABEL = 'No embedded content credentials were found for this image. ' +
+const noLabel = (medium: string): string => `No embedded content credentials were found for this ${medium}. ` +
   'The file has no C2PA manifest, so nothing cryptographic can be verified locally.'
 
 /**
- * What to say about an image with no credentials. "We looked for a removed
+ * What to say about a file with no credentials. "We looked for a removed
  * label and found none" and "we did not look because the online check is off"
- * are different facts, and the person can only act on the second.
+ * are different facts, and the person can only act on the second. A video is
+ * looked up by sending it (#195), which has its own switch, so its words name
+ * that switch and say when the service could not answer.
  */
-export function noLabelNote (r: { recovered: RecoveredCredential | null | undefined, checked: boolean, detail?: string }): string {
+export function noLabelNote (r: { recovered: RecoveredCredential | null | undefined, checked: boolean, detail?: string, medium?: 'video' }): string {
   if (r.recovered != null) {
     // Normally the full credential opens in the panel. This note is the fallback
     // when its details could not be loaded, and it says so rather than hiding it.
     return recoveredNote(r.recovered) + (r.detail != null && r.detail !== '' ? ` Its full details could not be shown (${r.detail}).` : '')
   }
-  return r.checked
-    ? `${NO_LABEL} We also looked for a copy of a label that might have been removed, and found none.`
-    : `${NO_LABEL} If its credentials were removed, a copy may still exist: turn on "Check durable credentials online" in the extension's Options and verify again.`
+  const base = noLabel(r.medium ?? 'image')
+  if (r.checked) return `${base} We also looked for a copy of a label that might have been removed, and found none.`
+  if (r.medium === 'video') {
+    return r.detail != null && r.detail !== ''
+      ? `${base} We tried to look for a removed label and could not: ${r.detail}`
+      : `${base} If its credentials were removed, a copy may still exist. Finding it means sending this video to Verifieddit: turn on "Check durable credentials online" and "Send videos I verify to Verifieddit" in the extension's Options and verify again.`
+  }
+  return `${base} If its credentials were removed, a copy may still exist: turn on "Check durable credentials online" in the extension's Options and verify again.`
 }
 
 /**

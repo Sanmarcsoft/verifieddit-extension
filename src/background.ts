@@ -27,7 +27,7 @@ import {
 import {
   MSG_GET_ID, MSG_L3_INSPECT_URL, MSG_REMOTE_INSPECT_URL, MSG_FORWARD_TO_CONTENT, REMOTE_VALIDATION_LINK,
   MSG_VALIDATE_URL, AWAIT_ASYNC_RESPONSE, MSG_C2PA_RESULT_FROM_CONTEXT, AUTO_SCAN_DEFAULT, MSG_AUTO_SCAN_UPDATED,
-  MSG_SET_MANIFEST_STORE_PROBE, MANIFEST_STORE_PROBE_KEY, MSG_OPEN_OVERLAY, PORT_OVERLAY_FRAME, MSG_RELAY_READY,
+  MSG_SET_MANIFEST_STORE_PROBE, MANIFEST_STORE_PROBE_KEY, VIDEO_UPLOAD_RECOVERY_KEY, MSG_OPEN_OVERLAY, PORT_OVERLAY_FRAME, MSG_RELAY_READY,
   TRUSTLIST_UPDATE_INTERVAL, MSG_REQUEST_C2PA_ENTRIES
 } from './constants'
 import { sendMessageToAllTabs } from './utils'
@@ -355,9 +355,14 @@ async function c2paValidateWithRetry (url: string, recover = false): Promise<C2p
   const probe = await chrome.storage.local.get(MANIFEST_STORE_PROBE_KEY)
     .then((r) => r?.[MANIFEST_STORE_PROBE_KEY] === true)
     .catch(() => false)
+  // The second switch (#195): may a video be sent to Verifieddit to look for
+  // a removed credential. Only consulted on an explicit Verify.
+  const upload = recover && await chrome.storage.local.get(VIDEO_UPLOAD_RECOVERY_KEY)
+    .then((r) => r?.[VIDEO_UPLOAD_RECOVERY_KEY] === true)
+    .catch(() => false)
   let last: C2paResult | C2paError | undefined
   for (let attempt = 0; attempt < 30; attempt++) {
-    const result = await c2paValidateUrl(url, recover, probe).catch(() => undefined)
+    const result = await c2paValidateUrl(url, recover, probe, upload).catch(() => undefined)
     last = result
     const notReady = result == null ||
       (result as C2paError)?.message === 'C2PA not initialized'

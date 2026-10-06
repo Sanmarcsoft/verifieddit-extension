@@ -32,6 +32,7 @@ export interface C2paErrorWire {
   recovered?: RecoveredCredential | null
   recoveryChecked?: boolean
   recoveryDetail?: string
+  recoveryMedium?: 'video'
 }
 
 export function toC2paErrorWire (error: Error | { name?: string, message?: string, url?: string }, url: string): C2paErrorWire {
@@ -44,7 +45,8 @@ export function toC2paErrorWire (error: Error | { name?: string, message?: strin
     url: (error as { url?: string }).url ?? url,
     recovered: (error as { recovered?: RecoveredCredential | null }).recovered,
     recoveryChecked: (error as { recoveryChecked?: boolean }).recoveryChecked,
-    recoveryDetail: (error as { recoveryDetail?: string }).recoveryDetail
+    recoveryDetail: (error as { recoveryDetail?: string }).recoveryDetail,
+    recoveryMedium: (error as { recoveryMedium?: 'video' }).recoveryMedium
   }
 }
 
@@ -52,12 +54,13 @@ export function isC2paErrorWire (value: unknown): value is C2paErrorWire {
   return typeof value === 'object' && value !== null && (value as C2paErrorWire).__c2paError === true
 }
 
-export function fromC2paErrorWire (wire: C2paErrorWire): Error & { url: string, recovered?: RecoveredCredential | null, recoveryChecked?: boolean, recoveryDetail?: string } {
-  const error = new Error(wire.message) as Error & { url: string, recovered?: RecoveredCredential | null, recoveryChecked?: boolean, recoveryDetail?: string }
+export function fromC2paErrorWire (wire: C2paErrorWire): Error & { url: string, recovered?: RecoveredCredential | null, recoveryChecked?: boolean, recoveryDetail?: string, recoveryMedium?: 'video' } {
+  const error = new Error(wire.message) as Error & { url: string, recovered?: RecoveredCredential | null, recoveryChecked?: boolean, recoveryDetail?: string, recoveryMedium?: 'video' }
   error.name = wire.name
   error.url = wire.url
   error.recovered = wire.recovered
   error.recoveryChecked = wire.recoveryChecked
   error.recoveryDetail = wire.recoveryDetail
+  error.recoveryMedium = wire.recoveryMedium
   return error
 }

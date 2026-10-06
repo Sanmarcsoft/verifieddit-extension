@@ -116,6 +116,14 @@ for no functional benefit.
   binding value to `manifests.sanmarcsoft.com` and fetches the matching public
   record to compare with the file; the file's hash is compared locally and never
   sent.
+  A second switch, also **off by default** and inert unless the first is on,
+  covers video (`recoverVideoByUpload` in `src/manifestStore.ts`). A video's
+  durable credential is a watermark in its frames that only our service can
+  read, so on an explicit right-click Verify of an MP4 with no credentials
+  (never on auto-scan, never above 25 MB) the video file itself is sent to
+  `api.verifieddit.com/api/v1/verify`, without cookies. The service reads the
+  watermark, answers, and deletes the file. This is the one case where media
+  bytes leave the browser, and it is disclosed in the UI next to the switch.
 - **Optional: technicalAndInteraction.** Anonymous usage statistics via a signed
   telemetry relay operated by SanMarcSoft and stored in self-hosted Umami in the
   EU at `analytics.sanmarcsoft.com` (`src/analytics.ts`). No data is sent to

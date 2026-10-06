@@ -194,7 +194,7 @@ async function handleValidationResult (mediaElement: MediaElement, c2paResult: C
         // A registered credential for a stripped image changes what we say,
         // not the badge: the file in hand still carries nothing verifiable.
         const recovered = (failure as { recovered?: RecoveredCredential | null }).recovered
-        ensureNoCredentialsIcon(mediaRecord, url, noLabelNote({ recovered, checked: (failure as { recoveryChecked?: boolean }).recoveryChecked === true, detail: (failure as { recoveryDetail?: string }).recoveryDetail }), recovered != null ? recoveredStatus(recovered.aiGenerated) : 'no-credentials')
+        ensureNoCredentialsIcon(mediaRecord, url, noLabelNote({ recovered, checked: (failure as { recoveryChecked?: boolean }).recoveryChecked === true, detail: (failure as { recoveryDetail?: string }).recoveryDetail, medium: (failure as { recoveryMedium?: 'video' }).recoveryMedium }), recovered != null ? recoveredStatus(recovered.aiGenerated) : 'no-credentials')
       } else {
         // Assigning null runs CrIcon.remove() via the setter; this also
         // clears the neutral scanning badge auto-scan put there first.
