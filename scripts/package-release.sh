@@ -65,6 +65,10 @@ if [ -n "$forbidden" ]; then
 fi
 echo "  OK: dist/chrome contains only shipping artifacts."
 
+# A browser has no `global`. 1.4.1 shipped with scripts that read it on their
+# first line and never ran; see scripts/check-bundle-globals.mjs.
+node scripts/check-bundle-globals.mjs dist/chrome
+
 # Step 3: pack the zip. Prefer /usr/bin/zip; fall back to python3 zipfile if missing.
 echo ""
 echo "[package] Step 3/4 — pack the zip"

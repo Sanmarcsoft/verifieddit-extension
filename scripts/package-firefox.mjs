@@ -60,6 +60,10 @@ if (!process.argv.includes('--skip-build')) {
 
 if (!fs.existsSync(distDir)) fail(`${distDir} does not exist — build first.`)
 
+// A browser has no `global`. 1.4.1 shipped with scripts that read it on their
+// first line and never ran; see scripts/check-bundle-globals.mjs.
+sh(`node scripts/check-bundle-globals.mjs "${distDir}"`)
+
 // ── 2. Manifest assertions ──────────────────────────────────────────────────
 step('Verifying Gecko manifest')
 const manifest = JSON.parse(fs.readFileSync(path.join(distDir, 'manifest.json'), 'utf8'))
