@@ -89,6 +89,20 @@ test.describe('CR overlay click (issue #65)', () => {
       }, CBC_FIXTURE_URL_FRAGMENT)
       await page.waitForTimeout(4_000)
 
+      // A badge is a neutral placeholder until its file has been checked, and a
+      // click on the placeholder does nothing. Wait for the real one: its
+      // tooltip then explains the verdict instead of saying "Click to view".
+      await page.waitForFunction((fragment) => {
+        const cbc = [...document.querySelectorAll('img')].find(i => (i.currentSrc || i.src).includes(fragment))
+        if (cbc == null) return false
+        const imgR = cbc.getBoundingClientRect()
+        const near = [...document.querySelectorAll('div[c2pa-icon]')].find((icon) => {
+          const ir = icon.getBoundingClientRect()
+          return Math.abs(ir.top - imgR.top) < 200 && Math.abs(ir.right - imgR.right) < 200
+        }) as HTMLElement | undefined
+        return near != null && near.title !== '' && !near.title.startsWith('Click to view')
+      }, CBC_FIXTURE_URL_FRAGMENT, { timeout: 60_000 })
+
       // Assert the CR icon exists, is near the image, and has an IDL onclick
       const pre = await page.evaluate((fragment) => {
         const imgs = [...document.querySelectorAll('img')]

@@ -206,14 +206,23 @@ async function registeredStore (manifestId: string): Promise<{ store: C2paRsStor
   }
 }
 
-/** At most two files are fetched and verified at a time; the rest wait their turn. */
-const oneAtATime = limiter(2)
+/**
+ * How many files are fetched and verified at once. Automatic scanning gets six
+ * places, the number of connections a browser opens to one site: with fewer, a
+ * page of pictures got its badges one after another and the last could take
+ * most of a minute (seen in the hosted tests as a click on a badge that was
+ * still only a placeholder). Each of those files is capped at 100 MB, so six
+ * is still a bound. What the reader asks for by hand has two places of its
+ * own and never waits behind a page being scanned.
+ */
+const scanQueue = limiter(6)
+const askedQueue = limiter(2)
 
 export async function validateUrl (url: string, recover = false, probe?: boolean, pageUrl?: string, inPieces = false): Promise<C2paResult | C2paError> {
   if (c2pa == null) {
     return new Error('C2PA not initialized') as C2paError
   }
-  return await oneAtATime(async () => await validateUrlNow(url, recover, probe, pageUrl, inPieces))
+  return await (recover ? askedQueue : scanQueue)(async () => await validateUrlNow(url, recover, probe, pageUrl, inPieces))
 }
 
 async function validateUrlNow (url: string, recover: boolean, probe: boolean | undefined, pageUrl: string | undefined, inPieces: boolean): Promise<C2paResult | C2paError> {
