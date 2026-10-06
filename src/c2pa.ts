@@ -10,7 +10,8 @@ import { timestampTokensOf } from './certs/coseTimestamp.js'
 import { isContentBox, decode as jumbfDecode } from './certs/jumbf.js'
 import { getManifestFromMetadata } from './certs/metadata.js'
 import { AWAIT_ASYNC_RESPONSE, MSG_C2PA_VALIDATE_URL, type MSG_PAYLOAD } from './constants.js'
-import { mediaFetchAllowed, readCapped } from './fetchGuard.js'
+import { limiter, mediaCeiling, mediaFetchAllowed, readCapped, redirectPolicy } from './fetchGuard.js'
+import { bmffHasC2pa } from './bmffScan.js'
 import { type TrustListMatch } from './trustlistProxy.js'
 import { type DurablePillars, hasSoftBinding } from './durableCredentials.js'
 import { sniffMediaType } from './recovered.js'
@@ -185,10 +186,22 @@ async function registeredStore (manifestId: string): Promise<{ store: C2paRsStor
   }
 }
 
+/** At most two files are fetched and verified at a time; the rest wait their turn. */
+const oneAtATime = limiter(2)
+
 export async function validateUrl (url: string, recover = false, probe?: boolean, pageUrl?: string): Promise<C2paResult | C2paError> {
   if (c2pa == null) {
     return new Error('C2PA not initialized') as C2paError
   }
+  return await oneAtATime(async () => await validateUrlNow(url, recover, probe, pageUrl))
+}
+
+async function validateUrlNow (url: string, recover: boolean, probe: boolean | undefined, pageUrl: string | undefined): Promise<C2paResult | C2paError> {
+  if (c2pa == null) {
+    return new Error('C2PA not initialized') as C2paError
+  }
+  // `recover` is set only for an explicit right-click Verify: the reader asked.
+  const userAsked = recover
 
   // Fetch the asset bytes ourselves so we can both (a) hand the blob to the new
   // c2pa-web reader and (b) re-parse the raw JUMBF/COSE for the trust +
@@ -201,11 +214,21 @@ export async function validateUrl (url: string, recover = false, probe?: boolean
     if (!allowed.ok) {
       return { message: `Not fetched: ${allowed.reason}`, url, name: 'Fetch Error' } satisfies C2paError
     }
-    const response = await fetch(url)
+    // No cookies, and no redirects for a fetch nobody asked for: a redirect could
+    // lead from a public address to a private one.
+    const response = await fetch(url, { credentials: 'omit', redirect: redirectPolicy(userAsked) })
+    if (response.redirected) {
+      const landed = mediaFetchAllowed(response.url, pageUrl)
+      if (!landed.ok) {
+        return { message: `Not used: the address redirected, and ${landed.reason}`, url, name: 'Fetch Error' } satisfies C2paError
+      }
+    }
     if (!response.ok) {
       return { message: `Fetch failed: ${response.status} ${response.statusText}`, url, name: 'Fetch Error' } satisfies C2paError
     }
-    blob = await readCapped(response)
+    // The ceiling comes from what this device can hold, and is low for a file
+    // nobody asked about.
+    blob = await readCapped(response, await mediaCeiling({ userAsked }), userAsked)
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     return { message, url, name: 'Fetch Error' } satisfies C2paError
@@ -220,6 +243,13 @@ export async function validateUrl (url: string, recover = false, probe?: boolean
     reader = await c2pa.reader.fromBlob(blob.type, blob)
   } catch (error: unknown) {
     if (!blob.type.startsWith('video/')) throw error
+  }
+  if (reader == null && await bmffHasC2pa(blob)) {
+    // The file does carry credentials, and the engine read none. Measured: that
+    // is what it does above roughly 1 GB. Say so, rather than report a signed
+    // video as unsigned.
+    const gb = (blob.size / (1024 * 1024 * 1024)).toFixed(1)
+    return { message: `This file carries Content Credentials, but at ${gb} GB it is too large for this browser to verify.`, url, name: 'Too Large' } satisfies C2paError
   }
   if (reader == null) {
     // The credentials may have been stripped rather than never present. On an

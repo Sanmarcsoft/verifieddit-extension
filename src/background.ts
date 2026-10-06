@@ -188,7 +188,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // that frame's port routed. The nonce must belong to a port in the same tab.
   if (action === MSG_CLAIM_OVERLAY_FRAME) {
     const claimed = typeof data === 'string' ? unclaimedOverlayPorts.get(data) : undefined
-    if (claimed != null && tabId != null && claimed.tabId === tabId) {
+    // Only the top page's content script may claim: the extension runs in every
+    // frame, and a frame inside the page must not take the page's channel.
+    if (claimed != null && tabId != null && claimed.tabId === tabId && sender.frameId === 0) {
       unclaimedOverlayPorts.delete(data as string)
       overlayFramePorts.set(tabId, claimed.port)
     }

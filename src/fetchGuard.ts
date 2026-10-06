@@ -34,11 +34,29 @@ function ipv4Private (a: number, b: number): boolean {
 /** The hostname as the browser will read it: 2130706433 and 0x7f.1 are 127.0.0.1. */
 function canonicalHost (host: string): string | null {
   try {
-    const bare = host.trim().replace(/^\[|\]$/g, '')
-    return new URL(`http://${bare.includes(':') ? `[${bare}]` : bare}/`).hostname.toLowerCase()
+    const bare = host.trim().replace(/\.+$/, '').replace(/^\[|\]$/g, '')
+    // A trailing dot is the same host to a resolver ("localhost.").
+    return new URL(`http://${bare.includes(':') ? `[${bare}]` : bare}/`).hostname.toLowerCase().replace(/\.+$/, '')
   } catch {
     return null
   }
+}
+
+/** An IPv6 address as its eight 16-bit groups, or null when it is not one. */
+function expandIpv6 (text: string): number[] | null {
+  const halves = text.split('::')
+  if (halves.length > 2) return null
+  const parse = (part: string): number[] | null => {
+    if (part === '') return []
+    const groups = part.split(':').map((g) => (/^[0-9a-f]{1,4}$/i.test(g) ? parseInt(g, 16) : NaN))
+    return groups.some(Number.isNaN) ? null : groups
+  }
+  const head = parse(halves[0])
+  const tail = halves.length === 2 ? parse(halves[1]) : []
+  if (head == null || tail == null) return null
+  const fill = 8 - head.length - tail.length
+  if (halves.length === 1 ? fill !== 0 : fill < 0) return null
+  return [...head, ...new Array<number>(fill).fill(0), ...tail]
 }
 
 /** True for the reader's own machine and network. Unparseable hosts count as private. */
@@ -47,15 +65,15 @@ export function isPrivateHost (host: string): boolean {
   if (name == null || name === '') return true
 
   if (name.startsWith('[')) {
-    const v6 = name.slice(1, -1)
-    if (v6 === '::' || v6 === '::1') return true
-    const mapped = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(v6)
-    if (mapped != null) {
-      const high = parseInt(mapped[1], 16)
-      return ipv4Private(high >> 8, high & 0xff)
-    }
-    const first = parseInt(v6.split(':')[0] === '' ? '0' : v6.split(':')[0], 16)
-    return (first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80 // unique local, link-local
+    const h = expandIpv6(name.slice(1, -1))
+    if (h == null) return true
+    const v4 = (high: number, low: number): boolean => ipv4Private(high >> 8, high & 0xff) && low >= 0
+    const leadingZero = h.slice(0, 5).every((x) => x === 0)
+    if (leadingZero && h[5] === 0 && h[6] === 0 && h[7] <= 1) return true // :: and ::1
+    if (leadingZero && (h[5] === 0 || h[5] === 0xffff)) return v4(h[6], h[7]) // IPv4-compatible, IPv4-mapped
+    if (h[0] === 0x64 && h[1] === 0xff9b && h.slice(2, 6).every((x) => x === 0)) return v4(h[6], h[7]) // NAT64
+    if (h[0] === 0x2002) return v4(h[1], h[2]) // 6to4
+    return (h[0] & 0xfe00) === 0xfc00 || (h[0] & 0xffc0) === 0xfe80 // unique local, link-local
   }
 
   const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(name)
@@ -105,30 +123,34 @@ export function mediaFetchAllowed (mediaUrl: string, pageUrl: string | undefined
  * length is checked before anything is read; the body is then counted as it
  * arrives, because a length can be wrong or missing.
  */
-export async function readCapped (response: Response, maxBytes: number = MEDIA_MAX_BYTES): Promise<Blob> {
-  const tooLarge = (): Error => new Error(`File too large to verify (over ${Math.round(maxBytes / (1024 * 1024))} MB)`)
+export async function readCapped (response: Response, maxBytes: number = MEDIA_MAX_BYTES, userAsked = true): Promise<Blob> {
+  const mb = (bytes: number): string => bytes >= 1024 * 1024 * 1024 ? `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB` : `${Math.round(bytes / (1024 * 1024))} MB`
+  // Two different facts: this device cannot hold the file, or nobody asked for
+  // it and automatic scanning does not fetch large files. The second has a remedy.
+  const tooLarge = (size?: number): Error => new Error(userAsked
+    ? `File too large to verify here${size != null ? `: it is ${mb(size)}, and` : ':'} the limit on this device is ${mb(maxBytes)}`
+    : `Automatic scanning skips files over ${mb(maxBytes)}${size != null ? ` (this one is ${mb(size)})` : ''}. Right-click it and choose Verify to check it.`)
   const declared = Number(response.headers.get('content-length') ?? '')
-  if (Number.isFinite(declared) && declared > maxBytes) throw tooLarge()
+  if (Number.isFinite(declared) && declared > maxBytes) throw tooLarge(declared)
   const type = (response.headers.get('content-type') ?? '').split(';')[0].trim()
   if (response.body == null) {
     const blob = await response.blob()
     if (blob.size > maxBytes) throw tooLarge()
     return blob
   }
-  const reader = response.body.getReader()
-  const chunks: Uint8Array[] = []
+  // Count the bytes as they pass, and let the browser build the Blob. It keeps
+  // a large Blob on disk rather than in memory; collecting the chunks here would
+  // hold the whole file in memory twice.
   let total = 0
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    total += value.byteLength
-    if (total > maxBytes) {
-      await reader.cancel().catch(() => {})
-      throw tooLarge()
+  const counted = response.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+    transform (chunk, controller) {
+      total += chunk.byteLength
+      if (total > maxBytes) { controller.error(tooLarge()); return }
+      controller.enqueue(chunk)
     }
-    chunks.push(value)
-  }
-  return new Blob(chunks, { type })
+  }))
+  const blob = await new Response(counted).blob()
+  return type === '' || blob.type === type ? blob : new Blob([blob], { type })
 }
 
 /** A link that may be put in an href: http or https and nothing else. */
@@ -140,4 +162,63 @@ export function isWebLink (url: string | null | undefined): boolean {
   } catch {
     return false
   }
+}
+
+const GB = 1024 * 1024 * 1024
+/** Enough for any picture, whatever the device reports. */
+export const MEDIA_FLOOR_BYTES = 64 * 1024 * 1024
+/** No device is asked to hold more than this for one file. */
+export const MEDIA_TOP_BYTES = 8 * GB
+/** For a file nobody asked about (auto-scan): a page must not be able to make the browser pull gigabytes. */
+export const MEDIA_UNASKED_BYTES = 100 * 1024 * 1024
+
+/**
+ * How large a file this device can take. The browser builds a large Blob on
+ * disk, so the room that matters is what it says this extension may store. A
+ * quarter of what is free leaves space for the engine's own working copy and
+ * for other files in flight. When the browser will not say, the fixed
+ * MEDIA_MAX_BYTES applies. A file the reader did not ask about gets a low
+ * ceiling regardless.
+ */
+export async function mediaCeiling (opts: { userAsked: boolean, estimate?: () => Promise<{ quota?: number, usage?: number }> }): Promise<number> {
+  if (!opts.userAsked) return MEDIA_UNASKED_BYTES
+  try {
+    const estimate = opts.estimate ?? (async () => await navigator.storage.estimate())
+    const { quota, usage } = await estimate()
+    if (typeof quota !== 'number' || !Number.isFinite(quota) || quota <= 0) return MEDIA_MAX_BYTES
+    const free = quota - (typeof usage === 'number' ? usage : 0)
+    return Math.min(MEDIA_TOP_BYTES, Math.max(MEDIA_FLOOR_BYTES, Math.floor(free / 4)))
+  } catch {
+    return MEDIA_MAX_BYTES
+  }
+}
+
+/**
+ * Run at most `max` jobs at a time, the rest in the order they came. A page
+ * with twenty large files must not start twenty downloads at once.
+ */
+export function limiter (max: number): <T>(job: () => Promise<T>) => Promise<T> {
+  let active = 0
+  const waiting: Array<() => void> = []
+  const next = (): void => { active--; waiting.shift()?.() }
+  return async <T>(job: () => Promise<T>): Promise<T> => {
+    if (active >= max) await new Promise<void>((resolve) => { waiting.push(resolve) })
+    active++
+    try {
+      return await job()
+    } finally {
+      next()
+    }
+  }
+}
+
+/**
+ * Whether a fetch follows redirects. The address check covers the address as
+ * written; a redirect could lead from a public address to a private one. So a
+ * fetch nobody asked for (auto-scan) does not follow redirects at all. One the
+ * reader asked for does, and the address it ended at is checked before the
+ * response is used (see mediaFetchAllowed on response.url).
+ */
+export function redirectPolicy (userAsked: boolean): 'follow' | 'error' {
+  return userAsked ? 'follow' : 'error'
 }

@@ -83,3 +83,40 @@ test('a page that frames the panel itself cannot take the verification result', 
     await ctx.close()
   }
 })
+
+test('a frame inside the page cannot take the top page\'s panel channel either', async () => {
+  test.setTimeout(120_000)
+  const { ctx, page } = await launch()
+  try {
+    await page.waitForTimeout(2_000)
+    const sw = ctx.serviceWorkers()[0] ?? await ctx.waitForEvent('serviceworker')
+    await sw.evaluate(async () => { await chrome.storage.local.set({ autoScan: true }) })
+    await page.goto(PAGE_URL, { waitUntil: 'networkidle', timeout: 60_000 })
+    await expect.poll(async () => await page.evaluate(() => document.querySelectorAll('div[c2pa-icon]').length), { timeout: 45_000 }).toBe(3)
+
+    // The extension runs in every frame, so a framed copy of the page makes its
+    // own panel, which connects and vouches for itself AFTER the top page's did.
+    await page.evaluate(async (url) => {
+      const frame = document.createElement('iframe')
+      frame.id = 'inner-page'
+      frame.src = url
+      frame.style.cssText = 'position:fixed;right:0;bottom:0;width:500px;height:400px'
+      document.body.appendChild(frame)
+      await new Promise((resolve) => { frame.onload = resolve })
+    }, PAGE_URL)
+    await page.waitForTimeout(4_000)
+
+    await page.evaluate(() => { (document.querySelector('div[c2pa-icon]') as HTMLElement).click() })
+    await page.waitForFunction(() => {
+      const d = [...document.querySelectorAll('iframe')].find((f) => f.className === 'c2paDialog')
+      return d != null && d.style.visibility === 'visible'
+    }, { timeout: 10_000 })
+
+    // The top page's own panel has the result.
+    const top = page.frames().find((f) => f.url().endsWith('/iframe.html') && f.parentFrame() === page.mainFrame())
+    expect(top, 'the top page must have a panel frame').toBeTruthy()
+    await expect.poll(async () => await top!.evaluate(() => document.documentElement.dataset.vdOverlay ?? 'no-state'), { timeout: 5_000 }).toMatch(/^applied@/)
+  } finally {
+    await ctx.close()
+  }
+})

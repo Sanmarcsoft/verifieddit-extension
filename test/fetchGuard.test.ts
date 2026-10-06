@@ -93,6 +93,12 @@ describe('readCapped', () => {
     await expect(readCapped(response([400, 400, 400], { 'content-length': '10' }), 1000)).rejects.toThrow(/too large/i)
   })
 
+  it('says which limit it was, and what to do about the one that has a remedy', async () => {
+    const big = (): Response => new Response(new Blob([new Uint8Array(10)]).stream(), { headers: { 'content-length': String(300 * 1024 * 1024) } })
+    await expect(readCapped(big(), 100 * 1024 * 1024, true)).rejects.toThrow(/it is 300 MB, and the limit on this device is 100 MB/)
+    await expect(readCapped(big(), 100 * 1024 * 1024, false)).rejects.toThrow(/Automatic scanning skips files over 100 MB \(this one is 300 MB\)\. Right-click it and choose Verify/)
+  })
+
   it('has a ceiling that still fits real video', () => {
     expect(MEDIA_MAX_BYTES).toBeGreaterThanOrEqual(256 * 1024 * 1024)
     expect(MEDIA_MAX_BYTES).toBeLessThanOrEqual(1024 * 1024 * 1024)
@@ -104,5 +110,80 @@ describe('isWebLink', () => {
     const { isWebLink } = await import('../src/fetchGuard')
     for (const u of ['https://c2pa.org', 'http://example.com/list', 'HTTPS://EXAMPLE.COM']) expect(isWebLink(u), u).toBe(true)
     for (const u of ['javascript:alert(1)', ' javascript:alert(1)', 'data:text/html,<script>1</script>', 'vbscript:x', 'file:///etc/passwd', '//example.com', 'example.com', '', undefined, null]) expect(isWebLink(u as string), String(u)).toBe(false)
+  })
+})
+
+// Forge pass 2, N2: spellings of a private address the first version let through.
+describe('isPrivateHost, second pass', () => {
+  it('is not fooled by a trailing dot', () => {
+    for (const h of ['localhost.', 'printer.local.', '127.0.0.1.', 'nas.internal..']) expect(isPrivateHost(h), h).toBe(true)
+    expect(isPrivateHost('example.com.')).toBe(false)
+  })
+
+  it('sees an IPv4 address carried inside an IPv6 one', () => {
+    for (const h of ['[::127.0.0.1]', '[::7f00:1]', '[64:ff9b::7f00:1]', '[64:ff9b::a00:c]', '[2002:7f00:1::1]', '[2002:c0a8:101::]', '[::ffff:c0a8:101]']) expect(isPrivateHost(h), h).toBe(true)
+    for (const h of ['[64:ff9b::808:808]', '[2002:808:808::1]', '[2001:db8::1]']) expect(isPrivateHost(h), h).toBe(false)
+  })
+})
+
+// M, 2026-10-06: the ceiling comes from the device, not from a number I picked.
+describe('mediaCeiling', () => {
+  const GB = 1024 * 1024 * 1024
+  it('takes a quarter of what the browser says it can store, for a file the reader asked about', async () => {
+    const { mediaCeiling } = await import('../src/fetchGuard')
+    expect(await mediaCeiling({ userAsked: true, estimate: async () => ({ quota: 10 * GB, usage: 2 * GB }) })).toBe(2 * GB)
+  })
+
+  it('never goes below a floor that fits ordinary pictures, nor above a sane top', async () => {
+    const { mediaCeiling, MEDIA_FLOOR_BYTES, MEDIA_TOP_BYTES } = await import('../src/fetchGuard')
+    expect(await mediaCeiling({ userAsked: true, estimate: async () => ({ quota: 100 * 1024 * 1024, usage: 99 * 1024 * 1024 }) })).toBe(MEDIA_FLOOR_BYTES)
+    expect(await mediaCeiling({ userAsked: true, estimate: async () => ({ quota: 5000 * GB, usage: 0 }) })).toBe(MEDIA_TOP_BYTES)
+  })
+
+  it('falls back to a fixed ceiling when the browser will not say', async () => {
+    const { mediaCeiling, MEDIA_MAX_BYTES } = await import('../src/fetchGuard')
+    expect(await mediaCeiling({ userAsked: true, estimate: async () => { throw new Error('no') } })).toBe(MEDIA_MAX_BYTES)
+    expect(await mediaCeiling({ userAsked: true, estimate: async () => ({}) })).toBe(MEDIA_MAX_BYTES)
+  })
+
+  it('is much lower for a file nobody asked about (auto-scan), whatever the device', async () => {
+    const { mediaCeiling, MEDIA_UNASKED_BYTES } = await import('../src/fetchGuard')
+    expect(await mediaCeiling({ userAsked: false, estimate: async () => ({ quota: 5000 * GB, usage: 0 }) })).toBe(MEDIA_UNASKED_BYTES)
+    expect(MEDIA_UNASKED_BYTES).toBeLessThanOrEqual(128 * 1024 * 1024)
+  })
+})
+
+// Forge pass 2, N3: a page with twenty large files must not start twenty downloads at once.
+describe('limiter', () => {
+  it('runs at most N at a time and the rest in order', async () => {
+    const { limiter } = await import('../src/fetchGuard')
+    const run = limiter(2)
+    let active = 0; let peak = 0; const order: number[] = []
+    const job = (i: number) => async (): Promise<number> => {
+      active++; peak = Math.max(peak, active); order.push(i)
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      active--
+      return i
+    }
+    const out = await Promise.all([0, 1, 2, 3, 4, 5].map(async (i) => await run(job(i))))
+    expect(out).toEqual([0, 1, 2, 3, 4, 5])
+    expect(peak).toBe(2)
+    expect(order).toEqual([0, 1, 2, 3, 4, 5])
+  })
+
+  it('a job that fails frees its place', async () => {
+    const { limiter } = await import('../src/fetchGuard')
+    const run = limiter(1)
+    await expect(run(async () => { throw new Error('boom') })).rejects.toThrow('boom')
+    expect(await run(async () => 'next')).toBe('next')
+  })
+})
+
+// The redirect rule (Forge pass 2, N1).
+describe('redirectPolicy', () => {
+  it('a fetch nobody asked for never follows a redirect; one the reader asked for does, and is checked after', async () => {
+    const { redirectPolicy } = await import('../src/fetchGuard')
+    expect(redirectPolicy(false)).toBe('error')
+    expect(redirectPolicy(true)).toBe('follow')
   })
 })
