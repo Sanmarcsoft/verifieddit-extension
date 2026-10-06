@@ -187,3 +187,38 @@ describe('redirectPolicy', () => {
     expect(redirectPolicy(true)).toBe('follow')
   })
 })
+
+// Forge pass 3, SEC-01: a server that sends headers and then nothing must not hold a place forever.
+describe('stalls', () => {
+  it('readCapped gives up when no bytes arrive for the idle time, and says so', async () => {
+    const stalled = new ReadableStream<Uint8Array>({ start (c) { c.enqueue(new Uint8Array(10)) } }) // never closes
+    const started = Date.now()
+    await expect(readCapped(new Response(stalled), 1000, true, { idleMs: 60 })).rejects.toThrow(/stalled/i)
+    expect(Date.now() - started).toBeLessThan(2000)
+  })
+
+  it('a slow but steady download is not a stall', async () => {
+    const steady = new ReadableStream<Uint8Array>({
+      async start (c) { for (let i = 0; i < 5; i++) { await new Promise((resolve) => setTimeout(resolve, 30)); c.enqueue(new Uint8Array(10)) } c.close() }
+    })
+    expect((await readCapped(new Response(steady), 1000, true, { idleMs: 80 })).size).toBe(50)
+  })
+
+  it('the queue refuses more than it can sensibly hold instead of growing without end', async () => {
+    const { limiter } = await import('../src/fetchGuard')
+    const run = limiter(1, 2)
+    const never = new Promise<void>(() => {})
+    void run(async () => { await never })
+    const waiting = [run(async () => 1), run(async () => 2)]
+    await expect(run(async () => 3)).rejects.toThrow(/too many/i)
+    expect(waiting.length).toBe(2)
+  })
+})
+
+// Forge pass 3, SEC-03: more addresses that are not the public internet.
+describe('isPrivateHost, third pass', () => {
+  it('covers benchmark, multicast, broadcast, and more IPv4-in-IPv6 forms', () => {
+    for (const h of ['198.18.0.1', '198.19.255.255', '224.0.0.1', '239.1.2.3', '255.255.255.255', '[ff02::1]', '[::ffff:0:7f00:1]', '[64:ff9b:1::7f00:1]', '[2001::7f00:1]']) expect(isPrivateHost(h), h).toBe(true)
+    for (const h of ['198.17.0.1', '198.20.0.1', '223.255.255.255', '[2001:4860:4860::8888]', '[2001:db8::1]']) expect(isPrivateHost(h), h).toBe(false)
+  })
+})

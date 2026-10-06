@@ -28,7 +28,9 @@ function ipv4Private (a: number, b: number): boolean {
     (a === 100 && b >= 64 && b <= 127) || // carrier-grade NAT
     (a === 169 && b === 254) || // link-local, cloud metadata
     (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168)
+    (a === 192 && b === 168) ||
+    (a === 198 && (b === 18 || b === 19)) || // benchmarking, used inside networks
+    a >= 224 // multicast, reserved, broadcast
 }
 
 /** The hostname as the browser will read it: 2130706433 and 0x7f.1 are 127.0.0.1. */
@@ -72,6 +74,10 @@ export function isPrivateHost (host: string): boolean {
     if (leadingZero && h[5] === 0 && h[6] === 0 && h[7] <= 1) return true // :: and ::1
     if (leadingZero && (h[5] === 0 || h[5] === 0xffff)) return v4(h[6], h[7]) // IPv4-compatible, IPv4-mapped
     if (h[0] === 0x64 && h[1] === 0xff9b && h.slice(2, 6).every((x) => x === 0)) return v4(h[6], h[7]) // NAT64
+    if (h.slice(0, 4).every((x) => x === 0) && h[4] === 0xffff && h[5] === 0) return v4(h[6], h[7]) // IPv4-translated
+    if (h[0] === 0x64 && h[1] === 0xff9b && h[2] === 1) return true // NAT64 for local use
+    if (h[0] === 0x2001 && h[1] === 0) return true // Teredo tunnels
+    if ((h[0] & 0xff00) === 0xff00) return true // multicast
     if (h[0] === 0x2002) return v4(h[1], h[2]) // 6to4
     return (h[0] & 0xfe00) === 0xfc00 || (h[0] & 0xffc0) === 0xfe80 // unique local, link-local
   }
@@ -123,7 +129,16 @@ export function mediaFetchAllowed (mediaUrl: string, pageUrl: string | undefined
  * length is checked before anything is read; the body is then counted as it
  * arrives, because a length can be wrong or missing.
  */
-export async function readCapped (response: Response, maxBytes: number = MEDIA_MAX_BYTES, userAsked = true): Promise<Blob> {
+/** A download that sends nothing for this long has stalled. */
+export const MEDIA_IDLE_MS = 30_000
+
+export async function readCapped (
+  response: Response,
+  maxBytes: number = MEDIA_MAX_BYTES,
+  userAsked = true,
+  opts: { idleMs?: number, onStall?: () => void } = {}
+): Promise<Blob> {
+  const idleMs = opts.idleMs ?? MEDIA_IDLE_MS
   const mb = (bytes: number): string => bytes >= 1024 * 1024 * 1024 ? `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB` : `${Math.round(bytes / (1024 * 1024))} MB`
   // Two different facts: this device cannot hold the file, or nobody asked for
   // it and automatic scanning does not fetch large files. The second has a remedy.
@@ -141,15 +156,37 @@ export async function readCapped (response: Response, maxBytes: number = MEDIA_M
   // Count the bytes as they pass, and let the browser build the Blob. It keeps
   // a large Blob on disk rather than in memory; collecting the chunks here would
   // hold the whole file in memory twice.
+  // A server that sends headers and then nothing must not hold a place in the
+  // queue forever: no bytes for `idleMs` ends the read. A slow, steady download
+  // is fine; only silence counts.
   let total = 0
+  let stalled: (() => void) | null = null
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const stall = new Promise<never>((_resolve, reject) => {
+    stalled = () => { reject(new Error('Download stalled: the server stopped sending')) }
+  })
+  const kick = (): void => {
+    clearTimeout(timer)
+    timer = setTimeout(() => { opts.onStall?.(); stalled?.() }, idleMs)
+  }
   const counted = response.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+    start () { kick() },
     transform (chunk, controller) {
+      kick()
       total += chunk.byteLength
       if (total > maxBytes) { controller.error(tooLarge()); return }
       controller.enqueue(chunk)
     }
   }))
-  const blob = await new Response(counted).blob()
+  let blob: Blob
+  try {
+    blob = await Promise.race([new Response(counted).blob(), stall])
+  } catch (error) {
+    void response.body.cancel().catch(() => {})
+    throw error
+  } finally {
+    clearTimeout(timer)
+  }
   return type === '' || blob.type === type ? blob : new Blob([blob], { type })
 }
 
@@ -197,12 +234,16 @@ export async function mediaCeiling (opts: { userAsked: boolean, estimate?: () =>
  * Run at most `max` jobs at a time, the rest in the order they came. A page
  * with twenty large files must not start twenty downloads at once.
  */
-export function limiter (max: number): <T>(job: () => Promise<T>) => Promise<T> {
+export function limiter (max: number, maxWaiting = 200): <T>(job: () => Promise<T>) => Promise<T> {
   let active = 0
   const waiting: Array<() => void> = []
   const next = (): void => { active--; waiting.shift()?.() }
   return async <T>(job: () => Promise<T>): Promise<T> => {
-    if (active >= max) await new Promise<void>((resolve) => { waiting.push(resolve) })
+    if (active >= max) {
+      // A queue that only grows is its own problem; refuse rather than hoard.
+      if (waiting.length >= maxWaiting) throw new Error('Too many files waiting to be checked')
+      await new Promise<void>((resolve) => { waiting.push(resolve) })
+    }
     active++
     try {
       return await job()

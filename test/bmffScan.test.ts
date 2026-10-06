@@ -75,3 +75,19 @@ describe('bmffHasC2pa', () => {
     expect(await bmffHasC2pa(blobOf(...many, c2pa))).toBe(false) // beyond the box budget: unknown is reported as no
   })
 })
+
+// Forge pass 3, SEC-02: a tiny file with a forged box must not be told it "carries Content Credentials".
+describe('credentialsUnreadAtThisSize', () => {
+  it('only speaks for files big enough that the engine may have failed on size', async () => {
+    const { credentialsUnreadAtThisSize, ENGINE_DOUBT_BYTES } = await import('../src/bmffScan')
+    const small = blobOf(ftyp, c2pa, box('mdat', new Uint8Array(500)))
+    expect(await credentialsUnreadAtThisSize(small)).toBe(false)
+    const head = new Uint8Array([...ftyp, ...c2pa])
+    expect(await credentialsUnreadAtThisSize(sparse(head, ENGINE_DOUBT_BYTES - 1))).toBe(false)
+    expect(await credentialsUnreadAtThisSize(sparse(head, ENGINE_DOUBT_BYTES))).toBe(true)
+    expect(await credentialsUnreadAtThisSize(sparse(new Uint8Array([...ftyp]), ENGINE_DOUBT_BYTES * 2))).toBe(false)
+    // Well under the size at which the engine was measured to fail (about 1 GB), so the margin is real.
+    expect(ENGINE_DOUBT_BYTES).toBeLessThanOrEqual(768 * 1024 * 1024)
+    expect(ENGINE_DOUBT_BYTES).toBeGreaterThanOrEqual(256 * 1024 * 1024)
+  })
+})

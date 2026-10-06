@@ -10,8 +10,8 @@ import { timestampTokensOf } from './certs/coseTimestamp.js'
 import { isContentBox, decode as jumbfDecode } from './certs/jumbf.js'
 import { getManifestFromMetadata } from './certs/metadata.js'
 import { AWAIT_ASYNC_RESPONSE, MSG_C2PA_VALIDATE_URL, type MSG_PAYLOAD } from './constants.js'
-import { limiter, mediaCeiling, mediaFetchAllowed, readCapped, redirectPolicy } from './fetchGuard.js'
-import { bmffHasC2pa } from './bmffScan.js'
+import { limiter, mediaCeiling, mediaFetchAllowed, readCapped, redirectPolicy, MEDIA_IDLE_MS } from './fetchGuard.js'
+import { credentialsUnreadAtThisSize } from './bmffScan.js'
 import { type TrustListMatch } from './trustlistProxy.js'
 import { type DurablePillars, hasSoftBinding } from './durableCredentials.js'
 import { sniffMediaType } from './recovered.js'
@@ -216,7 +216,16 @@ async function validateUrlNow (url: string, recover: boolean, probe: boolean | u
     }
     // No cookies, and no redirects for a fetch nobody asked for: a redirect could
     // lead from a public address to a private one.
-    const response = await fetch(url, { credentials: 'omit', redirect: redirectPolicy(userAsked) })
+    // A server that never answers must not hold a place in the queue: the
+    // headers get MEDIA_IDLE_MS, and so does every silence after them.
+    const abort = new AbortController()
+    const headersTimer = setTimeout(() => { abort.abort() }, MEDIA_IDLE_MS)
+    let response: Response
+    try {
+      response = await fetch(url, { credentials: 'omit', redirect: redirectPolicy(userAsked), signal: abort.signal })
+    } finally {
+      clearTimeout(headersTimer)
+    }
     if (response.redirected) {
       const landed = mediaFetchAllowed(response.url, pageUrl)
       if (!landed.ok) {
@@ -228,7 +237,7 @@ async function validateUrlNow (url: string, recover: boolean, probe: boolean | u
     }
     // The ceiling comes from what this device can hold, and is low for a file
     // nobody asked about.
-    blob = await readCapped(response, await mediaCeiling({ userAsked }), userAsked)
+    blob = await readCapped(response, await mediaCeiling({ userAsked }), userAsked, { onStall: () => { abort.abort() } })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     return { message, url, name: 'Fetch Error' } satisfies C2paError
@@ -244,7 +253,7 @@ async function validateUrlNow (url: string, recover: boolean, probe: boolean | u
   } catch (error: unknown) {
     if (!blob.type.startsWith('video/')) throw error
   }
-  if (reader == null && await bmffHasC2pa(blob)) {
+  if (reader == null && await credentialsUnreadAtThisSize(blob)) {
     // The file does carry credentials, and the engine read none. Measured: that
     // is what it does above roughly 1 GB. Say so, rather than report a signed
     // video as unsigned.

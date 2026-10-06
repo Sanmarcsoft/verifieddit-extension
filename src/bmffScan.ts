@@ -48,3 +48,21 @@ export async function bmffHasC2pa (blob: Blob): Promise<boolean> {
     return false
   }
 }
+
+/**
+ * Below this size the engine reads credentials reliably (measured up to about
+ * 950 MB), so a file that small with nothing read simply has none we can use.
+ * Set well under the measured failure point, because devices differ.
+ */
+export const ENGINE_DOUBT_BYTES = 512 * 1024 * 1024
+
+/**
+ * True when a file the engine read nothing from is large enough that size may
+ * be the reason AND it does carry a credential box. Only then may the reader
+ * be told "has credentials, too large to verify here". A small file with a
+ * forged box gets no such statement: for it, nothing read means nothing there.
+ */
+export async function credentialsUnreadAtThisSize (blob: Blob, minBytes: number = ENGINE_DOUBT_BYTES): Promise<boolean> {
+  if (blob.size < minBytes) return false
+  return await bmffHasC2pa(blob)
+}
