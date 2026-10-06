@@ -55,6 +55,12 @@ test('a page that frames the panel itself cannot take the verification result', 
     await page.goto(PAGE_URL, { waitUntil: 'networkidle', timeout: 60_000 })
     await expect.poll(async () => await page.evaluate(() => document.querySelectorAll('div[c2pa-icon]').length), { timeout: 45_000 }).toBe(3)
 
+    // The real panel's port is claimed and says so, where it can be observed.
+    await expect.poll(async () => {
+      const real = page.frames().find((f) => f.url().endsWith('/iframe.html'))
+      return real == null ? null : await real.evaluate(() => document.documentElement.dataset.vdRelay ?? null).catch(() => null)
+    }, { timeout: 10_000 }).toMatch(/^claimed:/)
+
     // The page frames the panel for itself, after the real one has connected.
     await page.evaluate(async (id) => {
       const frame = document.createElement('iframe')

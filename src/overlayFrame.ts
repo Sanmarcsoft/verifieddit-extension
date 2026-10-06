@@ -3,7 +3,7 @@
  *  Licensed under the MIT license.
  */
 
-import { MSG_DISPLAY_C2PA_OVERLAY, MSG_FORWARD_TO_CONTENT, MSG_UPDATE_FRAME_HEIGHT, MSG_OPEN_OVERLAY, PORT_OVERLAY_FRAME, PORT_RECONNECT_DELAY, MSG_RELAY_READY, RELAY_STATE_ATTR, RELAY_EVENT_ATTR, OVERLAY_HELLO_KEY } from './constants'
+import { MSG_DISPLAY_C2PA_OVERLAY, MSG_FORWARD_TO_CONTENT, MSG_UPDATE_FRAME_HEIGHT, MSG_OPEN_OVERLAY, PORT_OVERLAY_FRAME, PORT_RECONNECT_DELAY, MSG_RELAY_READY, RELAY_STATE_ATTR, RELAY_EVENT_ATTR, OVERLAY_HELLO_KEY, MSG_RELAY_CLAIMED } from './constants'
 import { type C2paOverlay } from './webComponents'
 import { type C2paResult } from './c2pa'
 
@@ -70,6 +70,29 @@ function setRelayState (state: string): void {
  * let an arbitrary page draw a fake "verified" panel under Verifieddit branding
  * — a UI-spoofing surface no nonce closes, since the page can read `iframe.src`.
  */
+/** True once the background has confirmed this frame's port is routed. */
+let claimed = false
+let announcing: ReturnType<typeof setInterval> | undefined
+
+/**
+ * Tell the embedding page which port is ours, and keep telling it until the
+ * background confirms. One message is not enough to rely on: the page may be
+ * mid-load, or the first answer may be lost when the background restarts. The
+ * content script accepts this only from the iframe it created, and the nonce
+ * is useless to anything else, so it does not matter that the page can read it.
+ */
+function announce (nonce: string): void {
+  claimed = false
+  clearInterval(announcing)
+  let tries = 0
+  const say = (): void => {
+    if (claimed || ++tries > 40) { clearInterval(announcing); return }
+    window.parent.postMessage({ [OVERLAY_HELLO_KEY]: nonce }, '*')
+  }
+  say()
+  announcing = setInterval(say, 250)
+}
+
 function connectRelay (): void {
   // A dead extension context (reload/update/disable) makes connect() throw.
   if (chrome.runtime?.id == null) {
@@ -89,9 +112,14 @@ function connectRelay (): void {
         // Tell the page that embeds us which port is ours. The content script
         // accepts this only from the iframe it created; the nonce is useless
         // to anything else, so it does not matter that the page can read it.
-        if (typeof message.data?.nonce === 'string') {
-          window.parent.postMessage({ [OVERLAY_HELLO_KEY]: message.data.nonce }, '*')
-        }
+        if (typeof message.data?.nonce === 'string') announce(message.data.nonce as string)
+        return
+      }
+      if (message.action === MSG_RELAY_CLAIMED) {
+        // The content script vouched for this frame and the background now
+        // routes to it. Until this arrives, a click cannot reach us.
+        claimed = true
+        setRelayState(`claimed:${String(message.data?.tabId)}`)
         return
       }
       if (message.action !== MSG_OPEN_OVERLAY) return

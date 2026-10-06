@@ -27,7 +27,7 @@ import {
 import {
   MSG_GET_ID, MSG_L3_INSPECT_URL, MSG_REMOTE_INSPECT_URL, MSG_FORWARD_TO_CONTENT, REMOTE_VALIDATION_LINK,
   MSG_VALIDATE_URL, AWAIT_ASYNC_RESPONSE, MSG_C2PA_RESULT_FROM_CONTEXT, AUTO_SCAN_DEFAULT, MSG_AUTO_SCAN_UPDATED,
-  MSG_SET_MANIFEST_STORE_PROBE, MANIFEST_STORE_PROBE_KEY, MSG_OPEN_OVERLAY, PORT_OVERLAY_FRAME, MSG_RELAY_READY, MSG_CLAIM_OVERLAY_FRAME,
+  MSG_SET_MANIFEST_STORE_PROBE, MANIFEST_STORE_PROBE_KEY, MSG_OPEN_OVERLAY, PORT_OVERLAY_FRAME, MSG_RELAY_READY, MSG_CLAIM_OVERLAY_FRAME, MSG_RELAY_CLAIMED,
   TRUSTLIST_UPDATE_INTERVAL, MSG_REQUEST_C2PA_ENTRIES
 } from './constants'
 import { sendMessageToAllTabs } from './utils'
@@ -193,6 +193,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (claimed != null && tabId != null && claimed.tabId === tabId && sender.frameId === 0) {
       unclaimedOverlayPorts.delete(data as string)
       overlayFramePorts.set(tabId, claimed.port)
+      // Tell the frame, so it stops asking and so the state can be observed.
+      try { claimed.port.postMessage({ action: MSG_RELAY_CLAIMED, data: { tabId } }) } catch { /* frame gone */ }
+    } else if (tabId != null && typeof data === 'string' && overlayFramePorts.get(tabId) != null && sender.frameId === 0) {
+      // A repeat of a claim already honoured (the frame asks until it hears
+      // back, and the first answer may have crossed with the next question).
+      try { overlayFramePorts.get(tabId)?.postMessage({ action: MSG_RELAY_CLAIMED, data: { tabId } }) } catch { /* frame gone */ }
     }
     return
   }

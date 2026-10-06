@@ -70,6 +70,8 @@ export const MSG_RELAY_READY = 'MSG_RELAY_READY'
  */
 export const OVERLAY_HELLO_KEY = 'vdOverlayHello'
 export const MSG_CLAIM_OVERLAY_FRAME = 'MSG_CLAIM_OVERLAY_FRAME'
+/** Background to the panel frame: your port has been claimed and is now routed. */
+export const MSG_RELAY_CLAIMED = 'MSG_RELAY_CLAIMED'
 // Mirrors relay state onto <html data-vd-relay> so a WebDriver probe can read
 // it from inside the frame. Diagnostic only — nothing branches on it.
 export const RELAY_STATE_ATTR = 'vdRelay'

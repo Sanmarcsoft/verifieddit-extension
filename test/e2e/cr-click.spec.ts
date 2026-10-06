@@ -133,10 +133,18 @@ test.describe('CR overlay click (issue #65)', () => {
       }, CBC_FIXTURE_URL_FRAGMENT)
 
       // Wait for overlay iframe to become visible (ResizeObserver + MSG_DISPLAY_C2PA_OVERLAY roundtrip)
+      // The options are the THIRD argument. They used to be passed second, as
+      // the page function's argument, so the 5 s limit never applied and a panel
+      // that did not open hung the test until its own two-minute limit.
       await page.waitForFunction(() => {
         const d = [...document.querySelectorAll('iframe')].find(f => f.className === 'c2paDialog')
         return d != null && d.style.visibility === 'visible'
-      }, { timeout: 5_000 })
+      }, undefined, { timeout: 8_000 }).catch(async (error: Error) => {
+        // Say what the panel frame knew, so a failure here explains itself.
+        const states = await Promise.all(page.frames().filter((f) => f.url().endsWith('/iframe.html'))
+          .map(async (f) => await f.evaluate(() => `relay=${document.documentElement.dataset.vdRelay ?? ''} overlay=${document.documentElement.dataset.vdOverlay ?? ''}`).catch(() => 'unreadable')))
+        throw new Error(`the panel did not open after the click; panel frame state: ${JSON.stringify(states)}; ${error.message}`)
+      })
 
       // Give the iframe a moment to populate via MSG_DISPLAY_C2PA_OVERLAY
       await page.waitForTimeout(2_000)
