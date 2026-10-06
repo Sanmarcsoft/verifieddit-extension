@@ -3,7 +3,7 @@
  *  Licensed under the MIT license.
  */
 
-import { MSG_UPDATE_FRAME_HEIGHT, OVERLAY_Z_INDEX, type MSG_PAYLOAD } from './constants'
+import { MSG_UPDATE_FRAME_HEIGHT, MSG_CLAIM_OVERLAY_FRAME, OVERLAY_HELLO_KEY, OVERLAY_Z_INDEX, type MSG_PAYLOAD } from './constants'
 
 export class C2paOverlay /* extends HTMLElement */ {
   private static singleInstance: C2paOverlay
@@ -83,6 +83,18 @@ export class C2paOverlay /* extends HTMLElement */ {
     } else {
       attach()
     }
+
+    // Vouch for our own panel frame (Forge F3). The frame posts the nonce the
+    // background gave its port; we pass it on only when the message came from
+    // the window of the iframe created above. A page can frame iframe.html
+    // itself, but it cannot make a message arrive from OUR frame's window.
+    const panelOrigin = new URL(chrome.runtime.getURL('')).origin
+    window.addEventListener('message', (event: MessageEvent) => {
+      if (event.source !== iframe.contentWindow || event.origin !== panelOrigin) return
+      const nonce = (event.data as Record<string, unknown> | null)?.[OVERLAY_HELLO_KEY]
+      if (typeof nonce !== 'string' || !/^[0-9a-f-]{36}$/.test(nonce)) return
+      void chrome.runtime.sendMessage({ action: MSG_CLAIM_OVERLAY_FRAME, data: nonce }).catch(() => {})
+    })
 
     /*
       The IFrame cannot resize itself from within the IFrame.

@@ -10,6 +10,7 @@ import { timestampTokensOf } from './certs/coseTimestamp.js'
 import { isContentBox, decode as jumbfDecode } from './certs/jumbf.js'
 import { getManifestFromMetadata } from './certs/metadata.js'
 import { AWAIT_ASYNC_RESPONSE, MSG_C2PA_VALIDATE_URL, type MSG_PAYLOAD } from './constants.js'
+import { mediaFetchAllowed, readCapped } from './fetchGuard.js'
 import { type TrustListMatch } from './trustlistProxy.js'
 import { type DurablePillars, hasSoftBinding } from './durableCredentials.js'
 import { sniffMediaType } from './recovered.js'
@@ -123,7 +124,12 @@ export async function init (): Promise<void> {
   chrome.runtime.onMessage.addListener(
     (request: MSG_PAYLOAD, sender, sendResponse) => {
       if (request.action === MSG_C2PA_VALIDATE_URL) {
-        void validateUrl(request.data as string, (request as { recover?: boolean }).recover === true, (request as { probe?: boolean }).probe).then(sendResponse)
+        // Only the extension's own background may ask. A content script carries
+        // a tab; it must go through the background, which decides whether a
+        // lookup is allowed and knows which page is asking.
+        if (sender.tab != null) return
+        const asked = request as { recover?: boolean, probe?: boolean, pageUrl?: string }
+        void validateUrl(request.data as string, asked.recover === true, asked.probe, typeof asked.pageUrl === 'string' ? asked.pageUrl : undefined).then(sendResponse)
         return AWAIT_ASYNC_RESPONSE
       }
     }
@@ -179,7 +185,7 @@ async function registeredStore (manifestId: string): Promise<{ store: C2paRsStor
   }
 }
 
-export async function validateUrl (url: string, recover = false, probe?: boolean): Promise<C2paResult | C2paError> {
+export async function validateUrl (url: string, recover = false, probe?: boolean, pageUrl?: string): Promise<C2paResult | C2paError> {
   if (c2pa == null) {
     return new Error('C2PA not initialized') as C2paError
   }
@@ -189,11 +195,17 @@ export async function validateUrl (url: string, recover = false, probe?: boolean
   // timestamp logic (extractC2paManifest below).
   let blob: Blob
   try {
+    // A page chooses this address, and this context is exempt from the browser's
+    // cross-origin and private-network rules: check it before asking (fetchGuard.ts).
+    const allowed = mediaFetchAllowed(url, pageUrl)
+    if (!allowed.ok) {
+      return { message: `Not fetched: ${allowed.reason}`, url, name: 'Fetch Error' } satisfies C2paError
+    }
     const response = await fetch(url)
     if (!response.ok) {
       return { message: `Fetch failed: ${response.status} ${response.statusText}`, url, name: 'Fetch Error' } satisfies C2paError
     }
-    blob = await response.blob()
+    blob = await readCapped(response)
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     return { message, url, name: 'Fetch Error' } satisfies C2paError

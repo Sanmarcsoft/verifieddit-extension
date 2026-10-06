@@ -60,6 +60,16 @@ export const PORT_OVERLAY_FRAME = 'overlay-frame'
 // routable" from "connected but the background dropped me", which are the two
 // ways this relay fails and are otherwise indistinguishable from the outside.
 export const MSG_RELAY_READY = 'MSG_RELAY_READY'
+/**
+ * The panel frame proves which frame it is (Forge F3). iframe.html is
+ * web-accessible, so any page can frame a copy and connect on the relay port.
+ * The background therefore routes nothing to a port until the content script
+ * claims it: the frame posts the nonce it was given to its parent, the content
+ * script accepts it only from the window of the iframe IT created, and tells
+ * the background. A page cannot make our frame post another frame's nonce.
+ */
+export const OVERLAY_HELLO_KEY = 'vdOverlayHello'
+export const MSG_CLAIM_OVERLAY_FRAME = 'MSG_CLAIM_OVERLAY_FRAME'
 // Mirrors relay state onto <html data-vd-relay> so a WebDriver probe can read
 // it from inside the frame. Diagnostic only — nothing branches on it.
 export const RELAY_STATE_ATTR = 'vdRelay'

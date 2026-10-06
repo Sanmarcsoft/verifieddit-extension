@@ -11,6 +11,7 @@ import { claimsDurability, type DurablePillars } from './durableCredentials'
 import { buildExpiryEvidence, classifyExpiry, expiryReason, type ExpiryVerdict } from './signatureValidity'
 import { computeVerdict, durabilityApplies, isFatalValidationCode, type Verdict } from './verdict'
 import { MSG_L3_INSPECT_URL, TRUSTEDDIT_LINK, taggedLink, MSG_SET_MANIFEST_STORE_PROBE, MANIFEST_STORE_PROBE_KEY, MANIFEST_STORE_PROBE_DEFAULT } from './constants'
+import { screenReaderSummary } from './recovered'
 import './provenanceDiagram'
 
 /*
@@ -568,13 +569,17 @@ export class C2paOverlay extends LitElement {
     // #128/#129: a plain-text, screen-reader summary in THIS shadow root (not the
     // nested typewriter). Makes the verdict announceable via aria-live and keeps
     // the signer + trust state available to overlay.shadowRoot.textContent.
-    const srSummary = `${mediaType} signed by ${this.signer ?? 'unknown'}. ` +
-      (trusted
-        ? expiredReason != null
-            ? `Signer in trust list ${this.trustList ?? ''}, but the ${expiredReason}. The file itself is intact.`
-            : `Trusted: ${this.trustList ?? ''}.`
-        : 'Signer unknown to your trust list.') +
-      (hasErrors ? ' Validation errors present.' : '')
+    // A recovered credential is announced as recovered, never as this file
+    // being signed (recovered.ts screenReaderSummary).
+    const srSummary = screenReaderSummary({
+      mediaType,
+      signer: this.signer,
+      trusted,
+      trustList: this.trustList,
+      expiredReason,
+      hasErrors,
+      recovered: c2paResult.recoveredFrom
+    })
 
     return html`
     <div id="card">

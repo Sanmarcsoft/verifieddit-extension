@@ -47,6 +47,44 @@ export function recoveredNote (r: RecoveredCredential): string {
     'This is a lead, not proof: this copy may have been changed since it was signed.'
 }
 
+/**
+ * The panel's spoken summary (aria-live). A recovered credential is announced
+ * as recovered FIRST, and never as this file being signed or trusted: the reader
+ * who cannot see the "recovered" banner must not hear a stripped file described
+ * as a signed one. Who signed the original is still said, as a fact about the
+ * original.
+ */
+export function screenReaderSummary (r: {
+  mediaType: string
+  signer: string | null | undefined
+  trusted: boolean
+  trustList: string | null | undefined
+  expiredReason: string | null | undefined
+  hasErrors: boolean
+  recovered: RecoveredCredential | null | undefined
+}): string {
+  const signer = r.signer ?? 'unknown'
+  const errors = r.hasErrors ? ' Validation errors present.' : ''
+  if (r.recovered != null) {
+    const medium = r.recovered.medium ?? 'image'
+    const standing = r.trusted
+      ? r.expiredReason != null
+        ? `a signer in trust list ${r.trustList ?? ''}, but the ${r.expiredReason}`
+        : `a signer in trust list ${r.trustList ?? ''}`
+      : 'a signer unknown to your trust list'
+    return `This ${medium} carries no Content Credentials. A credential for a matching ${medium} was recovered from ${r.recovered.registry}, ` +
+      `${r.recovered.similarityScore} percent match. The original was signed by ${signer}, ${standing}. ` +
+      `This is a lead, not proof: this copy may have been changed since it was signed.${errors}`
+  }
+  return `${r.mediaType} signed by ${signer}. ` +
+    (r.trusted
+      ? r.expiredReason != null
+        ? `Signer in trust list ${r.trustList ?? ''}, but the ${r.expiredReason}. The file itself is intact.`
+        : `Trusted: ${r.trustList ?? ''}.`
+      : 'Signer unknown to your trust list.') +
+    errors
+}
+
 const noLabel = (medium: string): string => `No embedded content credentials were found for this ${medium}. ` +
   'The file has no C2PA manifest, so nothing cryptographic can be verified locally.'
 

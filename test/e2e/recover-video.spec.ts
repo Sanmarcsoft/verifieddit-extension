@@ -92,6 +92,7 @@ const REGISTRY = `(() => {
 
 interface Outcome {
   name?: string
+  message?: string
   recoveryChecked?: boolean
   recoveryMedium?: string
   recoveryDetail?: string
@@ -99,12 +100,16 @@ interface Outcome {
   hasManifest: boolean
 }
 
-/** What a right-click Verify asks the engine. */
-async function verify (ctx: BrowserContext, file: string, probe: boolean): Promise<Outcome> {
-  return await ctx.serviceWorkers()[0].evaluate(async ({ url, probe }) => {
-    const r = await chrome.runtime.sendMessage({ action: 'MSG_C2PA_VALIDATE_URL', data: url, recover: true, probe })
-    return { name: r?.name, recoveryChecked: r?.recoveryChecked, recoveryMedium: r?.recoveryMedium, recoveryDetail: r?.recoveryDetail, recoveredFrom: r?.recoveredFrom, hasManifest: r?.manifestStore != null }
-  }, { url: `${BASE}/durable-video/${file}`, probe })
+/**
+ * What a right-click Verify asks the engine. `pageUrl` is the page the video is
+ * on, as the background passes it: the fixtures live on this machine, and only
+ * a page that is also on this machine may have them fetched (fetchGuard.ts).
+ */
+async function verify (ctx: BrowserContext, file: string, probe: boolean, pageUrl: string | undefined = `${BASE}/durable-video/`): Promise<Outcome> {
+  return await ctx.serviceWorkers()[0].evaluate(async ({ url, probe, pageUrl }) => {
+    const r = await chrome.runtime.sendMessage({ action: 'MSG_C2PA_VALIDATE_URL', data: url, recover: true, probe, pageUrl })
+    return { name: r?.name, message: r?.message, recoveryChecked: r?.recoveryChecked, recoveryMedium: r?.recoveryMedium, recoveryDetail: r?.recoveryDetail, recoveredFrom: r?.recoveredFrom, hasManifest: r?.manifestStore != null }
+  }, { url: `${BASE}/durable-video/${file}`, probe, pageUrl })
 }
 
 test('a stripped video is found again from one frame, in the browser, however a platform reshaped it', async () => {
@@ -122,6 +127,13 @@ test('a stripped video is found again from one frame, in the browser, however a 
     expect(await inOffscreen(REGISTRY)).toBe('ready')
     const sent = async (): Promise<Array<{ url: string, method: string, hasBody: boolean }>> =>
       JSON.parse(await inOffscreen('JSON.stringify(globalThis.__sent)') as string)
+
+    // A public page may not point the extension at this machine (Forge F1): the
+    // same file is refused, unfetched, when the page asking is not local.
+    const refused = await verify(ctx, 'scene.webm', true, 'https://news.example.com/story')
+    expect(refused.name).toBe('Fetch Error')
+    expect(refused.message).toMatch(/private address/)
+    expect(await sent()).toEqual([])
 
     // With the online check off, nothing is asked of anyone.
     const off = await verify(ctx, 'scene.webm', false)

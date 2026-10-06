@@ -3,7 +3,7 @@
  *  Licensed under the MIT license.
  */
 
-import { MSG_DISPLAY_C2PA_OVERLAY, MSG_FORWARD_TO_CONTENT, MSG_UPDATE_FRAME_HEIGHT, MSG_OPEN_OVERLAY, PORT_OVERLAY_FRAME, PORT_RECONNECT_DELAY, MSG_RELAY_READY, RELAY_STATE_ATTR, RELAY_EVENT_ATTR } from './constants'
+import { MSG_DISPLAY_C2PA_OVERLAY, MSG_FORWARD_TO_CONTENT, MSG_UPDATE_FRAME_HEIGHT, MSG_OPEN_OVERLAY, PORT_OVERLAY_FRAME, PORT_RECONNECT_DELAY, MSG_RELAY_READY, RELAY_STATE_ATTR, RELAY_EVENT_ATTR, OVERLAY_HELLO_KEY } from './constants'
 import { type C2paOverlay } from './webComponents'
 import { type C2paResult } from './c2pa'
 
@@ -86,6 +86,12 @@ function connectRelay (): void {
         // the former means a click can actually reach this frame.
         const tabId = message.data?.tabId
         setRelayState(tabId == null ? 'unroutable' : `ready:${String(tabId)}`)
+        // Tell the page that embeds us which port is ours. The content script
+        // accepts this only from the iframe it created; the nonce is useless
+        // to anything else, so it does not matter that the page can read it.
+        if (typeof message.data?.nonce === 'string') {
+          window.parent.postMessage({ [OVERLAY_HELLO_KEY]: message.data.nonce }, '*')
+        }
         return
       }
       if (message.action !== MSG_OPEN_OVERLAY) return

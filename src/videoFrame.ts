@@ -80,6 +80,8 @@ export function frameFingerprints (frame: ImageData): FrameFingerprints {
 }
 
 const LOAD_TIMEOUT_MS = 10_000
+/** The longest side a frame is drawn at. */
+const FRAME_MAX_SIDE = 1920
 
 /**
  * The frame at half the duration of a video, or null when the browser cannot
@@ -107,10 +109,13 @@ export async function videoMiddleFrame (blob: Blob): Promise<ImageData | null> {
     const seeked = wait('seeked')
     video.currentTime = video.duration / 2
     await seeked
-    const canvas = new OffscreenCanvas(video.videoWidth, video.videoHeight)
+    // A file can claim any dimensions. The fingerprint needs a 32-pixel picture,
+    // so nothing is lost by drawing an oversized frame smaller.
+    const scale = Math.min(1, FRAME_MAX_SIDE / Math.max(video.videoWidth, video.videoHeight))
+    const canvas = new OffscreenCanvas(Math.max(1, Math.round(video.videoWidth * scale)), Math.max(1, Math.round(video.videoHeight * scale)))
     const ctx = canvas.getContext('2d')
     if (ctx == null) return null
-    ctx.drawImage(video, 0, 0)
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
     return ctx.getImageData(0, 0, canvas.width, canvas.height)
   } catch {
     return null

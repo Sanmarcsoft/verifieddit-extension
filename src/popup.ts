@@ -3,6 +3,7 @@
  *  Licensed under the MIT license.
  */
 
+import { isWebLink } from './fetchGuard'
 import { type TrustListInfo, getTrustListInfos, removeTrustList, addTSATrustFile, addTrustFile } from './trustlistProxy.js'
 import packageManifest from '../package.json'
 import { BUILD_INFO } from './build-info'
@@ -134,7 +135,10 @@ async function renderTrustListsTab (): Promise<void> {
     const summary = `<p class="trustlists-summary"><b>${tlis.length}</b> trust list${tlis.length === 1 ? '' : 's'} loaded · <b>${totalEntities}</b> entit${totalEntities === 1 ? 'y' : 'ies'} total</p>`
     const rows = tlis.map((tli) => {
       const displayName = esc(tli.name ?? '(unnamed list)')
-      const website = tli.website?.length > 0 ? `<a href="${esc(tli.website)}" target="_blank" rel="noopener">${esc(tli.website)}</a>` : '<span class="detail-dim">no website</span>'
+      // A trust list names its own website; only a plain web address becomes a link.
+      const website = isWebLink(tli.website)
+        ? `<a href="${esc(tli.website)}" target="_blank" rel="noopener">${esc(tli.website)}</a>`
+        : tli.website?.length > 0 ? esc(tli.website) : '<span class="detail-dim">no website</span>'
       const lastUpdated = tli.last_updated != null && tli.last_updated !== ''
         ? esc(tli.last_updated.slice(0, 10))
         : '<span class="detail-dim">unknown</span>'
@@ -766,7 +770,7 @@ async function displayTrustListInfos (): Promise<void> {
     tlis.forEach((tli, index) => {
       const safeName = esc(tli.name ?? '')
       const safeWebsite = esc(tli.website ?? '')
-      const listItem = (tli.website.length > 0)
+      const listItem = isWebLink(tli.website)
         ? `<li><a href="${safeWebsite}" target="_blank" rel="noopener">${safeName}</a>`
         : `<li>${safeName}`
       listHtml += `${listItem} (<a href="#" class="delete-link" data-index="${index}">delete</a>)</li>`
