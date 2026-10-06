@@ -129,6 +129,10 @@ export function mediaFetchAllowed (mediaUrl: string, pageUrl: string | undefined
  * length is checked before anything is read; the body is then counted as it
  * arrives, because a length can be wrong or missing.
  */
+/** After this long, a download must be averaging at least MEDIA_MIN_BYTES_PER_SECOND. */
+export const MEDIA_GRACE_MS = 20_000
+/** Slower than any connection a person would wait on; fast enough that 8 GB cannot take years. */
+export const MEDIA_MIN_BYTES_PER_SECOND = 16 * 1024
 /** A download that sends nothing for this long has stalled. */
 export const MEDIA_IDLE_MS = 30_000
 
@@ -136,9 +140,12 @@ export async function readCapped (
   response: Response,
   maxBytes: number = MEDIA_MAX_BYTES,
   userAsked = true,
-  opts: { idleMs?: number, onStall?: () => void } = {}
+  opts: { idleMs?: number, graceMs?: number, minBytesPerSecond?: number, onStall?: () => void } = {}
 ): Promise<Blob> {
   const idleMs = opts.idleMs ?? MEDIA_IDLE_MS
+  const graceMs = opts.graceMs ?? MEDIA_GRACE_MS
+  const minRate = opts.minBytesPerSecond ?? MEDIA_MIN_BYTES_PER_SECOND
+  const began = Date.now()
   const mb = (bytes: number): string => bytes >= 1024 * 1024 * 1024 ? `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB` : `${Math.round(bytes / (1024 * 1024))} MB`
   // Two different facts: this device cannot hold the file, or nobody asked for
   // it and automatic scanning does not fetch large files. The second has a remedy.
@@ -175,6 +182,14 @@ export async function readCapped (
       kick()
       total += chunk.byteLength
       if (total > maxBytes) { controller.error(tooLarge()); return }
+      // A byte every few seconds is not silence, but it is not a download
+      // either: after a grace period the average speed must stay above a floor.
+      const seconds = (Date.now() - began) / 1000
+      if (seconds * 1000 > graceMs && total / seconds < minRate) {
+        opts.onStall?.()
+        controller.error(new Error('Download too slow to finish: the server is sending almost nothing'))
+        return
+      }
       controller.enqueue(chunk)
     }
   }))

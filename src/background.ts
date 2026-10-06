@@ -197,11 +197,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return
   }
 
+  // Some requests are honoured only from the extension's own pages (popup,
+  // options, the panel frame), never on the say-so of a script in a web page.
+  const fromOwnPage = typeof sender.url === 'string' && sender.url.startsWith(chrome.runtime.getURL(''))
+
   if (action === MSG_GET_ID) {
     sendResponse({ tab: tabId, frame: sender.frameId })
   }
 
-  if (action === MSG_L3_INSPECT_URL) {
+  // Opening a tab is asked for only by the panel's own Inspect button.
+  if (action === MSG_L3_INSPECT_URL && fromOwnPage) {
     // Open verifieddit.com with the image URL pre-populated via ?url=.
     // (#74) Replaces the upstream "paste into Microsoft Content Integrity's
     // HTMLInputElement via MutationObserver" dance, which was tied to
@@ -256,10 +261,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       })
     return AWAIT_ASYNC_RESPONSE
   }
-
-  // Settings are changed only from the extension's own pages (popup, options,
-  // the panel frame), never on the say-so of a script running in a web page.
-  const fromOwnPage = typeof sender.url === 'string' && sender.url.startsWith(chrome.runtime.getURL(''))
 
   if (action === MSG_AUTO_SCAN_UPDATED && fromOwnPage) {
     void chrome.storage.local.set({ autoScan: data })

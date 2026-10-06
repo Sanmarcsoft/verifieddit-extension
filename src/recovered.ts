@@ -62,6 +62,8 @@ export function screenReaderSummary (r: {
   expiredReason: string | null | undefined
   hasErrors: boolean
   recovered: RecoveredCredential | null | undefined
+  /** What was done with the contents of a file verified in pieces (#197), already worded. */
+  contents?: string | null
 }): string {
   const signer = r.signer ?? 'unknown'
   const errors = r.hasErrors ? ' Validation errors present.' : ''
@@ -82,7 +84,8 @@ export function screenReaderSummary (r: {
         ? `Signer in trust list ${r.trustList ?? ''}, but the ${r.expiredReason}. The file itself is intact.`
         : `Trusted: ${r.trustList ?? ''}.`
       : 'Signer unknown to your trust list.') +
-    errors
+    errors +
+    (r.contents != null && r.contents !== '' ? ` ${r.contents}` : '')
 }
 
 const noLabel = (medium: string): string => `No embedded content credentials were found for this ${medium}. ` +

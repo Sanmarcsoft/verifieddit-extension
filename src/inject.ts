@@ -446,6 +446,13 @@ function getC2PAStatus(c2pa: C2paResult): VALIDATION_STATUS {
     return recoveredStatus(c2pa.aiGeneration !== 'none') as VALIDATION_STATUS
   }
 
+  // The credential was read on its own and the contents were not checked (a
+  // large file nobody asked to download, #197). That is not a full pass, so it
+  // never earns the green or the AI badge: amber, with the reason in the tooltip.
+  if (c2pa.contentsCheck?.state === 'not-checked' && !hasFatalValidation(c2pa.manifestStore.validationStatus)) {
+    return 'warning'
+  }
+
   // AI status comes from what the asset DECLARES about its own content (the
   // IPTC digitalSourceType in its c2pa.actions assertion), not from which
   // trust list its signer matched. Matching on the "AI trust list" labelled

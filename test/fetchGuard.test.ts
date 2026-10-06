@@ -222,3 +222,24 @@ describe('isPrivateHost, third pass', () => {
     for (const h of ['198.17.0.1', '198.20.0.1', '223.255.255.255', '[2001:4860:4860::8888]', '[2001:db8::1]']) expect(isPrivateHost(h), h).toBe(false)
   })
 })
+
+// Forge pass 4, SEC-01: a server that trickles a byte now and then is as bad as a silent one.
+describe('trickles', () => {
+  it('readCapped gives up on a download that stays far too slow, even though bytes keep arriving', async () => {
+    let stop = false
+    const trickle = new ReadableStream<Uint8Array>({
+      async pull (c) { if (stop) { c.close(); return } await new Promise((resolve) => setTimeout(resolve, 15)); c.enqueue(new Uint8Array(1)) }
+    })
+    const started = Date.now()
+    await expect(readCapped(new Response(trickle), 1_000_000, true, { idleMs: 500, graceMs: 80, minBytesPerSecond: 10_000 })).rejects.toThrow(/too slow/i)
+    stop = true
+    expect(Date.now() - started).toBeLessThan(3000)
+  })
+
+  it('an ordinary download is nowhere near the floor', async () => {
+    const quick = new ReadableStream<Uint8Array>({
+      async start (c) { for (let i = 0; i < 4; i++) { await new Promise((resolve) => setTimeout(resolve, 30)); c.enqueue(new Uint8Array(5000)) } c.close() }
+    })
+    expect((await readCapped(new Response(quick), 1_000_000, true, { idleMs: 500, graceMs: 50, minBytesPerSecond: 10_000 })).size).toBe(20000)
+  })
+})

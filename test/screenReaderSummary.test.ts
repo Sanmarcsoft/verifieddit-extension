@@ -42,3 +42,10 @@ describe('screenReaderSummary', () => {
     expect(said).toMatch(/The original was signed by sign\.trusteddit\.com, a signer unknown to your trust list\./)
   })
 })
+
+describe('a file verified in pieces', () => {
+  it('has what was done with its contents read out too', () => {
+    const said = screenReaderSummary({ ...base, contents: 'Contents not checked. This file is 2.4 GB, so only its credential was read.' })
+    expect(said).toBe('Image signed by sign.trusteddit.com. Trusted: Trusteddit. Contents not checked. This file is 2.4 GB, so only its credential was read.')
+  })
+})

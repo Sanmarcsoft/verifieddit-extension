@@ -35,6 +35,11 @@ export const RELEASE_NOTES: readonly ReleaseEntry[] = [
     summary: 'A removed label that is found again now shows everything it said, clearly marked as recovered, and the online check works in Chrome.',
     fixes: [
       {
+        title: 'Large videos are verified without being downloaded into memory',
+        howToVerify:
+          'Verify a signed video of a gigabyte or more. Its credential is read at once from its own part of the file. Right-click it and choose Verify to have the whole file checked against the credential as it streams. Until that is done, the panel says "Contents not checked" and the badge is amber, never green.'
+      },
+      {
         title: 'A video whose label was removed can be found again, without leaving your browser',
         howToVerify:
           'Turn on "Check durable credentials online", right-click a video that has no credentials and choose Verify. One frame is fingerprinted in your browser and only that fingerprint is sent. If a signed video matches, its credential opens marked as recovered. The video itself is never sent.'

@@ -11,7 +11,9 @@ import { isContentBox, decode as jumbfDecode } from './certs/jumbf.js'
 import { getManifestFromMetadata } from './certs/metadata.js'
 import { AWAIT_ASYNC_RESPONSE, MSG_C2PA_VALIDATE_URL, type MSG_PAYLOAD } from './constants.js'
 import { limiter, mediaCeiling, mediaFetchAllowed, readCapped, redirectPolicy, MEDIA_IDLE_MS } from './fetchGuard.js'
-import { credentialsUnreadAtThisSize } from './bmffScan.js'
+import { credentialsUnreadAtThisSize, ENGINE_DOUBT_BYTES } from './bmffScan.js'
+import { applyContentsCheck, credentialStub, probeLarge, rangeSource, type ContentsCheck } from './bigMedia.js'
+import { blobSource, checkContents, hashAssertionOf, readCredentialBox, topLevelBoxes } from './bmffVerify.js'
 import { type TrustListMatch } from './trustlistProxy.js'
 import { type DurablePillars, hasSoftBinding } from './durableCredentials.js'
 import { sniffMediaType } from './recovered.js'
@@ -62,6 +64,13 @@ export interface C2paResult extends ExtensionC2paResult {
    * original, not a check of the copy in hand.
    */
   recoveredFrom: RecoveredCredential | null
+  /**
+   * Set when the file was too large to hand to the engine whole (#197). The
+   * credential was read from its own box, and the contents were checked here as
+   * a stream ('verified' or 'changed') or, when nobody asked for that download,
+   * not checked at all. Absent for a file verified the ordinary way.
+   */
+  contentsCheck?: { state: ContentsCheck, bytes: number, note?: string }
   // Whether the asset DECLARES AI generation, read from the IPTC
   // digitalSourceType in its own c2pa.actions assertion. Never inferred from
   // who signed it — see aiDetection.ts.
@@ -129,8 +138,13 @@ export async function init (): Promise<void> {
         // a tab; it must go through the background, which decides whether a
         // lookup is allowed and knows which page is asking.
         if (sender.tab != null) return
-        const asked = request as { recover?: boolean, probe?: boolean, pageUrl?: string }
-        void validateUrl(request.data as string, asked.recover === true, asked.probe, typeof asked.pageUrl === 'string' ? asked.pageUrl : undefined).then(sendResponse)
+        const asked = request as { recover?: boolean, probe?: boolean, pageUrl?: string, inPieces?: boolean }
+        const media = request.data as string
+        void validateUrl(media, asked.recover === true, asked.probe, typeof asked.pageUrl === 'string' ? asked.pageUrl : undefined, asked.inPieces === true)
+          // Always answer, so a refusal (a full queue, say) is reported as what
+          // it is and not as an engine that never came up.
+          .catch((error: unknown) => ({ message: error instanceof Error ? error.message : String(error), url: media, name: 'Fetch Error' } satisfies C2paError))
+          .then(sendResponse)
         return AWAIT_ASYNC_RESPONSE
       }
     }
@@ -165,13 +179,19 @@ const REGISTERED_MANIFEST_MAX_BYTES = 20 * 1024 * 1024
 async function registeredStore (manifestId: string): Promise<{ store: C2paRsStore, blob: Blob } | { error: string }> {
   try {
     if (c2pa == null) return { error: 'engine not ready' }
+    // The timer covers the headers AND the body: a registry answer that stalls
+    // half way must not hold a place in the queue. The size is capped as it is read.
     const controller = new AbortController()
-    const timer = setTimeout(() => { controller.abort() }, 10000)
-    const response = await fetch(`${REGISTERED_MANIFEST_URL}/${encodeURIComponent(manifestId)}`, { credentials: 'omit', signal: controller.signal })
-    clearTimeout(timer)
-    if (!response.ok) return { error: `registry answered ${response.status}` }
-    const bytes = await response.blob()
-    if (bytes.size === 0 || bytes.size > REGISTERED_MANIFEST_MAX_BYTES) return { error: `unexpected size ${bytes.size}` }
+    const timer = setTimeout(() => { controller.abort() }, 20000)
+    let bytes: Blob
+    try {
+      const response = await fetch(`${REGISTERED_MANIFEST_URL}/${encodeURIComponent(manifestId)}`, { credentials: 'omit', signal: controller.signal })
+      if (!response.ok) return { error: `registry answered ${response.status}` }
+      bytes = await readCapped(response, REGISTERED_MANIFEST_MAX_BYTES, true, { onStall: () => { controller.abort() } })
+    } finally {
+      clearTimeout(timer)
+    }
+    if (bytes.size === 0) return { error: 'unexpected size 0' }
     // The registry says application/c2pa but returns the signed file itself, so
     // the type is read from the bytes. Read as what it is, the file verifies.
     const type = sniffMediaType(new Uint8Array(await bytes.slice(0, 16).arrayBuffer()))
@@ -189,14 +209,14 @@ async function registeredStore (manifestId: string): Promise<{ store: C2paRsStor
 /** At most two files are fetched and verified at a time; the rest wait their turn. */
 const oneAtATime = limiter(2)
 
-export async function validateUrl (url: string, recover = false, probe?: boolean, pageUrl?: string): Promise<C2paResult | C2paError> {
+export async function validateUrl (url: string, recover = false, probe?: boolean, pageUrl?: string, inPieces = false): Promise<C2paResult | C2paError> {
   if (c2pa == null) {
     return new Error('C2PA not initialized') as C2paError
   }
-  return await oneAtATime(async () => await validateUrlNow(url, recover, probe, pageUrl))
+  return await oneAtATime(async () => await validateUrlNow(url, recover, probe, pageUrl, inPieces))
 }
 
-async function validateUrlNow (url: string, recover: boolean, probe: boolean | undefined, pageUrl: string | undefined): Promise<C2paResult | C2paError> {
+async function validateUrlNow (url: string, recover: boolean, probe: boolean | undefined, pageUrl: string | undefined, inPieces: boolean): Promise<C2paResult | C2paError> {
   if (c2pa == null) {
     return new Error('C2PA not initialized') as C2paError
   }
@@ -234,6 +254,20 @@ async function validateUrlNow (url: string, recover: boolean, probe: boolean | u
     }
     if (!response.ok) {
       return { message: `Fetch failed: ${response.status} ${response.statusText}`, url, name: 'Fetch Error' } satisfies C2paError
+    }
+    // A large MP4-family file is not downloaded into memory at all (#197): its
+    // credential is read from its own box and its contents are checked as a
+    // stream. `inPieces` forces that path for a small file, for the tests.
+    const declared = Number(response.headers.get('content-length') ?? '')
+    if (inPieces || (Number.isFinite(declared) && declared >= ENGINE_DOUBT_BYTES)) {
+      const large = await probeLarge(url, { pageUrl, userAsked })
+      if (large != null) {
+        const result = await verifyInPieces(url, large.size, pageUrl, userAsked, probe)
+        if (result != null) {
+          abort.abort() // the whole-file download is not needed
+          return result
+        }
+      }
     }
     // The ceiling comes from what this device can hold, and is low for a file
     // nobody asked about.
@@ -300,13 +334,59 @@ async function validateUrlNow (url: string, recover: boolean, probe: boolean | u
   return await buildResult(store, blob, url, probe, null)
 }
 
+/** Bytes asked for at a time when the contents are checked as a stream. */
+const PIECE_BYTES = 8 * 1024 * 1024
+
+/**
+ * Verify an MP4-family file without downloading it into memory (#197). The
+ * credential box is fetched on its own and the engine reads it from a stub of
+ * a few kilobytes. When the reader asked, the contents are then hashed as they
+ * stream past and compared with the credential; otherwise the result says the
+ * contents were not checked. Null means this path does not apply (no
+ * credential, a structure it cannot read) and the caller carries on as before.
+ */
+async function verifyInPieces (url: string, size: number, pageUrl: string | undefined, userAsked: boolean, probe: boolean | undefined): Promise<C2paResult | C2paError | null> {
+  if (c2pa == null) return null
+  try {
+    const remote = { pageUrl, userAsked }
+    const headers = rangeSource(url, size, { ...remote, maxRequests: 512 })
+    const boxes = await topLevelBoxes(headers)
+    const stub = await credentialStub(headers, boxes)
+    if (stub == null) return null
+    const reader = await c2pa.reader.fromBlob(stub.type, stub)
+    if (reader == null) return null
+    const store: C2paRsStore = await reader.manifestStore()
+    if (store.active_manifest == null || store.manifests?.[store.active_manifest] == null) return null
+
+    let state: ContentsCheck = 'not-checked'
+    let note: string | undefined
+    if (userAsked) {
+      const credential = await readCredentialBox(blobSource(stub))
+      const assertion = credential != null ? hashAssertionOf(credential.jumbf) : null
+      const whole = rangeSource(url, size, { ...remote, maxRequests: Math.ceil(size / PIECE_BYTES) + 512 })
+      const checked = await checkContents(whole, { boxes, assertion: assertion ?? undefined, chunkBytes: PIECE_BYTES })
+        .catch((error: unknown) => ({ result: 'unsupported' as const, why: error instanceof Error ? error.message : 'the download failed' }))
+      if (checked.result === 'match') state = 'verified'
+      else if (checked.result === 'mismatch') state = 'changed'
+      else note = checked.why
+    }
+
+    const result = await buildResult(store, stub, url, probe, null, true)
+    result.manifestStore.validationStatus = applyContentsCheck(result.manifestStore.validationStatus ?? [], state)
+    result.contentsCheck = { state, bytes: size, ...(note != null ? { note } : {}) }
+    return result
+  } catch {
+    return null
+  }
+}
+
 /**
  * Build the full result from a manifest store. `recoveredFrom` is set when the
  * store did not come out of the file in hand but out of a registry, for an image
  * whose own credentials were removed (#184): the same metadata is shown, flagged
  * as recovered, and nothing is probed again.
  */
-async function buildResult (store: C2paRsStore, blob: Blob, url: string, probe: boolean | undefined, recoveredFrom: RecoveredCredential | null): Promise<C2paResult> {
+async function buildResult (store: C2paRsStore, blob: Blob, url: string, probe: boolean | undefined, recoveredFrom: RecoveredCredential | null, credentialOnly = false): Promise<C2paResult> {
   const activeLabel = store.active_manifest as string
 
   const serializedResult = await serializeC2paStore(store, blob, url)
@@ -345,7 +425,9 @@ async function buildResult (store: C2paRsStore, blob: Blob, url: string, probe: 
   const declaredBindings = hasSoftBinding(assertionLabels) ? softBindingsOf(activeManifest.assertions) : []
   const durableRegistries = recoveredFrom != null ? [recoveredFrom.registry] : await probeRegistries(declaredBindings, probe)
   // And does our registry's record agree with this file? (same opt-in)
-  const registryRecord = recoveredFrom != null ? null : await checkRegistryRecord(blob, declaredBindings, probe)
+  // `credentialOnly`: the blob is a stub holding just the credential, so there
+  // is no file here to compare with the registry's record.
+  const registryRecord = recoveredFrom != null || credentialOnly ? null : await checkRegistryRecord(blob, declaredBindings, probe)
   // Forge review 2026-10-05: a record found by the binding is a confirmation too.
   // Without this, a cropped or re-saved copy (fingerprint no longer matching)
   // dropped the record it had just found and read as merely "declared".

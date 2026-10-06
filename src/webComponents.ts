@@ -12,6 +12,7 @@ import { buildExpiryEvidence, classifyExpiry, expiryReason, type ExpiryVerdict }
 import { computeVerdict, durabilityApplies, isFatalValidationCode, type Verdict } from './verdict'
 import { MSG_L3_INSPECT_URL, TRUSTEDDIT_LINK, taggedLink, MSG_SET_MANIFEST_STORE_PROBE, MANIFEST_STORE_PROBE_KEY, MANIFEST_STORE_PROBE_DEFAULT } from './constants'
 import { screenReaderSummary } from './recovered'
+import { contentsNote } from './bigMedia'
 import './provenanceDiagram'
 
 /*
@@ -569,6 +570,8 @@ export class C2paOverlay extends LitElement {
     // #128/#129: a plain-text, screen-reader summary in THIS shadow root (not the
     // nested typewriter). Makes the verdict announceable via aria-live and keeps
     // the signer + trust state available to overlay.shadowRoot.textContent.
+    // A file verified in pieces says what was done with its contents (#197).
+    const contents = c2paResult.contentsCheck != null ? contentsNote(c2paResult.contentsCheck) : null
     // A recovered credential is announced as recovered, never as this file
     // being signed (recovered.ts screenReaderSummary).
     const srSummary = screenReaderSummary({
@@ -578,7 +581,8 @@ export class C2paOverlay extends LitElement {
       trustList: this.trustList,
       expiredReason,
       hasErrors,
-      recovered: c2paResult.recoveredFrom
+      recovered: c2paResult.recoveredFrom,
+      contents: contents
     })
 
     return html`
@@ -591,6 +595,9 @@ export class C2paOverlay extends LitElement {
         <span class="status-badge ${c2paResult.recoveredFrom != null ? 'recovered' : tone}">${c2paResult.recoveredFrom != null ? 'recovered' : tone}</span>
       </div>
 
+      ${contents != null
+        ? html`<div class="recovered-banner reveal" style="animation-delay:40ms" role="note" data-contents-check=${c2paResult.contentsCheck?.state ?? ''}>${contents}</div>`
+        : nothing}
       ${c2paResult.recoveredFrom != null
         ? html`<div class="recovered-banner reveal" style="animation-delay:40ms" role="note">
             <strong>Recovered from a registry.</strong>
