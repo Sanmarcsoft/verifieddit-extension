@@ -19,7 +19,7 @@
  */
 import { computeDifferenceHash, computePerceptualHash } from './perceptualHash'
 import { MANIFEST_STORE_PROBE_DEFAULT, MANIFEST_STORE_PROBE_KEY } from './constants'
-import { type RecoveredCredential } from './recovered'
+import { type OtherMatch, type RecoveredCredential } from './recovered'
 
 const MANIFEST_STORE_URL = 'https://manifests.sanmarcsoft.com/v1'
 // No registry request may hang a validation: the service worker is killed when idle.
@@ -180,8 +180,10 @@ export async function recoverByFingerprint (fp: { phash: string, dhash: string }
     const params = new URLSearchParams({ alg: 'phash', value: fp.phash, crossAlg: 'dhash', crossValue: fp.dhash })
     const response = await fetch(`${MANIFEST_STORE_URL}/matches/byBinding?${params.toString()}`, { credentials: 'omit', signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS) })
     if (!response.ok) return null
-    const best = (await response.json() as ByBindingResponse)?.matches?.[0]
-    if (best == null || typeof best.manifestId !== 'string' || !MANIFEST_ID.test(best.manifestId)) return null
+    const all = ((await response.json() as ByBindingResponse)?.matches ?? [])
+      .filter((m) => m != null && typeof m.manifestId === 'string' && MANIFEST_ID.test(m.manifestId))
+    const best = all[0]
+    if (best == null) return null
     const record = await fetch(`${MANIFEST_STORE_URL}/manifests/${best.manifestId}?format=json`, { credentials: 'omit', signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS) })
     if (!record.ok) return null
     const meta = await record.json() as { signerCn?: unknown, signedAt?: unknown, filename?: unknown } | null
@@ -194,11 +196,38 @@ export async function recoverByFingerprint (fp: { phash: string, dhash: string }
       signerCn: text(meta.signerCn),
       signedAt: text(meta.signedAt),
       filename: text(meta.filename),
-      aiGenerated: null
+      aiGenerated: null,
+      otherMatches: await describeOthers(all.slice(1, 1 + MAX_OTHER_MATCHES))
     }
   } catch {
     return null
   }
+}
+
+/** How many other matching records are listed beside the recovered one (#191). */
+const MAX_OTHER_MATCHES = 4
+
+/**
+ * When and under what name each other matching record was signed. A record
+ * whose details cannot be read is still listed: it matched, and that is the fact
+ * the reader needs. Asks the same registry about ids it has just returned, so
+ * nothing new about the image leaves the browser.
+ */
+async function describeOthers (matches: Array<{ manifestId: string, similarityScore?: number }>): Promise<OtherMatch[]> {
+  const text = (v: unknown): string | null => typeof v === 'string' && v !== '' ? v.slice(0, 200) : null
+  return await Promise.all(matches.map(async (m) => {
+    let meta: { signedAt?: unknown, filename?: unknown } | null = null
+    try {
+      const record = await fetch(`${MANIFEST_STORE_URL}/manifests/${m.manifestId}?format=json`, { credentials: 'omit', signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS) })
+      if (record.ok) meta = await record.json() as { signedAt?: unknown, filename?: unknown } | null
+    } catch {}
+    return {
+      manifestId: m.manifestId,
+      similarityScore: typeof m.similarityScore === 'number' ? m.similarityScore : 0,
+      signedAt: text(meta?.signedAt),
+      filename: text(meta?.filename)
+    }
+  }))
 }
 
 /** Recovery for an image blob: fingerprints are computed here, on the device. */

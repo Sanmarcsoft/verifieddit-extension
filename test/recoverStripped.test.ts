@@ -60,7 +60,8 @@ describe('recoverByFingerprint', () => {
       signerCn: 'sign.trusteddit.com',
       signedAt: '2026-10-05 10:16:33+00:00',
       filename: 'durable-test.png',
-      aiGenerated: null
+      aiGenerated: null,
+      otherMatches: []
     })
   })
 
@@ -184,5 +185,70 @@ describe('what the registry really returns', () => {
     expect(sniffMediaType(new Uint8Array([0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70]))).toBe('video/mp4')
     expect(sniffMediaType(new Uint8Array([0, 0, 0, 0x1d, 0x6a, 0x75, 0x6d, 0x62]))).toBe('application/c2pa')
     expect(sniffMediaType(new Uint8Array([]))).toBe('application/c2pa')
+  })
+})
+
+// When the same pixels were signed more than once the registry holds a record per
+// signing. The reader must be told the recovered credential is one of several.
+describe('recoverByFingerprint when several records match', () => {
+  it('lists the other matching records with their signing time and file name', async () => {
+    storage.manifestStoreProbe = true
+    matches = [
+      { manifestId: 'mid-1', similarityScore: 100, algorithm: 'phash' },
+      { manifestId: 'mid-2', similarityScore: 100, algorithm: 'phash' },
+      { manifestId: 'mid-3', similarityScore: 96, algorithm: 'phash' }
+    ]
+    const byId: Record<string, unknown> = {
+      'mid-1': { signerCn: 'sign.trusteddit.com', signedAt: '2026-10-05 18:47:24+00:00', filename: 'p-composite.jpg' },
+      'mid-2': { signerCn: 'sign.trusteddit.com', signedAt: '2026-10-05 18:48:20+00:00', filename: 'composite.jpg' },
+      'mid-3': { signerCn: 'sign.trusteddit.com', signedAt: '2026-10-01 09:00:00+00:00', filename: 'older.jpg' }
+    }
+    globalThis.fetch = (async (url: string) => {
+      calls.push(String(url))
+      if (String(url).includes('/matches/byBinding')) return { ok: true, json: async () => ({ matches }) }
+      const id = /manifests\/([^?]+)/.exec(String(url))?.[1] ?? ''
+      return { ok: id in byId, json: async () => byId[id] }
+    }) as unknown as typeof fetch
+    const { recoverByFingerprint } = await loadFresh()
+    const out = await recoverByFingerprint(fingerprints)
+    expect(out?.manifestId).toBe('mid-1')
+    expect(out?.otherMatches).toEqual([
+      { manifestId: 'mid-2', similarityScore: 100, signedAt: '2026-10-05 18:48:20+00:00', filename: 'composite.jpg' },
+      { manifestId: 'mid-3', similarityScore: 96, signedAt: '2026-10-01 09:00:00+00:00', filename: 'older.jpg' }
+    ])
+  })
+
+  it('a single match has no others, and an unreadable other record is still counted', async () => {
+    storage.manifestStoreProbe = true
+    const { recoverByFingerprint } = await loadFresh()
+    expect((await recoverByFingerprint(fingerprints))?.otherMatches).toEqual([])
+
+    matches = [{ manifestId: 'mid-1', similarityScore: 100 }, { manifestId: 'mid-9', similarityScore: 100 }]
+    globalThis.fetch = (async (url: string) => {
+      if (String(url).includes('/matches/byBinding')) return { ok: true, json: async () => ({ matches }) }
+      return String(url).includes('mid-1') ? { ok: true, json: async () => meta } : { ok: false, json: async () => null }
+    }) as unknown as typeof fetch
+    const again = await loadFresh()
+    expect((await again.recoverByFingerprint(fingerprints))?.otherMatches).toEqual([{ manifestId: 'mid-9', similarityScore: 100, signedAt: null, filename: null }])
+  })
+
+  it('lists at most four others and ignores malformed entries', async () => {
+    storage.manifestStoreProbe = true
+    matches = [{ manifestId: 'mid-1', similarityScore: 100 }, { manifestId: '../etc', similarityScore: 100 }, { nope: 1 },
+      ...Array.from({ length: 9 }, (_, i) => ({ manifestId: `mid-x${i}`, similarityScore: 99 }))]
+    const { recoverByFingerprint } = await loadFresh()
+    const out = await recoverByFingerprint(fingerprints)
+    expect(out?.otherMatches.length).toBe(4)
+    expect(out?.otherMatches.every((m) => m.manifestId.startsWith('mid-x'))).toBe(true)
+  })
+})
+
+describe('recoveredNote', () => {
+  it('says when the recovered credential is one of several registered for the same picture', async () => {
+    const { recoveredNote } = await import('../src/recovered')
+    const base = { registry: 'SanMarcSoft Manifest Store', manifestId: 'mid-1', similarityScore: 100, signerCn: 'sign.trusteddit.com', signedAt: '2026-10-05 18:47:24+00:00', filename: 'a.jpg', aiGenerated: null }
+    expect(recoveredNote({ ...base, otherMatches: [] })).not.toMatch(/other/i)
+    expect(recoveredNote({ ...base, otherMatches: [{ manifestId: 'mid-2', similarityScore: 100, signedAt: null, filename: null }] })).toMatch(/1 other registered record also matches/)
+    expect(recoveredNote({ ...base, otherMatches: [{ manifestId: 'a', similarityScore: 100, signedAt: null, filename: null }, { manifestId: 'b', similarityScore: 99, signedAt: null, filename: null }] })).toMatch(/2 other registered records also match/)
   })
 })
