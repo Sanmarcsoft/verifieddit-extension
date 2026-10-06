@@ -7,7 +7,7 @@ import { type C2paError, type C2paResult } from './c2pa'
 // Value import: must come from the side-effect-free wire module, or the whole
 // WASM engine is inlined into every page this content script runs on.
 import { isC2paErrorWire, fromC2paErrorWire } from './c2paWire'
-import { noLabelNote, type RecoveredCredential } from './recovered'
+import { noLabelNote, uncheckedContentsTitle, CONTENTS_NOT_CHECKED, type RecoveredCredential } from './recovered'
 import { withDurable, recoveredStatus } from './badgeArt'
 import { type ProvenanceGraph } from './provenanceTypes.js'
 import { type MediaElement } from './content'
@@ -552,7 +552,9 @@ function credentialsEntry (c2pa: C2paResult): MSG_RESPONSE_C2PA_ENTRIES_PAYLOAD 
     status: getC2PAStatus(c2pa),
     thumbnail: c2pa.source.thumbnail.data,
     url: c2pa.url,
-    detail: null,
+    // The popup's word for the amber status is "Untrusted", which is wrong for
+    // a file that is amber because its contents were not checked.
+    detail: c2pa.contentsCheck?.state === 'not-checked' ? CONTENTS_NOT_CHECKED : null,
     credentials: {
       signer: (activeManifest as unknown as { signatureInfo?: { issuer?: string } })?.signatureInfo?.issuer ?? signingCert?.subject?.CN ?? '(unknown signer)',
       trustListName: c2pa.trustList?.tlInfo.name ?? null,
@@ -987,7 +989,7 @@ VisibilityMonitor.onEnterViewport((mediaRecord: MediaRecord): void => {
           // Create icon with a default status if it doesn't exist
           if (mediaRecord.icon === null) {
              mediaRecord.icon = new CrIcon(mediaRecord.element, 'img'); // Use 'img' as default status
-             mediaRecord.icon.setMetadataLink(mediaRecord.src);
+             mediaRecord.icon.setMetadataLink(mediaRecord.src, mediaRecord.state.c2pa?.contentsCheck?.state === 'not-checked' ? uncheckedContentsTitle() : undefined);
              mediaRecord.icon.onClick = async () => {
                const offsets = await getOffsets(mediaRecord.element);
                if (mediaRecord.state.c2pa) {
@@ -1070,7 +1072,7 @@ function setIcon (mediaRecord: MediaRecord): void {
     mediaRecord.onReady = (mediaRecord) => {
       // Use the C2PA status directly for the icon status
       mediaRecord.icon = new CrIcon(mediaRecord.element, c2paStatus as VALIDATION_STATUS)
-      mediaRecord.icon.setMetadataLink(mediaRecord.src) // Set the metadata link
+      mediaRecord.icon.setMetadataLink(mediaRecord.src, mediaRecord.state.c2pa?.contentsCheck?.state === 'not-checked' ? uncheckedContentsTitle() : undefined) // Set the metadata link
       mediaRecord.icon.onClick = async () => {
         const offsets = await getOffsets(mediaRecord.element)
         if (mediaRecord.state.c2pa) {
@@ -1083,7 +1085,7 @@ function setIcon (mediaRecord: MediaRecord): void {
 
   // Icon already exists (created in onEnterViewport or previously here), update its status
   mediaRecord.icon.status = c2paStatus as VALIDATION_STATUS;
-  mediaRecord.icon.setMetadataLink(mediaRecord.src); // Update the metadata link
+  mediaRecord.icon.setMetadataLink(mediaRecord.src, mediaRecord.state.c2pa?.contentsCheck?.state === 'not-checked' ? uncheckedContentsTitle() : undefined); // Update the metadata link
   // Re-bind the click: this icon may have been created as a "no label" badge,
   // whose click shows a note. Left alone, a badge upgraded to real credentials
   // kept showing that note instead of opening the panel.

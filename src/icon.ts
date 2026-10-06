@@ -125,9 +125,15 @@ export class CrIcon {
     this.show()
   }
 
-  public setMetadataLink (url: string): void {
+  public setMetadataLink (url: string, instead?: string): void {
     if (this._crDiv == null) {
       throw new Error('Icon not created')
+    }
+    // `instead` replaces the badge's usual words when they would say something
+    // that is not true of this file (see uncheckedContentsTitle).
+    if (instead != null && instead !== '') {
+      this._crDiv.title = `${instead} Click for details.\n${url}`
+      return
     }
     // Hover says what the badge means, in plain words; the click shows the detail.
     const status = this._status

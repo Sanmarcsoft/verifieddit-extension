@@ -49,3 +49,16 @@ describe('a file verified in pieces', () => {
     expect(said).toBe('Image signed by sign.trusteddit.com. Trusted: Trusteddit. Contents not checked. This file is 2.4 GB, so only its credential was read.')
   })
 })
+
+// An amber badge normally means "unchanged, signer unknown". For a file whose
+// contents were not checked, "unchanged" is the one thing that was NOT established.
+describe('uncheckedContentsTitle', () => {
+  it('never says the file is unchanged, and says how to have it checked', async () => {
+    const { uncheckedContentsTitle } = await import('../src/recovered')
+    const title = uncheckedContentsTitle()
+    expect(title).toMatch(/contents (were )?not checked/i)
+    expect(title).toMatch(/Right-click/)
+    expect(title).not.toMatch(/has not changed/i)
+    expect(title).not.toMatch(/verified/i)
+  })
+})

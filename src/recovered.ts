@@ -88,6 +88,20 @@ export function screenReaderSummary (r: {
     (r.contents != null && r.contents !== '' ? ` ${r.contents}` : '')
 }
 
+/**
+ * The badge tooltip for a file whose credential was read but whose contents
+ * were not checked (a large file nobody asked to download, #197). The amber
+ * badge's usual words say the file has not changed, which is exactly what was
+ * not established here.
+ */
+/** The short label for the same state, used in the popup's list. */
+export const CONTENTS_NOT_CHECKED = 'Contents not checked'
+
+export function uncheckedContentsTitle (): string {
+  return 'Signed, but this file\'s contents were not checked. It is large, so only its credential was read: who signed it and when. ' +
+    'Right-click it and choose Verify to check that the file itself is as it was signed.'
+}
+
 const noLabel = (medium: string): string => `No embedded content credentials were found for this ${medium}. ` +
   'The file has no C2PA manifest, so nothing cryptographic can be verified locally.'
 

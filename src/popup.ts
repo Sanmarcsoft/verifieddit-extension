@@ -3,6 +3,7 @@
  *  Licensed under the MIT license.
  */
 
+import { CONTENTS_NOT_CHECKED } from './recovered'
 import { isWebLink } from './fetchGuard'
 import { type TrustListInfo, getTrustListInfos, removeTrustList, addTSATrustFile, addTrustFile } from './trustlistProxy.js'
 import packageManifest from '../package.json'
@@ -512,6 +513,8 @@ function statusLabel (r: MSG_RESPONSE_C2PA_ENTRIES_PAYLOAD): { text: string, cls
   // failure but is a different claim, so it gets its own label. "Unchecked"
   // says we could not look; "Invalid" would say the file is broken.
   if (r.kind === 'unavailable') return { text: 'Unchecked', cls: 'status-unavailable' }
+  // Amber because its contents were not checked (a large file), not because of who signed it.
+  if (r.kind === 'credentials' && r.detail === CONTENTS_NOT_CHECKED) return { text: CONTENTS_NOT_CHECKED, cls: 'status-warning' }
   switch (r.status) {
     case 'success':         return { text: 'Trusted',     cls: 'status-success' }
     case 'warning':         return { text: 'Untrusted',   cls: 'status-warning' }
