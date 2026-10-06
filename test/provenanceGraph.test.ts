@@ -10,7 +10,7 @@
  */
 import { describe, it, expect } from 'bun:test'
 import { buildProvenanceGraph, graphToMermaid, prettyMime, extractToolName, relLabel } from '../src/provenanceGraph'
-import { computeLayout, visibleSubgraph, COLUMN_GAP, PADDING } from '../src/provenanceLayout'
+import { computeLayout, edgeLabelPoints, visibleSubgraph, COLUMN_GAP, PADDING } from '../src/provenanceLayout'
 import type { ProvenanceGraph } from '../src/provenanceTypes'
 
 /*
@@ -384,5 +384,53 @@ describe('a composite with two credentialed ingredients', () => {
     expect(manifests.find((n) => n.kind === 'current')!.ingredientCount).toBe(2)
     // The composite itself is signed by our PKI, like its sources.
     expect(JSON.stringify(manifests.find((n) => n.kind === 'current')!.signer)).toContain('Trusteddit')
+  })
+})
+
+// #193: on a composite the "added" label was drawn on top of an "asserts" label
+// and the second source's line crossed the first source's lines.
+describe('diagram layout of a composite with two sources', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const store = require('./fixtures/multi-ingredient/composite.store.json')
+  const graph = visibleSubgraph(buildProvenanceGraph(store, 'composite.jpg')!, new Set())
+  const pos = computeLayout(graph)
+  const y = (id: string): number => pos.get(id)!.y
+  const current = graph.nodes.find((n) => n.kind === 'current')!
+  const sourceOf = (label: string): string => graph.edges.find((e) => e.target === current.id && e.label === label)!.source
+  const assertionsOf = (id: string): string[] => graph.edges.filter((e) => e.source === id && e.label === 'asserts').map((e) => e.target)
+
+  it('puts the composite between its two sources, not above both', () => {
+    const edited = assertionsOf(sourceOf('parent')).map(y)
+    const added = assertionsOf(sourceOf('added')).map(y)
+    expect(Math.max(...edited)).toBeLessThan(y(current.id))
+    expect(y(current.id)).toBeLessThan(Math.min(...added))
+  })
+
+  it('never draws two edge labels on top of each other', () => {
+    const points = [...edgeLabelPoints(graph, pos).values()]
+    expect(points.length).toBe(graph.edges.filter((e) => e.label !== '').length)
+    for (let i = 0; i < points.length; i++) {
+      for (let j = i + 1; j < points.length; j++) {
+        const clash = Math.abs(points[i].x - points[j].x) < 60 && Math.abs(points[i].y - points[j].y) < 14
+        expect(clash).toBe(false)
+      }
+    }
+  })
+
+  it('moves a label along its own line when two lines share a midpoint', () => {
+    // Two lines crossing like an X share a midpoint whatever the row order.
+    const node = (id: string): any => ({ ...graph.nodes[0], id, parentId: undefined })
+    const crossed: ProvenanceGraph = {
+      nodes: ['a', 'b', 'c', 'd'].map(node),
+      edges: [
+        { id: 'e0', source: 'a', target: 'd', label: 'one' },
+        { id: 'e1', source: 'b', target: 'c', label: 'two' }
+      ]
+    }
+    const fixed = new Map([['a', { x: 0, y: 0 }], ['b', { x: 0, y: 118 }], ['c', { x: 268, y: 0 }], ['d', { x: 268, y: 118 }]])
+    const labels = edgeLabelPoints(crossed, fixed)
+    const one = labels.get('e0')!
+    const two = labels.get('e1')!
+    expect(Math.abs(one.x - two.x) < 60 && Math.abs(one.y - two.y) < 14).toBe(false)
   })
 })

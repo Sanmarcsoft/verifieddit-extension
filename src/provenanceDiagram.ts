@@ -38,6 +38,8 @@ import {
   NODE_W,
   PADDING,
   computeLayout,
+  edgeEnds,
+  edgeLabelPoints,
   visibleSubgraph,
   type Point
 } from './provenanceLayout.js'
@@ -729,6 +731,8 @@ export class C2paProvenanceGraph extends LitElement {
       positions.set(id, offset == null ? p : { x: p.x + offset.x, y: p.y + offset.y })
     }
 
+    const labelPoints = edgeLabelPoints(view, positions)
+
     let maxX = 0
     let maxY = 0
     for (const p of positions.values()) {
@@ -764,7 +768,7 @@ export class C2paProvenanceGraph extends LitElement {
                 <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"></path>
               </marker>
             </defs>
-            ${view.edges.map((edge) => this.renderEdge(positions.get(edge.source), positions.get(edge.target), edge.label))}
+            ${view.edges.map((edge) => this.renderEdge(positions.get(edge.source), positions.get(edge.target), edge.label, labelPoints.get(edge.id)))}
           </svg>
           ${view.nodes.map((node) => this.renderNode(node, positions.get(node.id), (childCount.get(node.id) ?? 0) > 0))}
         </div>
@@ -870,22 +874,19 @@ export class C2paProvenanceGraph extends LitElement {
     `
   }
 
-  private renderEdge (from: Point | undefined, to: Point | undefined, label: string): TemplateResult | typeof nothing {
+  private renderEdge (from: Point | undefined, to: Point | undefined, label: string, labelAt: Point | undefined): TemplateResult | typeof nothing {
     if (from == null || to == null) return nothing
     // Edges leave the source's right edge and enter the target's left edge —
     // the same left-to-right generation flow the sites draw.
-    const x1 = from.x + NODE_W
-    const y1 = from.y + NODE_H / 2
-    const x2 = to.x
-    const y2 = to.y + NODE_H / 2
+    const { x1, y1, x2, y2 } = edgeEnds(from, to)
     const midX = (x1 + x2) / 2
-    const labelY = (y1 + y2) / 2 - 5
     return svg`
       <path d="M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}"
             stroke="#cbd5e1" stroke-width="1.5" fill="none"
             stroke-linecap="round" marker-end="url(#pg-arrow)" opacity="0.85"></path>
-      ${label !== ''
-        ? svg`<text x="${midX}" y="${labelY}" text-anchor="middle" font-size="10" fill="#64748b">${label}</text>`
+      ${label !== '' && labelAt != null
+        ? svg`<text x="${labelAt.x}" y="${labelAt.y - 5}" text-anchor="middle" font-size="10" fill="#64748b"
+                    stroke="#fafaf7" stroke-width="3" paint-order="stroke">${label}</text>`
         : nothing}
     `
   }
