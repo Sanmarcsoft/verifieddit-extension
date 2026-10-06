@@ -122,3 +122,12 @@ describe('B: checking the contents as a stream', () => {
     await expect(checkContents(blobSource(new Blob([signed])), { signal: abort.signal })).rejects.toThrow()
   })
 })
+
+// Forge pass 5, FINDING-06.
+describe('Sha256 used twice', () => {
+  it('refuses to be finished twice or fed after it is finished, rather than give a wrong digest', () => {
+    const h = new Sha256(); h.update(new Uint8Array([1, 2, 3])); h.digest()
+    expect(() => h.digest()).toThrow()
+    expect(() => h.update(new Uint8Array([4]))).toThrow()
+  })
+})

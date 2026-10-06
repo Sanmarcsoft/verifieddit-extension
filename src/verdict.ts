@@ -111,16 +111,22 @@ export interface VerdictInput {
   trusted: boolean
   /** RFC 3161 evidence, used only to decide whether an expired credential is forgiven. */
   timestamp?: TimestampEvidence | null
+  /**
+   * True when the credential was read but the file's contents were not checked
+   * against it (a large file nobody asked to download, #197). Such a file is
+   * never 'verified', whoever signed it.
+   */
+  contentsUnchecked?: boolean
 }
 
 /**
  * Decide the verdict. Precedence: integrity failure, then absence of a signature,
  * then trust. An expired credential is deliberately NOT an integrity failure.
  */
-export function computeVerdict ({ codes, signed, trusted }: VerdictInput): Verdict {
+export function computeVerdict ({ codes, signed, trusted, contentsUnchecked }: VerdictInput): Verdict {
   if (codes.some(isFatalValidationCode)) return 'invalid'
   if (!signed) return 'unsigned'
-  return trusted ? 'verified' : 'authentic'
+  return trusted && contentsUnchecked !== true ? 'verified' : 'authentic'
 }
 
 /**

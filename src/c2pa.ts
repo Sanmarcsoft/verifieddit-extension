@@ -10,7 +10,7 @@ import { timestampTokensOf } from './certs/coseTimestamp.js'
 import { isContentBox, decode as jumbfDecode } from './certs/jumbf.js'
 import { getManifestFromMetadata } from './certs/metadata.js'
 import { AWAIT_ASYNC_RESPONSE, MSG_C2PA_VALIDATE_URL, type MSG_PAYLOAD } from './constants.js'
-import { limiter, mediaCeiling, mediaFetchAllowed, readCapped, redirectPolicy, MEDIA_IDLE_MS } from './fetchGuard.js'
+import { limiter, mediaCeiling, mediaFetchAllowed, readCapped, redirectPolicy, MEDIA_IDLE_MS, MEDIA_GRACE_MS, MEDIA_MIN_BYTES_PER_SECOND } from './fetchGuard.js'
 import { credentialsUnreadAtThisSize, ENGINE_DOUBT_BYTES } from './bmffScan.js'
 import { applyContentsCheck, credentialStub, probeLarge, rangeSource, type ContentsCheck } from './bigMedia.js'
 import { blobSource, checkContents, hashAssertionOf, readCredentialBox, topLevelBoxes } from './bmffVerify.js'
@@ -261,7 +261,9 @@ async function validateUrlNow (url: string, recover: boolean, probe: boolean | u
     const declared = Number(response.headers.get('content-length') ?? '')
     if (inPieces || (Number.isFinite(declared) && declared >= ENGINE_DOUBT_BYTES)) {
       const large = await probeLarge(url, { pageUrl, userAsked })
-      if (large != null) {
+      // The size that counts is the one the range request reported, not a
+      // header a server can set to anything: a small file is verified whole.
+      if (large != null && (inPieces || large.size >= ENGINE_DOUBT_BYTES)) {
         const result = await verifyInPieces(url, large.size, pageUrl, userAsked, probe)
         if (result != null) {
           abort.abort() // the whole-file download is not needed
@@ -349,7 +351,8 @@ async function verifyInPieces (url: string, size: number, pageUrl: string | unde
   if (c2pa == null) return null
   try {
     const remote = { pageUrl, userAsked }
-    const headers = rangeSource(url, size, { ...remote, maxRequests: 512 })
+    // A file nobody asked about gets a small budget for finding its credential.
+    const headers = rangeSource(url, size, { ...remote, maxRequests: userAsked ? 512 : 48 })
     const boxes = await topLevelBoxes(headers)
     const stub = await credentialStub(headers, boxes)
     if (stub == null) return null
@@ -362,9 +365,26 @@ async function verifyInPieces (url: string, size: number, pageUrl: string | unde
     let note: string | undefined
     if (userAsked) {
       const credential = await readCredentialBox(blobSource(stub))
-      const assertion = credential != null ? hashAssertionOf(credential.jumbf) : null
+      // The same manifest the engine calls active, by its label.
+      const assertion = credential != null ? hashAssertionOf(credential.jumbf, store.active_manifest) : null
       const whole = rangeSource(url, size, { ...remote, maxRequests: Math.ceil(size / PIECE_BYTES) + 512 })
-      const checked = await checkContents(whole, { boxes, assertion: assertion ?? undefined, chunkBytes: PIECE_BYTES })
+      // The whole check must keep a minimum speed, like any other download: a
+      // server answering each request just inside its time limit cannot hold a
+      // place in the queue for hours.
+      const stop = new AbortController()
+      const began = Date.now()
+      const checked = assertion == null
+        ? { result: 'unsupported' as const, why: 'the credential has no contents hash this code can read' }
+        : await checkContents(whole, {
+          boxes,
+          assertion,
+          chunkBytes: PIECE_BYTES,
+          signal: stop.signal,
+          onProgress: (done) => {
+            const seconds = (Date.now() - began) / 1000
+            if (seconds * 1000 > MEDIA_GRACE_MS && done / seconds < MEDIA_MIN_BYTES_PER_SECOND) stop.abort()
+          }
+        })
         .catch((error: unknown) => ({ result: 'unsupported' as const, why: error instanceof Error ? error.message : 'the download failed' }))
       if (checked.result === 'match') state = 'verified'
       else if (checked.result === 'mismatch') state = 'changed'

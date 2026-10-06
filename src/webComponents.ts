@@ -462,7 +462,8 @@ export class C2paOverlay extends LitElement {
     const trusted = c2paResult.trustList != null
     const signed = (c2paResult.certChain?.length ?? 0) > 0 ||
       (c2paResult.manifestStore?.manifests?.length ?? 0) > 0
-    const tone: StatusTone = computeVerdict({ codes, signed, trusted })
+    // Contents that were not checked cap the verdict: never 'verified' (verdict.ts).
+    const tone: StatusTone = computeVerdict({ codes, signed, trusted, contentsUnchecked: c2paResult.contentsCheck?.state === 'not-checked' })
     return { errors, trusted, tone, expired, expiry }
   }
 
@@ -592,7 +593,7 @@ export class C2paOverlay extends LitElement {
         <div class="header-left">
           <span class="brand">Content Credentials</span>
         </div>
-        <span class="status-badge ${c2paResult.recoveredFrom != null ? 'recovered' : tone}">${c2paResult.recoveredFrom != null ? 'recovered' : tone}</span>
+        <span class="status-badge ${c2paResult.recoveredFrom != null ? 'recovered' : tone}">${c2paResult.recoveredFrom != null ? 'recovered' : c2paResult.contentsCheck?.state === 'not-checked' ? 'contents not checked' : tone}</span>
       </div>
 
       ${contents != null

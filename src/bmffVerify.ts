@@ -135,12 +135,19 @@ function findHashBox (box: JumbfBox | ContentBox): { label: string, data: Uint8A
   return found
 }
 
-/** The contents-check assertion of the ACTIVE manifest, which is the last one in the store. */
-export function hashAssertionOf (jumbf: Uint8Array): HashAssertion | null {
+/**
+ * The contents-check assertion of the ACTIVE manifest. Pass the label the
+ * engine reports as active, so both read the same manifest; a label that is not
+ * in the store gives null, never a guess. Without a label the last manifest in
+ * the store is taken, which is where the standard puts the active one.
+ */
+export function hashAssertionOf (jumbf: Uint8Array, activeLabel?: string): HashAssertion | null {
   try {
     const store = decodeJumbf(jumbf)
     const manifests = store.boxes.filter((b): b is JumbfBox => !isContentBox(b))
-    const active = manifests[manifests.length - 1]
+    const active = activeLabel != null
+      ? manifests.find((m) => m.label === activeLabel)
+      : manifests[manifests.length - 1]
     if (active == null) return null
     const found = findHashBox(active)
     if (found == null) return null
@@ -300,8 +307,10 @@ export class Sha256 {
   private readonly w = new Uint32Array(64)
   private filled = 0
   private length = 0
+  private finished = false
 
   update (data: Uint8Array): this {
+    if (this.finished) throw new Error('Sha256: already finished')
     this.length += data.length
     let at = 0
     if (this.filled > 0) {
@@ -321,7 +330,9 @@ export class Sha256 {
     return this
   }
 
+  /** Finishes the hash. A finished hasher cannot be fed or finished again. */
   digest (): Uint8Array {
+    if (this.finished) throw new Error('Sha256: already finished')
     const bits = BigInt(this.length) * 8n
     const pad = new Uint8Array(((this.filled < 56 ? 56 : 120) - this.filled) + 8)
     pad[0] = 0x80
@@ -329,6 +340,7 @@ export class Sha256 {
     const length = this.length
     this.update(pad)
     this.length = length
+    this.finished = true
     const out = new Uint8Array(32)
     const view = new DataView(out.buffer)
     for (let i = 0; i < 8; i++) view.setUint32(i * 4, this.state[i])

@@ -144,3 +144,34 @@ describe('contentsNote', () => {
     expect(contentsNote({ state: 'changed', bytes: GB })).toMatch(/does not match its credential/)
   })
 })
+
+// Forge pass 5, FINDING-02: a server that answers a small range with a huge body.
+describe('rangeSource against an oversized answer', () => {
+  const lying = (declaredEnd: number, bodyBytes: number): typeof fetch => (async (url: string) => {
+    const r = new Response(new Uint8Array(bodyBytes), { status: 206, headers: { 'content-range': `bytes 0-${declaredEnd}/${signed.length}` } })
+    Object.defineProperty(r, 'url', { value: url })
+    return r
+  }) as unknown as typeof fetch
+
+  it('refuses a header that claims more than was asked for, before reading the body', async () => {
+    const source = rangeSource(URL_, signed.length, { pageUrl: PAGE, userAsked: true, fetchImpl: lying(50_000, 50_001) })
+    await expect(source.read(0, 16)).rejects.toThrow(/range/i)
+  })
+
+  it('stops reading a body that runs past what its own header promised', async () => {
+    const source = rangeSource(URL_, signed.length, { pageUrl: PAGE, userAsked: true, fetchImpl: lying(15, 5_000_000) })
+    await expect(source.read(0, 16)).rejects.toThrow(/range|large/i)
+  })
+})
+
+// Forge pass 5, FINDING-03: the contents hash must come from the manifest the engine calls active.
+describe('hashAssertionOf by label', () => {
+  it('takes the named manifest, and refuses a name that is not in the store', async () => {
+    const { hashAssertionOf: byLabel } = await import('../src/bmffVerify')
+    const { decode } = await import('../src/certs/jumbf')
+    const found = await readCredentialBox(blobSource(new Blob([signed])))
+    const labels = decode(found!.jumbf).boxes.map((b) => (b as { label?: string }).label)
+    expect(byLabel(found!.jumbf, labels[labels.length - 1])).not.toBeNull()
+    expect(byLabel(found!.jumbf, 'urn:uuid:not-in-this-store')).toBeNull()
+  })
+})

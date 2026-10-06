@@ -16,7 +16,7 @@
  * and a time limit.
  */
 
-import { mediaFetchAllowed, redirectPolicy, MEDIA_IDLE_MS } from './fetchGuard'
+import { mediaFetchAllowed, readCapped, redirectPolicy, MEDIA_IDLE_MS } from './fetchGuard'
 import { readCredentialBox, type Box, type ByteSource } from './bmffVerify'
 
 export interface RemoteOptions {
@@ -52,8 +52,21 @@ async function ranged (url: string, start: number, endInclusive: number, opts: R
     void response.body?.cancel().catch(() => {})
     return { refused: 'the server did not answer with the range asked for' }
   }
-  const bytes = new Uint8Array(await response.arrayBuffer())
-  if (bytes.length !== Number(range[2]) - start + 1 || bytes.length > endInclusive - start + 1) return { refused: 'the server sent a different range than asked for' }
+  // The header must promise no more than was asked for, and the body is then
+  // read through a cap of exactly that much: a server cannot answer a 16-byte
+  // request with gigabytes and have them buffered.
+  const promised = Number(range[2]) - start + 1
+  if (promised < 1 || promised > endInclusive - start + 1) {
+    void response.body?.cancel().catch(() => {})
+    return { refused: 'the server sent a different range than asked for' }
+  }
+  let bytes: Uint8Array
+  try {
+    bytes = new Uint8Array(await (await readCapped(response, promised)).arrayBuffer())
+  } catch {
+    return { refused: 'the server sent a larger range than it said it would' }
+  }
+  if (bytes.length !== promised) return { refused: 'the server sent a different range than asked for' }
   return { bytes, total: Number(range[3]) }
 }
 
