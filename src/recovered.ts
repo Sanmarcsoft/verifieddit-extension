@@ -21,7 +21,7 @@ export interface RecoveredCredential {
    * it carried, so the reader is told this credential is one of several.
    */
   otherMatches: OtherMatch[]
-  /** Set for a video (#195), whose credential is recovered from a watermark the service reads. Absent means an image. */
+  /** Set for a video (#197), whose credential is found from the fingerprint of one frame. Absent means an image. */
   medium?: 'video'
 }
 
@@ -38,6 +38,7 @@ export function recoveredNote (r: RecoveredCredential): string {
   // A result recovered by an older build, or relayed from one, has no list.
   const others = r.otherMatches?.length ?? 0
   return `This ${r.medium ?? 'image'}'s Content Credentials were removed, but a registered credential matches it. ` +
+    (r.medium === 'video' ? 'The match was made on one frame from the middle of the video, compared in your browser. ' : '') +
     `The original was signed by ${who}${when} (${r.similarityScore}% match, ${r.registry}). ` +
     (r.aiGenerated === true ? 'Its label says it was made with AI. ' : '') +
     (others > 0
@@ -53,8 +54,8 @@ const noLabel = (medium: string): string => `No embedded content credentials wer
  * What to say about a file with no credentials. "We looked for a removed
  * label and found none" and "we did not look because the online check is off"
  * are different facts, and the person can only act on the second. A video is
- * looked up by sending it (#195), which has its own switch, so its words name
- * that switch and say when the service could not answer.
+ * looked up from one frame's fingerprint (#197); its words say the video stays
+ * in the browser, and say when the browser could not read it.
  */
 export function noLabelNote (r: { recovered: RecoveredCredential | null | undefined, checked: boolean, detail?: string, medium?: 'video' }): string {
   if (r.recovered != null) {
@@ -67,7 +68,7 @@ export function noLabelNote (r: { recovered: RecoveredCredential | null | undefi
   if (r.medium === 'video') {
     return r.detail != null && r.detail !== ''
       ? `${base} We tried to look for a removed label and could not: ${r.detail}`
-      : `${base} If its credentials were removed, a copy may still exist. Finding it means sending this video to Verifieddit: turn on "Check durable credentials online" and "Send videos I verify to Verifieddit" in the extension's Options and verify again.`
+      : `${base} If its credentials were removed, a copy may still exist: turn on "Check durable credentials online" in the extension's Options and verify again. One frame is fingerprinted in your browser and only that fingerprint is sent, never the video.`
   }
   return `${base} If its credentials were removed, a copy may still exist: turn on "Check durable credentials online" in the extension's Options and verify again.`
 }

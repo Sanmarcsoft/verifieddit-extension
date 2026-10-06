@@ -18,7 +18,8 @@
  * Endpoint contract mirrors verifieddit-www/src/utils/manifestStoreClient.ts.
  */
 import { computeDifferenceHash, computePerceptualHash } from './perceptualHash'
-import { MANIFEST_STORE_PROBE_DEFAULT, MANIFEST_STORE_PROBE_KEY, VIDEO_UPLOAD_RECOVERY_DEFAULT, VIDEO_UPLOAD_RECOVERY_KEY } from './constants'
+import { MANIFEST_STORE_PROBE_DEFAULT, MANIFEST_STORE_PROBE_KEY } from './constants'
+import { frameFingerprints, videoMiddleFrame } from './videoFrame'
 import { type OtherMatch, type RecoveredCredential } from './recovered'
 
 const MANIFEST_STORE_URL = 'https://manifests.sanmarcsoft.com/v1'
@@ -239,76 +240,46 @@ export async function recoverStripped (blob: Blob, enabled?: boolean): Promise<R
 }
 
 /*
- * Recovery of a stripped video (#195). A video's durable credential is a
- * watermark hidden in its frames. Reading it takes a model far too large to run
- * in a browser, so the video is sent to the Verifieddit service, which reads the
- * watermark and asks the registry. The file itself leaves the device, which a
- * fingerprint lookup never does, so this needs a second switch on top of the
- * online check, and like every recovery it runs only on an explicit Verify.
+ * Recovery of a stripped video (#197). One frame of the video, the one at half
+ * its duration, is fingerprinted here on the device, and the registry is asked
+ * about those hashes exactly as it is for a stripped picture. The signer
+ * registers the same frame's fingerprints when it signs. The video itself, and
+ * the frame, never leave the browser.
+ *
+ * Two pictures are tried: the whole frame with any black bars removed, then its
+ * centre, which a platform's logo leaves alone. A copy cropped to a vertical
+ * format needs nothing extra: its whole frame is the slice the signer also
+ * registered, and the registry matches a lookup against every variant.
+ *
+ * A match says a signed video looks like this one. It rests on one frame, so it
+ * is a lead, not proof.
  */
-const VIDEO_VERIFY_URL = 'https://api.verifieddit.com/api/v1/verify'
-/** The service skips recovery above this size, so sending more would disclose a file for nothing. */
-export const VIDEO_RECOVERY_MAX_BYTES = 25 * 1024 * 1024
-/** Reading a watermark takes the service tens of seconds for a short clip. */
-const VIDEO_RECOVERY_TIMEOUT_MS = 120_000
-
 export interface VideoRecovery {
   credential: RecoveredCredential | null
-  /** True only when the service looked and gave an answer, found or not. */
+  /** True only when the registry was asked and answered, found or not. */
   checked: boolean
   /** Why nothing was looked up, when there is a reason worth telling. */
   detail?: string
 }
 
-async function videoUploadIsOn (enabled?: boolean): Promise<boolean> {
-  if (enabled != null) return enabled
-  try {
-    const stored = await chrome.storage.local.get(VIDEO_UPLOAD_RECOVERY_KEY)
-    return stored?.[VIDEO_UPLOAD_RECOVERY_KEY] ?? VIDEO_UPLOAD_RECOVERY_DEFAULT
-  } catch {
-    return VIDEO_UPLOAD_RECOVERY_DEFAULT
-  }
-}
-
-/**
- * `on.lookups` and `on.upload` are the caller's reading of the two switches and
- * win when given: in Chrome this runs in an offscreen document, which cannot
- * read chrome.storage, so the background reads them and passes them in.
- */
-export async function recoverVideoByUpload (blob: Blob, on: { lookups?: boolean, upload?: boolean } = {}): Promise<VideoRecovery> {
+export async function recoverVideoByFingerprint (
+  blob: Blob,
+  enabled?: boolean,
+  grab: (blob: Blob) => Promise<ImageData | null> = videoMiddleFrame
+): Promise<VideoRecovery> {
   const notChecked: VideoRecovery = { credential: null, checked: false }
   try {
-    if (blob.type !== 'video/mp4') return notChecked
-    if (!(await checkIsOn(on.lookups)) || !(await videoUploadIsOn(on.upload))) return notChecked
-    if (blob.size > VIDEO_RECOVERY_MAX_BYTES) {
-      return { ...notChecked, detail: 'this video is too large to look up (the limit is 25 MB).' }
+    if (!(await checkIsOn(enabled))) return notChecked
+    const frame = await grab(blob)
+    if (frame == null) return { ...notChecked, detail: 'this browser could not read the video.' }
+    const fp = frameFingerprints(frame)
+    for (const picture of [fp.whole, fp.centre]) {
+      const credential = await recoverByFingerprint(picture, true)
+      if (credential != null) return { checked: true, credential: { ...credential, medium: 'video' } }
     }
-    const form = new FormData()
-    form.append('file', blob, 'video.mp4')
-    const response = await fetch(VIDEO_VERIFY_URL, { method: 'POST', body: form, credentials: 'omit', signal: AbortSignal.timeout(VIDEO_RECOVERY_TIMEOUT_MS) })
-    const unanswered: VideoRecovery = { ...notChecked, detail: 'the Verifieddit service could not look it up just now.' }
-    if (!response.ok) return unanswered
-    const data = await response.json() as { durable?: { recovery?: { status?: unknown, manifestId?: unknown, similarityScore?: unknown, signerCn?: unknown, signedAt?: unknown } | null } | null } | null
-    const r = data?.durable?.recovery
-    if (r?.status === 'not-found') return { credential: null, checked: true }
-    if (r?.status !== 'recovered' || typeof r.manifestId !== 'string' || !MANIFEST_ID.test(r.manifestId)) return unanswered
-    const text = (v: unknown): string | null => typeof v === 'string' && v !== '' ? v.slice(0, 200) : null
-    return {
-      checked: true,
-      credential: {
-        registry: 'SanMarcSoft Manifest Store',
-        manifestId: r.manifestId,
-        similarityScore: typeof r.similarityScore === 'number' ? r.similarityScore : 0,
-        signerCn: text(r.signerCn),
-        signedAt: text(r.signedAt),
-        filename: null,
-        aiGenerated: null,
-        otherMatches: [],
-        medium: 'video'
-      }
-    }
+    return { credential: null, checked: true }
   } catch {
-    return { ...notChecked, detail: 'the Verifieddit service could not look it up just now.' }
+    return notChecked
   }
 }
 

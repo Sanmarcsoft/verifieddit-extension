@@ -1,0 +1,90 @@
+{
+  "frame-scene.png": {
+    "size": [
+      640,
+      360
+    ],
+    "afterBars": [
+      640,
+      360
+    ],
+    "centreSize": [
+      448,
+      251
+    ],
+    "whole": {
+      "phash": "f4db616d10f14e38",
+      "dhash": "4441697d24368686"
+    },
+    "centre": {
+      "phash": "86d26b4cb1ccb473",
+      "dhash": "caecece66467770b"
+    }
+  },
+  "frame-scene-padded.png": {
+    "size": [
+      720,
+      1280
+    ],
+    "afterBars": [
+      720,
+      406
+    ],
+    "centreSize": [
+      503,
+      284
+    ],
+    "whole": {
+      "phash": "f4db616d10f14e38",
+      "dhash": "4441697d24368686"
+    },
+    "centre": {
+      "phash": "86d26b4cb1ccb473",
+      "dhash": "caecece66467770b"
+    }
+  },
+  "frame-scene-logo.png": {
+    "size": [
+      640,
+      360
+    ],
+    "afterBars": [
+      640,
+      360
+    ],
+    "centreSize": [
+      448,
+      251
+    ],
+    "whole": {
+      "phash": "a4dbe17c90a14e2f",
+      "dhash": "0401697d24368686"
+    },
+    "centre": {
+      "phash": "86d26b4cb1ccac73",
+      "dhash": "caecece66467770b"
+    }
+  },
+  "frame-scene-vertical.png": {
+    "size": [
+      202,
+      360
+    ],
+    "afterBars": [
+      202,
+      360
+    ],
+    "centreSize": [
+      141,
+      251
+    ],
+    "whole": {
+      "phash": "cab27f5e09364b30",
+      "dhash": "38098fc3c36124c3"
+    },
+    "centre": {
+      "phash": "c2b037423fc7f03c",
+      "dhash": "0c0e9e0311c1e06e"
+    }
+  }
+}

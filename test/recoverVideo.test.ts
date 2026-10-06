@@ -1,44 +1,42 @@
 /*
- *  Recovering a stripped video's credential (#195). A video's durable credential
- *  is a watermark in its frames that only the Verifieddit service can read, so
- *  the video itself is sent. That is a bigger disclosure than a fingerprint, and
- *  it has its own switch: nothing is uploaded unless BOTH the online check and
- *  the video switch are on.
+ *  Recovering a stripped video's credential (#197), in the browser. One frame
+ *  is fingerprinted on the device and the registry is asked about the hashes,
+ *  exactly as for a stripped picture. The video never leaves the browser.
  *  Run with:  bun test test/recoverVideo.test.ts
  */
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 
 let storage: Record<string, unknown> = {}
 let calls: Array<{ url: string, init: RequestInit | undefined }> = []
-let answer: unknown = null
-let status = 200
+let matchFor: Record<string, unknown[]> = {}
 const realFetch = globalThis.fetch
 
-const recovered = {
-  durable: {
-    recovery: {
-      status: 'recovered',
-      method: 'watermark',
-      algorithm: 'videoseal',
-      similarityScore: 96,
-      manifestId: 'urn:c2pa:474b2742-aaaa',
-      signerCn: 'sign.trusteddit.com',
-      signedAt: '2026-10-06 10:58:12+00:00'
-    }
+const frame = (seed: number): ImageData => {
+  const width = 64; const height = 48
+  const data = new Uint8ClampedArray(width * height * 4)
+  for (let i = 0; i < width * height; i++) {
+    const v = (Math.sin(i * 0.37 + seed) * 0.5 + 0.5) * 200 + 40
+    data[i * 4] = data[i * 4 + 1] = data[i * 4 + 2] = v; data[i * 4 + 3] = 255
   }
+  return { width, height, data, colorSpace: 'srgb' } as unknown as ImageData
 }
+const video = (): Blob => new Blob([new Uint8Array(32)], { type: 'video/mp4' })
 
 beforeEach(() => {
   storage = {}
   calls = []
-  answer = recovered
-  status = 200
+  matchFor = {}
   ;(globalThis as Record<string, unknown>).chrome = {
     storage: { local: { get: async (k: string) => ({ [k]: storage[k] }) } }
   }
   globalThis.fetch = (async (url: string, init?: RequestInit) => {
-    calls.push({ url: String(url), init })
-    return { ok: status >= 200 && status < 300, status, json: async () => answer }
+    const u = String(url)
+    calls.push({ url: u, init })
+    if (u.includes('/matches/byBinding')) {
+      const value = new URL(u).searchParams.get('value') ?? ''
+      return { ok: true, json: async () => ({ matches: matchFor[value] ?? [] }) }
+    }
+    return { ok: true, json: async () => ({ signerCn: 'sign.trusteddit.com', signedAt: '2026-10-06 12:15:00+00:00', filename: 'clip.mp4' }) }
   }) as unknown as typeof fetch
 })
 
@@ -46,120 +44,110 @@ afterEach(() => { globalThis.fetch = realFetch })
 
 const loadFresh = async (): Promise<typeof import('../src/manifestStore')> =>
   await import(`../src/manifestStore?t=${Date.now()}${Math.random()}`)
+const fingerprintsOf = async (f: ImageData): Promise<{ whole: { phash: string, dhash: string }, centre: { phash: string, dhash: string } }> =>
+  (await import('../src/videoFrame')).frameFingerprints(f)
 
-const mp4 = (bytes = 64): Blob => new Blob([new Uint8Array(bytes)], { type: 'video/mp4' })
-const bothOn = (): void => { storage.manifestStoreProbe = true; storage.videoUploadRecovery = true }
-
-describe('recoverVideoByUpload', () => {
-  it('uploads NOTHING unless both switches are on', async () => {
-    const { recoverVideoByUpload } = await loadFresh()
-    expect(await recoverVideoByUpload(mp4())).toEqual({ credential: null, checked: false })
-
-    storage.manifestStoreProbe = true // online check on, video switch off
-    expect((await recoverVideoByUpload(mp4())).checked).toBe(false)
-
-    storage.manifestStoreProbe = false // video switch on, online check off
-    storage.videoUploadRecovery = true
-    expect((await recoverVideoByUpload(mp4())).checked).toBe(false)
-
+describe('recoverVideoByFingerprint', () => {
+  it('does nothing at all unless the online check is on: no frame is read, nothing is sent', async () => {
+    const { recoverVideoByFingerprint } = await loadFresh()
+    let grabbed = 0
+    const out = await recoverVideoByFingerprint(video(), undefined, async () => { grabbed++; return frame(1) })
+    expect(out).toEqual({ credential: null, checked: false })
+    expect(grabbed).toBe(0)
     expect(calls).toEqual([])
   })
 
-  it('the caller\'s answers win over storage, because the offscreen page cannot read it', async () => {
-    const { recoverVideoByUpload } = await loadFresh()
-    expect((await recoverVideoByUpload(mp4(), { lookups: true, upload: false })).checked).toBe(false)
-    expect((await recoverVideoByUpload(mp4(), { lookups: false, upload: true })).checked).toBe(false)
-    expect(calls).toEqual([])
-    expect((await recoverVideoByUpload(mp4(), { lookups: true, upload: true })).checked).toBe(true)
-    expect(calls.length).toBe(1)
+  it('sends hashes of one frame to the registry, and never the video', async () => {
+    storage.manifestStoreProbe = true
+    const { recoverVideoByFingerprint } = await loadFresh()
+    const f = frame(1)
+    const fp = await fingerprintsOf(f)
+    await recoverVideoByFingerprint(video(), undefined, async () => f)
+    expect(calls.length).toBeGreaterThan(0)
+    for (const c of calls) {
+      expect(new URL(c.url).origin).toBe('https://manifests.sanmarcsoft.com')
+      expect(c.init?.method ?? 'GET').toBe('GET')
+      expect(c.init?.body).toBeUndefined()
+      expect(c.init?.credentials).toBe('omit')
+    }
+    const first = new URL(calls[0].url).searchParams
+    expect([first.get('alg'), first.get('value'), first.get('crossAlg'), first.get('crossValue')]).toEqual(['phash', fp.whole.phash, 'dhash', fp.whole.dhash])
   })
 
-  it('sends only MP4, and only up to the size the service will look at', async () => {
-    bothOn()
-    const { recoverVideoByUpload, VIDEO_RECOVERY_MAX_BYTES } = await loadFresh()
-    expect((await recoverVideoByUpload(new Blob([new Uint8Array(8)], { type: 'image/jpeg' }))).checked).toBe(false)
-    expect((await recoverVideoByUpload(new Blob([new Uint8Array(8)], { type: 'video/webm' }))).checked).toBe(false)
-    expect(VIDEO_RECOVERY_MAX_BYTES).toBe(25 * 1024 * 1024)
-    const big = { type: 'video/mp4', size: VIDEO_RECOVERY_MAX_BYTES + 1 } as unknown as Blob
-    const out = await recoverVideoByUpload(big)
-    expect(out.checked).toBe(false)
-    expect(out.detail).toMatch(/too large/i)
-    expect(calls).toEqual([])
-  })
-
-  it('posts the file to the Verifieddit verify endpoint, with no cookies', async () => {
-    bothOn()
-    const { recoverVideoByUpload } = await loadFresh()
-    await recoverVideoByUpload(mp4())
-    expect(calls.length).toBe(1)
-    expect(calls[0].url).toBe('https://api.verifieddit.com/api/v1/verify')
-    expect(calls[0].init?.method).toBe('POST')
-    expect(calls[0].init?.credentials).toBe('omit')
-    const file = (calls[0].init?.body as FormData).get('file') as Blob
-    expect(file.type).toBe('video/mp4')
-    expect(file.size).toBe(64)
-  })
-
-  it('returns who signed the original when the service recovers the credential', async () => {
-    bothOn()
-    const { recoverVideoByUpload } = await loadFresh()
-    const out = await recoverVideoByUpload(mp4())
+  it('returns who signed the original, marked as a video', async () => {
+    storage.manifestStoreProbe = true
+    const { recoverVideoByFingerprint } = await loadFresh()
+    const f = frame(1)
+    matchFor[(await fingerprintsOf(f)).whole.phash] = [{ manifestId: 'mid-video', similarityScore: 97, algorithm: 'phash' }]
+    const out = await recoverVideoByFingerprint(video(), undefined, async () => f)
     expect(out.checked).toBe(true)
-    expect(out.credential).toEqual({
-      registry: 'SanMarcSoft Manifest Store',
-      manifestId: 'urn:c2pa:474b2742-aaaa',
-      similarityScore: 96,
-      signerCn: 'sign.trusteddit.com',
-      signedAt: '2026-10-06 10:58:12+00:00',
-      filename: null,
-      aiGenerated: null,
-      otherMatches: [],
-      medium: 'video'
-    })
+    expect(out.credential?.manifestId).toBe('mid-video')
+    expect(out.credential?.medium).toBe('video')
+    expect(out.credential?.signerCn).toBe('sign.trusteddit.com')
+    expect(out.credential?.similarityScore).toBe(97)
   })
 
-  it('looked and found none is not the same as the service could not answer', async () => {
-    bothOn()
-    const { recoverVideoByUpload } = await loadFresh()
-    answer = { durable: { recovery: { status: 'not-found' } } }
-    expect(await recoverVideoByUpload(mp4())).toEqual({ credential: null, checked: true })
-
-    answer = { durable: { recovery: { status: 'unavailable' } } }
-    const down = await recoverVideoByUpload(mp4())
-    expect(down.checked).toBe(false)
-    expect(down.detail).toMatch(/could not/i)
-
-    status = 502
-    expect((await recoverVideoByUpload(mp4())).checked).toBe(false)
-
-    status = 200
-    answer = { durable: null }
-    expect((await recoverVideoByUpload(mp4())).checked).toBe(false)
+  it('tries the centre of the frame when the whole frame finds nothing (a logo was stamped on it)', async () => {
+    storage.manifestStoreProbe = true
+    const { recoverVideoByFingerprint } = await loadFresh()
+    const f = frame(2)
+    const fp = await fingerprintsOf(f)
+    matchFor[fp.centre.phash] = [{ manifestId: 'mid-centre', similarityScore: 94, algorithm: 'phash-centre' }]
+    const out = await recoverVideoByFingerprint(video(), undefined, async () => f)
+    expect(out.credential?.manifestId).toBe('mid-centre')
+    const asked = calls.filter((c) => c.url.includes('/matches/byBinding')).map((c) => new URL(c.url).searchParams.get('value'))
+    expect(asked).toEqual([fp.whole.phash, fp.centre.phash])
   })
 
-  it('refuses a manifest id that is not shaped like one', async () => {
-    bothOn()
-    const { recoverVideoByUpload } = await loadFresh()
-    answer = { durable: { recovery: { status: 'recovered', manifestId: '../../etc/passwd', similarityScore: 99 } } }
-    const out = await recoverVideoByUpload(mp4())
-    expect(out.credential).toBeNull()
+  it('looked and found none is a checked answer', async () => {
+    storage.manifestStoreProbe = true
+    const { recoverVideoByFingerprint } = await loadFresh()
+    expect(await recoverVideoByFingerprint(video(), undefined, async () => frame(3))).toEqual({ credential: null, checked: true })
+  })
+
+  it('says so when the browser cannot read the video, and asks nothing', async () => {
+    storage.manifestStoreProbe = true
+    const { recoverVideoByFingerprint } = await loadFresh()
+    const out = await recoverVideoByFingerprint(video(), undefined, async () => null)
     expect(out.checked).toBe(false)
+    expect(out.detail).toMatch(/could not read/i)
+    expect(calls).toEqual([])
+  })
+
+  it('the caller\'s answer wins over storage, because the offscreen page cannot read it', async () => {
+    const { recoverVideoByFingerprint } = await loadFresh()
+    expect((await recoverVideoByFingerprint(video(), false, async () => frame(1))).checked).toBe(false)
+    expect((await recoverVideoByFingerprint(video(), true, async () => frame(1))).checked).toBe(true)
+  })
+
+  it('there is no way left to send the video itself', async () => {
+    const mod = await loadFresh() as Record<string, unknown>
+    expect(mod.recoverVideoByUpload).toBeUndefined()
+    const constants = await import('../src/constants') as Record<string, unknown>
+    expect(constants.VIDEO_UPLOAD_RECOVERY_KEY).toBeUndefined()
   })
 })
 
 describe('the words for a video with no credentials', () => {
-  it('names the video switch when the upload was not allowed', async () => {
+  it('points at the one switch, and promises the video stays put', async () => {
     const { noLabelNote } = await import('../src/recovered')
     const note = noLabelNote({ recovered: null, checked: false, medium: 'video' })
-    expect(note).toMatch(/video/i)
-    expect(note).toMatch(/Send videos I verify/)
-    expect(note).not.toMatch(/this image/i)
+    expect(note).toMatch(/for this video/)
+    expect(note).toMatch(/Check durable credentials online/)
+    expect(note).not.toMatch(/Send videos/)
+    expect(note).toMatch(/never the video/i)
   })
 
-  it('says a recovered video is a video', async () => {
+  it('says when the video could not be read', async () => {
+    const { noLabelNote } = await import('../src/recovered')
+    expect(noLabelNote({ recovered: null, checked: false, medium: 'video', detail: 'this browser could not read the video.' })).toMatch(/could not read the video/)
+  })
+
+  it('a recovered video is called a video, and the match is called what it is', async () => {
     const { recoveredNote } = await import('../src/recovered')
-    const note = recoveredNote({ ...({ registry: 'SanMarcSoft Manifest Store', manifestId: 'm', similarityScore: 96, signerCn: 'sign.trusteddit.com', signedAt: '2026-10-06', filename: null, aiGenerated: null, otherMatches: [] }), medium: 'video' })
+    const note = recoveredNote({ registry: 'SanMarcSoft Manifest Store', manifestId: 'm', similarityScore: 96, signerCn: 'sign.trusteddit.com', signedAt: '2026-10-06', filename: null, aiGenerated: null, otherMatches: [], medium: 'video' })
     expect(note).toMatch(/^This video's Content Credentials were removed/)
+    expect(note).toMatch(/one frame/i)
   })
 
   it('still says image for a picture', async () => {
