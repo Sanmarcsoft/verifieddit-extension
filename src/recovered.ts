@@ -15,14 +15,32 @@ export interface RecoveredCredential {
    * registered manifest could not be read: unknown, which is not the same as no.
    */
   aiGenerated: boolean | null
+  /**
+   * Other registered records that match the same picture (#191). The same pixels
+   * signed twice give two records, and nothing in a stripped file says which one
+   * it carried, so the reader is told this credential is one of several.
+   */
+  otherMatches: OtherMatch[]
+}
+
+export interface OtherMatch {
+  manifestId: string
+  similarityScore: number
+  signedAt: string | null
+  filename: string | null
 }
 
 export function recoveredNote (r: RecoveredCredential): string {
   const who = r.signerCn ?? 'an unnamed signer'
   const when = r.signedAt != null ? ` on ${r.signedAt.slice(0, 10)}` : ''
+  // A result recovered by an older build, or relayed from one, has no list.
+  const others = r.otherMatches?.length ?? 0
   return 'This image\'s Content Credentials were removed, but a registered credential matches it. ' +
     `The original was signed by ${who}${when} (${r.similarityScore}% match, ${r.registry}). ` +
     (r.aiGenerated === true ? 'Its label says it was made with AI. ' : '') +
+    (others > 0
+      ? `${others} other registered record${others === 1 ? ' also matches' : 's also match'} this picture, so this may not be the exact credential that was removed. `
+      : '') +
     'This is a lead, not proof: this copy may have been changed since it was signed.'
 }
 

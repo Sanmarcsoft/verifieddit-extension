@@ -191,6 +191,9 @@ export class C2paOverlay extends LitElement {
         color: #dbeafe;
       }
       .recovered-banner strong { display: block; color: #bfdbfe; margin-bottom: 2px; }
+      .recovered-others { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(147, 197, 253, 0.25); }
+      .recovered-others ul { margin: 4px 0 0; padding-left: 16px; }
+      .recovered-others li { margin: 2px 0; }
       .status-badge.invalid   { background: rgba(244, 63, 94, 0.14);  color: var(--bad); }
       .status-badge.unsigned  { background: rgba(245, 158, 11, 0.14); color: var(--warn); }
 
@@ -589,6 +592,15 @@ export class C2paOverlay extends LitElement {
             These credentials are not in this file. Its own label was removed, and everything below comes from a registered picture that matches it
             (${c2paResult.recoveredFrom.similarityScore}% match, ${c2paResult.recoveredFrom.registry}).
             It describes the original. This copy may have been changed since.
+            ${c2paResult.recoveredFrom.otherMatches?.length > 0
+              ? html`<div class="recovered-others">
+                  <strong>${c2paResult.recoveredFrom.otherMatches.length} other registered record${c2paResult.recoveredFrom.otherMatches.length === 1 ? ' also matches' : 's also match'} this picture.</strong>
+                  The same picture was signed more than once, so the one shown may not be the exact credential that was removed.
+                  <ul>
+                    ${c2paResult.recoveredFrom.otherMatches.map((m) => html`<li>${m.filename ?? 'unnamed file'}, signed ${m.signedAt != null ? m.signedAt.slice(0, 19).replace('T', ' ') : 'at an unknown time'} (${m.similarityScore}% match)</li>`)}
+                  </ul>
+                </div>`
+              : nothing}
           </div>`
         : nothing}
 
