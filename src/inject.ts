@@ -973,7 +973,22 @@ VisibilityMonitor.onNotVisible((mediaRecord: MediaRecord): void => {
   mediaRecord.icon = null
 })
 
+/*
+ * #204: an image that has not picked a source yet reports an empty src. It used
+ * to be skipped here, and because it was already in view the observer never
+ * fired for it again, so on a real network (where images take time) auto-scan
+ * badged nothing. Wait for it to load, then evaluate it once.
+ */
 VisibilityMonitor.onEnterViewport((mediaRecord: MediaRecord): void => {
+  if (mediaRecord.state.evaluated) return
+  if (mediaRecord.src === '') {
+    mediaRecord.onReady = (ready: MediaRecord): void => { evaluateOnFirstSight(ready) }
+    return
+  }
+  evaluateOnFirstSight(mediaRecord)
+})
+
+function evaluateOnFirstSight (mediaRecord: MediaRecord): void {
   if (!mediaRecord.state.evaluated && mediaRecord.src !== '') {
     mediaRecord.state.evaluated = true
 
@@ -1043,7 +1058,7 @@ VisibilityMonitor.onEnterViewport((mediaRecord: MediaRecord): void => {
          });
     }
   }
-});
+}
 
 VisibilityMonitor.onLeaveViewport((mediaRecord: MediaRecord): void => {
   // do nothing
