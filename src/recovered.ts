@@ -95,6 +95,16 @@ export function screenReaderSummary (r: {
  * not established here.
  */
 /** The short label for the same state, used in the popup's list. */
+/** What the recovered panel calls the thing that was matched (#204). Absent medium means an image. */
+export function mediumWord (r: { medium?: 'video' } | null | undefined): 'video' | 'picture' {
+  return r?.medium === 'video' ? 'video' : 'picture'
+}
+
+/** Sub-label of the durable watermark tile. TrustMark is the picture watermark; a video carries a different one (#204). */
+export function watermarkTileLabel (video: boolean): string {
+  return video ? 'Video watermark · soft binding' : 'TrustMark soft binding'
+}
+
 export const CONTENTS_NOT_CHECKED = 'Contents not checked'
 
 export function uncheckedContentsTitle (): string {

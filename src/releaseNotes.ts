@@ -30,6 +30,23 @@ export const DEMO_URL = 'https://www.verifieddit.com/demo'
 
 export const RELEASE_NOTES: readonly ReleaseEntry[] = [
   {
+    tag: 'v1.4.3',
+    date: '2026-10-07',
+    summary: 'Auto-scan now badges pictures that take a moment to load, and the recovered panel calls a video a video.',
+    fixes: [
+      {
+        title: 'Auto-scan no longer misses pictures that were still loading',
+        howToVerify:
+          'Turn on auto-scan and open a page of signed pictures on an ordinary connection. Every signed picture gets its badge once it has loaded. Before, a picture that was still loading when it came into view was never checked.'
+      },
+      {
+        title: 'A recovered video is described as a video',
+        howToVerify:
+          'Recover the label of a stripped video. The panel says the credentials come from a registered video, and the watermark tile no longer names the picture watermark.'
+      }
+    ]
+  },
+  {
     tag: 'v1.4.2',
     date: '2026-10-06',
     summary: 'Repairs 1.4.1, which was packaged wrongly and did not start.',

@@ -11,7 +11,7 @@ import { claimsDurability, type DurablePillars } from './durableCredentials'
 import { buildExpiryEvidence, classifyExpiry, expiryReason, type ExpiryVerdict } from './signatureValidity'
 import { computeVerdict, durabilityApplies, isFatalValidationCode, type Verdict } from './verdict'
 import { MSG_L3_INSPECT_URL, TRUSTEDDIT_LINK, taggedLink, MSG_SET_MANIFEST_STORE_PROBE, MANIFEST_STORE_PROBE_KEY, MANIFEST_STORE_PROBE_DEFAULT } from './constants'
-import { screenReaderSummary } from './recovered'
+import { screenReaderSummary, mediumWord, watermarkTileLabel } from './recovered'
 import { contentsNote } from './bigMedia'
 import './provenanceDiagram'
 
@@ -602,13 +602,13 @@ export class C2paOverlay extends LitElement {
       ${c2paResult.recoveredFrom != null
         ? html`<div class="recovered-banner reveal" style="animation-delay:40ms" role="note">
             <strong>Recovered from a registry.</strong>
-            These credentials are not in this file. Its own label was removed, and everything below comes from a registered picture that matches it
+            These credentials are not in this file. Its own label was removed, and everything below comes from a registered ${mediumWord(c2paResult.recoveredFrom)} that matches it
             (${c2paResult.recoveredFrom.similarityScore}% match, ${c2paResult.recoveredFrom.registry}).
             It describes the original. This copy may have been changed since.
             ${c2paResult.recoveredFrom.otherMatches?.length > 0
               ? html`<div class="recovered-others">
-                  <strong>${c2paResult.recoveredFrom.otherMatches.length} other registered record${c2paResult.recoveredFrom.otherMatches.length === 1 ? ' also matches' : 's also match'} this picture.</strong>
-                  The same picture was signed more than once, so the one shown may not be the exact credential that was removed.
+                  <strong>${c2paResult.recoveredFrom.otherMatches.length} other registered record${c2paResult.recoveredFrom.otherMatches.length === 1 ? ' also matches' : 's also match'} this ${mediumWord(c2paResult.recoveredFrom)}.</strong>
+                  The same ${mediumWord(c2paResult.recoveredFrom)} was signed more than once, so the one shown may not be the exact credential that was removed.
                   <ul>
                     ${c2paResult.recoveredFrom.otherMatches.map((m) => html`<li>${m.filename ?? 'unnamed file'}, signed ${m.signedAt != null ? m.signedAt.slice(0, 19).replace('T', ' ') : 'at an unknown time'} (${m.similarityScore}% match)</li>`)}
                   </ul>
@@ -630,7 +630,7 @@ export class C2paOverlay extends LitElement {
       ${this.renderLog(c2paResult)}
 
       ${pillars != null && durabilityApplies(tone)
-        ? html`<c2pa-pillars class="reveal" style="animation-delay:${pillarsDelay}ms; display:block" .pillars=${pillars} .signerTrusted=${this.status?.trusted === true}></c2pa-pillars>`
+        ? html`<c2pa-pillars class="reveal" style="animation-delay:${pillarsDelay}ms; display:block" .pillars=${pillars} .video=${c2paResult.recoveredFrom?.medium === 'video' || (c2paResult.source?.type ?? '').startsWith('video/')} .signerTrusted=${this.status?.trusted === true}></c2pa-pillars>`
         : nothing}
 
       ${this.renderErrors(c2paResult.recoveredFrom != null ? c2paResult.manifestStore.validationStatus.filter((c: string) => !isAssetBindingCode(c)) : c2paResult.manifestStore.validationStatus)}
@@ -843,6 +843,8 @@ type PillarState = 'on' | 'declared' | 'off'
 @customElement('c2pa-pillars')
 export class C2paPillars extends LitElement {
   @property({ type: Object }) pillars: DurablePillars | null = null
+  // A video's watermark is not TrustMark; the tile must not say it is (#204).
+  @property({ type: Boolean }) video = false
   // Durability is only a TRUST positive when the signer is itself trusted.
   // When false, the pillars are shown but flagged as self-asserted (issue #113).
   @property({ type: Boolean }) signerTrusted = false
@@ -1034,7 +1036,7 @@ export class C2paPillars extends LitElement {
               >
                 ${def.icon}
                 <span class="l"><span class="glyph">${glyph(st)}</span> ${def.label}</span>
-                <span class="s">${def.sub}</span>
+                <span class="s">${def.key === 'trustmark' ? watermarkTileLabel(this.video) : def.sub}</span>
                 ${st === 'declared' ? html`<span class="badge">declared · unverified</span>` : nothing}
                 <span class="more-dot" aria-hidden="true">${open ? '▴' : '▾'}</span>
               </div>
