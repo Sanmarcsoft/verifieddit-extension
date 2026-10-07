@@ -199,22 +199,32 @@ against the source: zero analytics SDKs, and no `document.cookie`,
 
 ## Screenshots
 
-Captured from the built v1.1.0 extension in real Chrome, 1280x800. Regenerate
-with `bun scripts/capture-listing-screenshots.mjs` after any UI change. Stale
-screenshots that show a superseded interface are a listing-accuracy defect.
+**On the listing since the 1.4.3 submission (2026-10-07).** Captured from the
+tagged v1.4.3 package in real Chrome 152 against the live registry, 1280x800.
+Each file carries a durable Content Credential as a screen capture
+(`SignMedia --kind=capture --lane=production`), read back and verified.
 
 | # | File | Shows |
 |---|---|---|
-| 1 | `releases/screenshots/01-detection.png` | Badges overlaid on credentialed media across a live page |
-| 2 | `releases/screenshots/02-provenance-graph.png` | The interactive provenance graph in the panel, node expanded |
-| 3 | `releases/screenshots/03-graph-fullscreen.png` | The graph full screen, showing a multi-generation chain |
-| 4 | `releases/screenshots/04-popup-validation.png` | Popup Validation tab with the graph for the current page |
-| 5 | `releases/screenshots/05-popup-trustlists.png` | Popup Trust Lists tab, official C2PA + TSA anchors loaded |
+| 1 | `releases/screenshots/1.4.3/1-badges-on-a-page.png` | Six signed pictures on a page, each with its badge: AI with durable credentials, unknown signer, altered |
+| 2 | `releases/screenshots/1.4.3/2-ai-durable-credentials.png` | An AI-generated picture and its panel: Trusteddit.com, trust list, timestamp, 3 of 3 durable checks |
+| 3 | `releases/screenshots/1.4.3/3-recovered-video-durable-credentials.png` | A stripped video and the panel marked Recovered, 3 of 3 durable checks |
+| 4 | `releases/screenshots/1.4.3/4-icon-only-badges.png` | The same page with icon-only badges |
+| 5 | `releases/screenshots/1.4.3/5-full-screen-provenance-diagram.png` | The full-screen provenance diagram for a picture made from two signed sources |
 
-Held in the repo but not uploaded (CWS caps the listing at five):
-`06-popup-about.png` (About tab, version + what's new). The right-click item is
-not captured: Chrome renders that menu natively, outside the page, so no
-automated capture can include it honestly.
+How they were made: the extension was loaded into a separate Chrome profile,
+the right-click Verify handler was triggered for the media shown, and the page
+was captured through the debugging protocol. Nothing was mocked or edited. The
+sample pictures are our own signed artwork, a real-world CBC news photograph and
+the demo corpus.
+
+`scripts/capture-listing-screenshots.mjs` is stale: it fails on its second shot
+against 1.4.3 because the panel changed. Fix it before relying on it again.
+
+**Superseded (v1.1.0 interface), kept for history:** `01-detection.png` to
+`06-popup-about.png` in `releases/screenshots/`. The right-click item is not
+captured: Chrome renders that menu natively, outside the page, so no automated
+capture can include it honestly.
 
 ## Store Icon
 Use vd128.png (128x128), generated from the SanMarcSoft Verifieddit logo
