@@ -30,6 +30,18 @@ export const DEMO_URL = 'https://www.verifieddit.com/demo'
 
 export const RELEASE_NOTES: readonly ReleaseEntry[] = [
   {
+    tag: 'v1.4.2',
+    date: '2026-10-06',
+    summary: 'Repairs 1.4.1, which was packaged wrongly and did not start.',
+    fixes: [
+      {
+        title: 'The extension starts again',
+        howToVerify:
+          'Open the extensions page. Verifieddit shows no errors. Right-click a signed picture and choose Verify: the badge appears.'
+      }
+    ]
+  },
+  {
     tag: 'v1.4.1',
     date: '2026-10-05',
     summary: 'A removed label that is found again now shows everything it said, clearly marked as recovered, and the online check works in Chrome.',

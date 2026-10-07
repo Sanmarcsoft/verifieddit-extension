@@ -6,6 +6,7 @@
  * browser testing required.
  *
  *   node scripts/e2e-verify.mjs <url> [<url> ...]
+ *   VD_DIST=<unpacked release> node scripts/e2e-verify.mjs <url> [<url> ...]
  *
  * Requires: `npx playwright install chromium` once. Exit code is non-zero if
  * any URL fails to validate (engine error), so it can gate CI.
@@ -15,7 +16,9 @@ import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const DIST = resolve(here, '..', 'dist', 'chrome')
+// VD_DIST points the test at an unpacked release package instead of the local
+// build, so the files that ship are the files that are tested.
+const DIST = process.env.VD_DIST != null && process.env.VD_DIST !== '' ? resolve(process.env.VD_DIST) : resolve(here, '..', 'dist', 'chrome')
 const DEFAULT_URL = 'https://www.verifieddit.com/test-images/interop/Pixel%20Camera%20Prod%20L2-MAH-Images/PXL_20250814_180141200.MP.jpg'
 const urls = process.argv.slice(2)
 if (urls.length === 0) urls.push(DEFAULT_URL)
