@@ -34,6 +34,6 @@ What It Can Read:
 Photographs, video, audio, and PDF documents, across sixteen file formats: the ones the web is built on, the raw formats photographers shoot in, and the newer formats publishers have started serving. The current list is in the repository README.
 
 Open Source:
-MIT-licensed. View the source code at https://github.com/Sanmarcsoft/verifieddit-browser-extension
+MIT-licensed. View the source code at https://github.com/Sanmarcsoft/verifieddit-extension
 
 Learn more at https://www.verifieddit.com

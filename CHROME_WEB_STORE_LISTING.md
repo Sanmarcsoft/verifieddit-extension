@@ -97,7 +97,7 @@ Photographs, video, audio, and PDF documents, across sixteen file formats: the o
 > `releases/store-assets/LISTING-COPY.md`.
 
 **Open Source:**
-MIT-licensed. View the source code at https://github.com/Sanmarcsoft/verifieddit-browser-extension
+MIT-licensed. View the source code at https://github.com/Sanmarcsoft/verifieddit-extension
 
 Learn more at https://www.verifieddit.com
 
