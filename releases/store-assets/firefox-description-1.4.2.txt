@@ -1,0 +1,77 @@
+Most photos and videos online carry no proof of where they came from, or whether they were altered since. Verifieddit checks the ones that do, free, in your browser, with no account.
+
+It does not just repeat what a file says about itself. It rebuilds the signature on the file's C2PA Content Credential and traces the signing certificate back to an issuer you trust, the way your browser checks a padlock before you trust a website. A signed photo that was altered, or whose certificate chain is broken, gets caught here instead of being shown to you as fine.
+
+Browse normally. Media carrying Content Credentials picks up a small badge in the corner.
+
+NEW IN 1.4
+
+A label that was removed can be found again. Right click a picture or video that carries no credentials and choose "Verify with Verifieddit". With the durable credential check switched on, a short fingerprint is worked out in your browser and looked up in a public registry. If a signed original matches, its credential opens, clearly marked as recovered. When several registered records match, all of them are listed with their dates.
+
+Large videos are checked without being downloaded into memory. The credential of a video of several gigabytes is read at once from its own part of the file. The badge stays amber and says "Contents not checked" until you ask for the full check, which reads the file as it streams.
+
+Icon-only badges, for anyone who cannot tell the colours apart: every result gets its own shape in black on white. Switch it on under Options.
+
+THE FOUR ANSWERS
+
+GREEN: the signature checks out and the certificate traces back to a trust anchor already loaded, whether we shipped it or you added it yourself.
+
+YELLOW: the manifest is valid, but the signer is in none of your trust lists. Signed by somebody, and you decide whether that somebody counts.
+
+RED: the file was altered after it was signed. The bytes no longer match what was signed.
+
+NO BADGE: nothing signed was found here. That means unverified, not clean, and today that is most of the web.
+
+That fourth answer is the one most verification tools quietly skip. Absence of a warning is not evidence of authenticity, and this extension will not let you read it that way. It is also why you can believe the other three.
+
+WHAT YOU SEE WHEN YOU OPEN IT
+
+Click any badge, or right click any image, video or audio file and choose "Verify with Verifieddit", and you get the whole record:
+<ul><li>who signed it, and which trust list matched</li><li>the signing certificate, and who issued it to whom</li><li>whether an RFC 3161 trusted timestamp is present</li><li>an interactive provenance graph of every ingredient and edit in the file's history, which you can pan, zoom, fit, expand node by node, or open full screen</li><li>and when verification fails, exactly what failed, rather than a bare red mark</li></ul>
+The same panel is one click away in the toolbar popup for whatever is on the page you are viewing.
+
+ABOUT THE AI LABEL
+
+The popup shows a row called "AI (declared by signer)". Read that label literally. It reports the IPTC digitalSourceType a signer wrote into their own signed manifest. It does not analyse pixels and it does not guess.
+
+Media carrying no signed manifest, which is most of what you will meet online, reads "not declared" rather than "no", because an absent declaration is not evidence of human authorship. Any AI image detector that claims a verdict on an unsigned JPEG is guessing, and this one will not pretend otherwise.
+
+IT TELLS YOU WHAT IT CANNOT CONFIRM
+
+Content Credentials have more than one layer, and the panel scores three: signed and timestamped, a durable watermark, and cloud recovery if the file is re-encoded or stripped.
+
+Often only the first can be confirmed from what is inside the file, and the panel says so plainly, "1 of 3 verified", instead of handing you a clean result you would discover was fragile later. An embed-only credential is real, but it does not survive a screenshot.
+
+YOUR PRIVACY
+
+Verification runs entirely inside your browser using locally bundled WebAssembly. Media bytes never leave your machine. No analytics, no telemetry, no cookies, no account, and no record of what you inspected.
+
+One optional feature can send anything at all, and it is off until you switch it on. Enable the durable credential check and the extension asks our manifest store whether a credential is registered for a picture or a video, sending a short perceptual fingerprint of that picture or of one frame of the video. Never the picture or the video, never the page, and nothing identifying you or your device. You turn it on from the panel itself, which states exactly what would be sent before anything is, and off again whenever you like. Section 2.9 of the privacy policy has the detail.
+
+WHY IT ASKS FOR ACCESS TO ALL SITES
+
+Content Credentials can appear on any page you visit, so the extension has to read the media on the page you are actually looking at. It makes no other use of that access.
+
+TRUST IS YOURS TO SET
+
+Six trust lists ship built in, 84 entities in total: the C2PA Conformance Program anchors, 30 for signing and 22 official timestamp authorities; the Content Authenticity Initiative's 26 known-certificate anchors, the same production roots the Content Credentials Verify site trusts, so photos from mainstream cameras and edits from mainstream software read as trusted out of the box; an AI trust list; and the Trusteddit signing and timestamp anchors.
+
+Add your own trust list from a file or a web address at any time, or remove any list you would rather not rely on. Who counts as trustworthy is configuration you control, not a decision we make for you.
+
+WHAT IT CAN READ
+
+Photographs, video, audio and PDF documents, across sixteen file formats: the ones the web is built on, the raw formats photographers shoot in, and the newer formats publishers have started serving. Coverage tracks what the C2PA specification supports, and the current list is kept in the repository README next to the code that implements it.
+
+WHO USES IT
+
+A picture desk checking a wire photo before it runs. A photographer proving the work is theirs. Anyone tracing where a file came from before relying on it, or who has shared something that turned out to be fake and would rather check first.
+
+IF YOU SIGN YOUR OWN WORK
+
+Verifying is the free half. If you are the photographer, the newsroom or the team that has to prove its own content, Trusteddit, from the same publisher, issues the certificates and signs the Content Credentials this extension reads. It also serves organisations documenting content provenance for regulatory or compliance reasons, with enterprise PKI and Chrome enterprise policy deployment across managed fleets.
+
+ABOUT
+
+Free and open source, MIT licensed. Source code, issue tracker and full release history at <a href="https://github.com/Sanmarcsoft/verifieddit-browser-extension">github.com/Sanmarcsoft/verifieddit-browser-extension</a>.
+
+Published by SanMarcSoft LLC as an independent fork of Microsoft's open source C2PA validator, built on the Content Authenticity Initiative's c2pa toolkit. SanMarcSoft is not affiliated with, endorsed by, or partnered with Microsoft, Adobe, or the Content Authenticity Initiative.

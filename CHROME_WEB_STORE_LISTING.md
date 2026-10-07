@@ -7,6 +7,9 @@
 >
 > **Applies to:** v1.1.0 · **Last verified:** 2026-08-03
 >
+> **Detailed Description updated 2026-10-07 (v1.4.2):** a "New in 1.4" section and one
+> privacy line were added (#201). The rest of the file was not re-audited.
+>
 > **Partial re-verification, 2026-09-08 (v1.2.6).** One claim in this file was
 > re-checked and corrected: the bundled trust-anchor counts, read directly from
 > `src/trust-anchors/*.json` at tag `v1.2.6` after #487 resynced the c2pa.org
@@ -55,6 +58,14 @@ Verifieddit is a free, open-source browser extension that verifies Content Crede
 **What are Content Credentials?**
 Content Credentials are a new open standard (C2PA) for proving where digital content came from and how it was created or modified. Major organisations including Adobe, Google, Microsoft, and the BBC have adopted the C2PA standard.
 
+**New in 1.4:**
+
+- Find a removed label again: when a picture or video has had its credentials stripped, right-click it and choose Verify. If you have turned on "Check durable credentials online", a short fingerprint is computed in your browser and looked up in a public registry. A match opens the original credential, clearly marked as recovered. The picture or video itself is never sent
+- Large videos: the credential of a video of several gigabytes is read at once from its own part of the file. The badge stays amber and says "Contents not checked" until you ask for the full check, which reads the file as it streams
+- Several matches, all shown: when more than one registered record matches a recovered picture, every record is listed with its date
+- Icon-only badges: an option for anyone who cannot tell the colours apart. Each result has its own shape in black on white
+- Clearer provenance diagram: line labels no longer overlap
+
 **Key Features:**
 
 - Automatic Detection: Scans media elements on any webpage for C2PA content credentials
@@ -69,6 +80,7 @@ Content Credentials are a new open standard (C2PA) for proving where digital con
 **Privacy-First:**
 - All verification processing happens locally in your browser using WebAssembly
 - No media files are ever uploaded to any server
+- The online lookup for removed labels is off by default and sends only a fingerprint, never the file
 - Anonymous usage statistics are strictly opt-in and off by default
 - No advertising, tracking, or profiling
 - No account required
