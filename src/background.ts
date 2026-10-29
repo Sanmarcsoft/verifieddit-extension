@@ -5,18 +5,30 @@
 
 import 'c2pa'
 import { validateUrl as c2paValidateUrl } from './c2paProxy'
-import { init as initTrustlist, checkTrustListInclusion, refreshTrustLists, checkTSATrustListInclusion } from './trustlist'
+import { init as initTrustlist, checkTrustListInclusion, refreshTrustLists, checkTSATrustListInclusion, trustAnchorsPem } from './trustlist'
 import { type C2paError, type C2paResult } from './c2pa'
 // Value import, so it must come from the side-effect-free wire module: pulling
 // it from './c2pa' would run the WASM engine's init() inside this service
 // worker, where `Worker` is undefined.
 import { toC2paErrorWire } from './c2paWire'
 import { detectDurablePillars } from './durableCredentials'
+import { computeVerdict } from './verdict'
+import {
+  extension_installed,
+  extension_updated,
+  verify_started,
+  verify_completed,
+  badge_scan,
+  mapMediaType,
+  mapVerificationResult,
+  shouldEmitScanEvent,
+  type MediaType
+} from './analytics.js'
 import {
   MSG_GET_ID, MSG_L3_INSPECT_URL, MSG_REMOTE_INSPECT_URL, MSG_FORWARD_TO_CONTENT, REMOTE_VALIDATION_LINK,
   MSG_VALIDATE_URL, AWAIT_ASYNC_RESPONSE, MSG_C2PA_RESULT_FROM_CONTEXT, AUTO_SCAN_DEFAULT, MSG_AUTO_SCAN_UPDATED,
-  MSG_SET_MANIFEST_STORE_PROBE, MANIFEST_STORE_PROBE_KEY, MSG_OPEN_OVERLAY, PORT_OVERLAY_FRAME, MSG_RELAY_READY,
-  TRUSTLIST_UPDATE_INTERVAL
+  MSG_SET_MANIFEST_STORE_PROBE, MANIFEST_STORE_PROBE_KEY, MSG_OPEN_OVERLAY, PORT_OVERLAY_FRAME, MSG_RELAY_READY, MSG_CLAIM_OVERLAY_FRAME, MSG_RELAY_CLAIMED,
+  TRUSTLIST_UPDATE_INTERVAL, MSG_REQUEST_C2PA_ENTRIES
 } from './constants'
 import { sendMessageToAllTabs } from './utils'
 
@@ -42,8 +54,10 @@ initTrustlist().catch((err) => {
 
 chrome.runtime.onInstalled.addListener(function (details) {
   if (details.reason === 'install') {
+    void extension_installed()
     void chrome.storage.local.set({ autoScan: AUTO_SCAN_DEFAULT })
   } else if (details.reason === 'update') {
+    void extension_updated(details.previousVersion ?? 'unknown')
     // rc11.7 / #86 — one-shot migration to force auto-scan OFF for any
     // user who was silently stuck on the old rc<=11.6 build where
     // AUTO_SCAN=true was baked into the bundle as the install default.
@@ -71,13 +85,39 @@ function createContextMenu (): void {
   })
 }
 
+function emitVerifyCompleted (c2paResult: C2paResult | C2paError, mediaType: MediaType): void {
+  const isError = c2paResult instanceof Error
+  let verdict: string | null = null
+  let hasDurableBinding = false
+  if (!isError) {
+    const res = c2paResult as C2paResult
+    const codes = res.manifestStore?.validationStatus ?? []
+    const signed = (res.certChain?.length ?? 0) > 0 ||
+      (res.manifestStore?.manifests?.length ?? 0) > 0
+    const trusted = res.trustList != null
+    verdict = computeVerdict({ codes, signed, trusted })
+    hasDurableBinding = res.durablePillars?.durable ?? false
+  }
+
+  void verify_completed({
+    result: mapVerificationResult(c2paResult, verdict),
+    has_durable_binding: hasDurableBinding,
+    media_type: mediaType
+  })
+}
+
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   const url = info.srcUrl
   if (url == null) {
     return
   }
 
-  void validateUrl(url).then(c2paResult => {
+  void verify_started('context_menu')
+
+  // The user asked: this is the one path that may look a stripped image up (#184).
+  void validateUrl(url, true, info.frameUrl ?? info.pageUrl ?? tab?.url).then(c2paResult => {
+    emitVerifyCompleted(c2paResult, mapMediaType(info.mediaType))
+
     // A thrown Error used to be dropped here with a bare `return`, so when the
     // engine failed to come up the user's explicit right-click produced no
     // badge, no toast and no error — indistinguishable from the extension not
@@ -109,6 +149,8 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
  * map would only preserve stale handles; the frames reconnect on their side.
  */
 const overlayFramePorts = new Map<number, chrome.runtime.Port>()
+/** Ports that have connected but that no content script has claimed, by nonce. */
+const unclaimedOverlayPorts = new Map<string, { tabId: number, port: chrome.runtime.Port }>()
 
 chrome.runtime.onConnect.addListener(port => {
   if (port.name !== PORT_OVERLAY_FRAME) return
@@ -116,8 +158,9 @@ chrome.runtime.onConnect.addListener(port => {
   // Tell the frame what we resolved, including when we resolved nothing. A port
   // that connects but cannot be routed looks identical to a healthy one from the
   // frame's side, and that ambiguity is what made #149 so hard to see.
+  const nonce = crypto.randomUUID()
   try {
-    port.postMessage({ action: MSG_RELAY_READY, data: { tabId: tabId ?? null } })
+    port.postMessage({ action: MSG_RELAY_READY, data: { tabId: tabId ?? null, nonce } })
   } catch { /* frame torn down between connect and now */ }
   if (tabId == null) {
     // Without a tab we cannot route a payload back, and guessing would risk
@@ -125,8 +168,12 @@ chrome.runtime.onConnect.addListener(port => {
     console.debug('background: overlay-frame port with no tab id, ignoring')
     return
   }
-  overlayFramePorts.set(tabId, port)
+  // Not routed yet. iframe.html is web-accessible, so this port may belong to a
+  // copy a page framed for itself. It is routed only once the content script
+  // claims its nonce (MSG_CLAIM_OVERLAY_FRAME below).
+  unclaimedOverlayPorts.set(nonce, { tabId, port })
   port.onDisconnect.addListener(() => {
+    unclaimedOverlayPorts.delete(nonce)
     // Only clear our own entry — a reconnect may already have replaced it.
     if (overlayFramePorts.get(tabId) === port) overlayFramePorts.delete(tabId)
   })
@@ -137,11 +184,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const action = message.action
   const data = message.data
 
+  // The content script vouches for the panel frame it created. Only then is
+  // that frame's port routed. The nonce must belong to a port in the same tab.
+  if (action === MSG_CLAIM_OVERLAY_FRAME) {
+    const claimed = typeof data === 'string' ? unclaimedOverlayPorts.get(data) : undefined
+    // Only the top page's content script may claim: the extension runs in every
+    // frame, and a frame inside the page must not take the page's channel.
+    if (claimed != null && tabId != null && claimed.tabId === tabId && sender.frameId === 0) {
+      unclaimedOverlayPorts.delete(data as string)
+      overlayFramePorts.set(tabId, claimed.port)
+      // Tell the frame, so it stops asking and so the state can be observed.
+      try { claimed.port.postMessage({ action: MSG_RELAY_CLAIMED, data: { tabId } }) } catch { /* frame gone */ }
+    } else if (tabId != null && typeof data === 'string' && overlayFramePorts.get(tabId) != null && sender.frameId === 0) {
+      // A repeat of a claim already honoured (the frame asks until it hears
+      // back, and the first answer may have crossed with the next question).
+      try { overlayFramePorts.get(tabId)?.postMessage({ action: MSG_RELAY_CLAIMED, data: { tabId } }) } catch { /* frame gone */ }
+    }
+    return
+  }
+
+  // Some requests are honoured only from the extension's own pages (popup,
+  // options, the panel frame), never on the say-so of a script in a web page.
+  const fromOwnPage = typeof sender.url === 'string' && sender.url.startsWith(chrome.runtime.getURL(''))
+
   if (action === MSG_GET_ID) {
     sendResponse({ tab: tabId, frame: sender.frameId })
   }
 
-  if (action === MSG_L3_INSPECT_URL) {
+  // Opening a tab is asked for only by the panel's own Inspect button.
+  if (action === MSG_L3_INSPECT_URL && fromOwnPage) {
     // Open verifieddit.com with the image URL pre-populated via ?url=.
     // (#74) Replaces the upstream "paste into Microsoft Content Integrity's
     // HTMLInputElement via MutationObserver" dance, which was tied to
@@ -151,6 +222,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (action === MSG_FORWARD_TO_CONTENT && tabId != null) {
     chrome.tabs.sendMessage(tabId, data).catch(() => { /* content script may be absent on this tab */ })
+  }
+
+  if (action === MSG_REQUEST_C2PA_ENTRIES) {
+    void verify_started('popup')
   }
 
   // #149 — relay a badge click's payload to this tab's overlay iframe. The
@@ -175,13 +250,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (action === MSG_VALIDATE_URL) {
+    const shouldEmit = shouldEmitScanEvent(sender?.tab?.id, Date.now())
+    if (shouldEmit) {
+      void verify_started('auto_scan')
+      void badge_scan()
+    }
     // Flatten Errors before they cross the port — see C2paErrorWire in c2pa.ts.
-    void validateUrl(data as string)
-      .then((result) => { sendResponse(result instanceof Error ? toC2paErrorWire(result, data as string) : result) })
+    // The page asking decides what may be fetched for it (fetchGuard.ts).
+    void validateUrl(data as string, false, sender.url ?? sender.tab?.url)
+      .then((result) => {
+        if (shouldEmit) {
+          // media_type is not known on this path (the content script sends only a URL)
+          emitVerifyCompleted(result, mapMediaType(null))
+        }
+        sendResponse(result instanceof Error ? toC2paErrorWire(result, data as string) : result)
+      })
     return AWAIT_ASYNC_RESPONSE
   }
 
-  if (action === MSG_AUTO_SCAN_UPDATED) {
+  if (action === MSG_AUTO_SCAN_UPDATED && fromOwnPage) {
     void chrome.storage.local.set({ autoScan: data })
     void sendMessageToAllTabs({ action: MSG_AUTO_SCAN_UPDATED, data })
   }
@@ -189,13 +276,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Consent for the manifest-store probe, given from the overlay or the popup.
   // Stored only; nothing is probed retroactively, so turning it on never
   // reaches the network for media the user already looked at.
-  if (action === MSG_SET_MANIFEST_STORE_PROBE) {
+  if (action === MSG_SET_MANIFEST_STORE_PROBE && fromOwnPage) {
     void chrome.storage.local.set({ [MANIFEST_STORE_PROBE_KEY]: data === true })
   }
 })
 
-async function validateUrl (url: string): Promise<C2paResult | C2paError> {
-  const c2paResult = await c2paValidateWithRetry(url);
+async function validateUrl (url: string, recover = false, pageUrl?: string): Promise<C2paResult | C2paError> {
+  const c2paResult = await c2paValidateWithRetry(url, recover, pageUrl);
 
   if (c2paResult instanceof Error) {
     // rc11.6 / #83 — removed the anonymous cross-origin verifieddit.com
@@ -226,7 +313,9 @@ async function validateUrl (url: string): Promise<C2paResult | C2paError> {
     assertionLabels: c2paResult.assertionLabels,
     // P3 'verified' only when the offscreen byBinding probe found the credential
     // registered in the manifest store.
-    manifestStoreVerified: c2paResult.manifestStoreVerified
+    manifestStoreVerified: c2paResult.manifestStoreVerified,
+    confirmedBy: c2paResult.durableRegistries,
+    registryRecord: c2paResult.registryRecord
   });
 
   // rc11.6 / #83 — removed the anonymous cross-origin verifieddit.com
@@ -290,11 +379,20 @@ async function ensureOffscreen (): Promise<void> {
 // The offscreen document initializes c2pa asynchronously on load, so a request
 // that arrives first may get "C2PA not initialized" (or no listener yet); retry
 // briefly before giving up.
-async function c2paValidateWithRetry (url: string): Promise<C2paResult | C2paError> {
+async function c2paValidateWithRetry (url: string, recover = false, pageUrl?: string): Promise<C2paResult | C2paError> {
   await ensureOffscreen()
+  // The offscreen document cannot read chrome.storage, so the opt-in for the
+  // online durable check is read here and travels with the request. Read it
+  // fresh each time: the person may have just switched it.
+  const probe = await chrome.storage.local.get(MANIFEST_STORE_PROBE_KEY)
+    .then((r) => r?.[MANIFEST_STORE_PROBE_KEY] === true)
+    .catch(() => false)
+  // The anchors travel with the request too, so the engine can judge a stapled
+  // OCSP answer (#209). Rebuilt each time: the person may have imported a list.
+  const anchors = trustAnchorsPem()
   let last: C2paResult | C2paError | undefined
   for (let attempt = 0; attempt < 30; attempt++) {
-    const result = await c2paValidateUrl(url).catch(() => undefined)
+    const result = await c2paValidateUrl(url, recover, probe, pageUrl, false, anchors).catch(() => undefined)
     last = result
     const notReady = result == null ||
       (result as C2paError)?.message === 'C2PA not initialized'

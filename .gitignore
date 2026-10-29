@@ -32,3 +32,7 @@ test/trusted/*.srl
 # all untrusted media files except for the jpg one (for our test page)
 test/media/cards_untrusted.*
 !test/media/cards_untrusted.jpg
+
+# Playwright output. Written on every e2e run and never committed.
+test-results/
+test/e2e/results/

@@ -1,5 +1,167 @@
 # CHANGELOG
 
+## v1.3.0
+
+- Added opt-in anonymous usage statistics via a signed telemetry relay (#183).
+  Telemetry is disabled by default and sends data only after the user explicitly
+  grants consent. No data is sent to Google Analytics or any third-party
+  analytics service: events are sent to a telemetry relay operated by
+  SanMarcSoft and stored in self-hosted Umami in the EU at
+  `analytics.sanmarcsoft.com`. `src/analytics.ts` implements a typed,
+  fire-and-forget client. Each event is signed with an on-device ECDSA P-256
+  key whose private key is non-extractable and kept in IndexedDB; the install
+  identifier is the RFC 7638 public key thumbprint, not derived from the user
+  or device. Events are authenticated by short-lived tickets issued by the
+  relay. Events carry only the event name, its typed parameters, the extension
+  version, and the browser family (Chrome or Firefox). Transmitted events are
+  strictly limited to seven: `extension_installed`, `extension_updated`
+  (`previous_version`), `verify_started` (`source`), `verify_completed`
+  (`result`, `has_durable_binding`, `media_type`), `badge_scan`,
+  `options_opened`, and `consent_changed` (`value`). No URLs, page content,
+  file names, or content of verified media (no media bytes, no media hashes, no
+  signer certificates, or personal identifiers) are ever collected or sent. IP
+  addresses are not stored: the relay uses the client IP only in memory, as a
+  salted hash with a daily rotating salt, for rate limiting, and never forwards
+  or logs it. The relay rate-limits requests per install and per hashed address,
+  and rejects a replayed signed request.
+
+- Consent UI and signed erasure flow added (#183). A first-run banner in the
+  popup (`src/popup.ts`) prompts users to allow or decline anonymous usage
+  statistics. A persistent toggle switch in both the popup Options tab and the
+  Firefox preferences page (`src/options.ts`) allows users to enable or disable
+  collection at any time. Disabling the setting immediately halts outbound
+  telemetry, sends one signed erasure request (`DELETE /v1/installs`) to the
+  relay, and deletes the key pair, ticket, and install identifier from the
+  browser. Erasure of stored records in Umami is processed by SanMarcSoft from
+  the relay's erasure queue. Storage key `analyticsConsent` records consent
+  status.
+
+- Auto-scan telemetry rate-limited (#183). Auto-scan events are throttled via
+  `shouldEmitScanEvent` in `src/analytics.ts` to at most one set of
+  `verify_started`, `verify_completed`, and `badge_scan` events per browser tab
+  per 60-second window, preventing page scanning from becoming a per-image
+  beacon.
+
+- Build-time relay configuration with an inert default (#183). The relay
+  endpoint `TELEMETRY_RELAY_URL` is inlined at build time by rollup via
+  `@rollup/plugin-replace` from the environment or `.env`. When built without a
+  relay URL or when empty, `isAnalyticsConfigured()` evaluates to `false` and the
+  client operates as an inert no-op that never calls `fetch` and never logs. The
+  stateless relay service is implemented in `relay/` (see `relay/README.md`).
+
+- Privacy and store documentation updated (#183). Disclosures reflecting opt-in
+  signed telemetry, IndexedDB key storage, salted hash rate limiting, and
+  relay architecture updated across `PRIVACY_POLICY.md`,
+  `CHROME_WEB_STORE_LISTING.md`, `FIREFOX_ADDON_LISTING.md`,
+  `AMO_REVIEWER_NOTES.md`, and `README.md`.
+
+## v1.2.6
+
+- An expired signing certificate no longer reads as a broken file when a
+  trusted timestamp authority vouches for the signing time (#174, #179). Both
+  halves are required: the authority must be in the trust list, and the stamp
+  must predate the certificate's expiry. An untrusted authority's clock is only
+  an assertion, and a stamp taken after expiry proves the opposite of what is
+  needed. `src/verdict.ts` holds the predicates as pure functions
+  (`timestampRedeemsExpiry`, `timestampEvidenceFromC2pa`, `invalidIsExpiryOnly`,
+  `verdictFromHubState`) with field names matching the hub contract, so a hub
+  response feeds them without translation. The durability panel is now gated on
+  `durabilityApplies`, so a tampered file no longer reports a second, lesser
+  finding about self-asserted durability on top of the pixel-integrity failure.
+
+- Bundled trust anchors resynced with the official c2pa.org lists (#487). The
+  committed anchors were a month stale: `default-trust-list.json` 29 to 30,
+  `default-tsa-trust-list.json` 21 to 22, `cai-known-anchors.json` unchanged
+  because upstream froze it. The new entry in both official lists is the
+  Castlabs C2PA ECC P-384 Root CA, which until now would have rendered a
+  Castlabs-signed asset valid but untrusted. No existing corpus verdict moved.
+
+- The package is 2.46 MiB smaller, 19.82 MiB down to 17.36 MiB. A 1024px logo
+  master sat in `public/`, which is copied verbatim into both browser targets,
+  so it shipped twice and nothing loaded it. Removed, with a guard that no
+  single file in `public/` may exceed 256 KB.
+
+- Durable Content Credentials reported 2 of 3 pillars on every image, even when
+  the third pillar was genuinely present (#164). The manifest-store probe asks
+  `manifests.sanmarcsoft.com` whether an image's perceptual fingerprint is on
+  record. The store is populated by the signing API using Python `imagehash` on
+  Pillow, and this client's port of that pipeline disagreed with it in three
+  places: the dHash gradient ran left to right where `imagehash` compares
+  `pixels[:, 1:] > pixels[:, :-1]`, so every dHash we computed was the bitwise
+  complement of the stored one; resizing used an area average where `imagehash`
+  uses Pillow's Lanczos; and the pHash median was taken over the AC
+  coefficients only where `imagehash` includes the DC term. The pHash was close
+  enough to match on its own, so the query looked healthy right up to the
+  cross-validation, which the inverted dHash then failed at a Hamming distance
+  in the fifties against a limit of 8.
+
+  `src/perceptualHash.ts` is now a faithful port: Pillow's integer luma with
+  alpha ignored, Pillow's separable Lanczos with 22-bit fixed-point
+  coefficients and an 8-bit clamp between passes, a scipy-order 2-D DCT-II, and
+  the median of all 64 low-frequency coefficients. Measured against the four
+  signed images on a live SanMarcSoft blog post, the probe went from verifying
+  1 of 4 to verifying 4 of 4, and the computed hashes are byte-identical to the
+  store's records. Kept in sync with
+  `verifieddit-www/src/utils/perceptualHash.ts`, which carries the same port.
+
+  Locked by test/perceptualHash.test.ts, which pins both hashes to `imagehash`
+  ground truth on PNG fixtures and holds a post-#376 signed asset to exact
+  equality with its live store record.
+
+  Note that the probe remains opt-in. "Check durable credentials online" is off
+  by default in both the popup and the options page, and with it off the third
+  pillar cannot be verified by design, so 2 of 3 stays the correct reading.
+
+## v1.2.5
+
+- Expanded diagram nodes can be resized again (#175). `.node.expanded` has
+  carried `resize: both` since the detail panel was introduced, but the
+  pointerdown handler captured every press anywhere on the node, including the
+  user agent's resize gripper in the bottom-right corner, so the node moved
+  instead of growing and the CSS was dead. A press inside the gripper now falls
+  through without `preventDefault` and without `setPointerCapture`, which hands
+  the drag back to the browser. Dragging the node body still moves it. Locked by
+  test/nodeResizeHandle.test.ts and test/e2e/node-resize.spec.ts.
+
+- A single step exports as a CSV file instead of copying to the clipboard
+  (#175). The node's CSV button called the clipboard while the toolbar's CSV
+  button, one control away, downloaded a file: the same word for two behaviours,
+  and nobody who pressed the node one got a file. It now downloads
+  `<label>-step-<date>.csv`, sharing filename construction with the chain export
+  so the two sort next to each other in a downloads folder. Copying a step as
+  text is still the Copy button beside it.
+
+- Full Screen works in the toolbar popup (#175). Pressing it did nothing at all.
+  Both halves of the handler were useless there: `requestFullscreen` is refused
+  in a browser action popup, and the CSS fallback its catch block applies sets
+  `inset: 0` and `height: 100vh` against the popup window the diagram already
+  fills, so every layer reported success and the button looked dead. The popup
+  now marks the diagram `fullscreen-mode="tab"`, the button hands the graph up
+  over a `provenance-open-in-tab` event, and the popup parks it in
+  `storage.session` and opens the chain in a real tab. The in-page overlay is
+  unchanged: its iframe carries `allow="fullscreen"`, where the API works.
+  Feature detection alone cannot tell the two hosts apart, because
+  `document.fullscreenEnabled` is true inside a popup, so the host states its
+  intent instead. Locked by test/fullscreenStrategy.test.ts and
+  test/e2e/fullscreen-tab.spec.ts.
+
+- The unit suite runs in CI. Eleven test files sat in test/ with no workflow step
+  and no package script, so a broken invariant could reach main unnoticed.
+
+- The Preferences page is no longer blank (#170). `options_ui` pointed at the
+  Microsoft scaffold template from the day the repo was created: a 535 byte page
+  carrying a heading and a `TODO:` comment, reachable as an Options entry in the
+  extensions menu of both browsers. Chrome drops `options_ui` entirely, because
+  the same two controls already live in the popup's Options tab and a second
+  surface only lets the two drift. Firefox gets a real page with
+  `open_in_tab: false`, so it renders inside the Add-ons Manager panel where
+  Firefox users look for preferences. Both surfaces write the same
+  `chrome.storage.local` keys, so they cannot disagree. The page also carries the
+  durable-credentials privacy note that backs
+  `data_collection_permissions.optional: ["websiteContent"]` in the AMO manifest;
+  a reviewer clicking Preferences previously found a blank page where the
+  manifest promises a disclosure.
+
 ## v1.2.4
 
 - Auto-scan no longer badges unsigned media (#169). With auto-scan on, every

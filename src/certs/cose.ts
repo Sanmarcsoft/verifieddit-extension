@@ -26,6 +26,10 @@ interface UnprotectedHeader {
   sigTst?: {
     tstTokens: TSTInfo[]
   }
+  // C2PA v2 signatures: same container, timestamp taken over the signature.
+  sigTst2?: {
+    tstTokens: TSTInfo[]
+  }
   x5chain?: CertificateInfoExtended[]
   [key: string | number]: unknown
 }
@@ -137,6 +141,7 @@ async function parseLabels (object: Record<string, unknown>): Promise<Record<str
         object[key] = await x5Chain(object[key] as Uint8Array | Uint8Array[])
         break
       case 'sigTst':
+      case 'sigTst2':
         object[key] = await sigTst(object[key] as { tstTokens: Array<{ val: Uint8Array }> })
         break
       default:
@@ -187,10 +192,32 @@ async function certificatesFromASN1 (asn1Certificates: ASN1): Promise<Certificat
   return certs
 }
 
+/**
+ * A timestamp token arrives in one of two DER shapes:
+ *   - `sigTst`  (C2PA v1): the whole RFC 3161 TimeStampResp, i.e.
+ *     SEQUENCE { PKIStatusInfo, TimeStampToken }
+ *   - `sigTst2` (C2PA v2): the bare TimeStampToken, i.e. the CMS ContentInfo
+ *     SEQUENCE { OID signedData, [0] SignedData }
+ * The first element tells them apart (a SEQUENCE vs an OID). A token that
+ * matches neither is skipped rather than aborting the whole header parse: a
+ * broken timestamp must not hide an otherwise readable signature.
+ */
+function parseTimestampTokenDER (val: Uint8Array): Captures | null {
+  try {
+    const der = Buffer.from(val)
+    const first = ASN1.fromDER(der).mustCompound()[0]
+    const isBareToken = first?.class === Class.UNIVERSAL && first?.tag === Tag.OID
+    return ASN1.parseDERWithTemplate(der, isBareToken ? timeStampTokenTemplate : tbsCertificateTemplate)
+  } catch {
+    return null
+  }
+}
+
 async function sigTst (sigTst: { tstTokens: Array<{ val: Uint8Array }> }): Promise<{ tstTokens: TSTInfo[] }> {
   const tokens: TSTInfo[] = []
   for (const token of sigTst.tstTokens) {
-    const captures = ASN1.parseDERWithTemplate(Buffer.from(token.val), tbsCertificateTemplate)
+    const captures = parseTimestampTokenDER(token.val)
+    if (captures == null) continue
     const tsTinfoType = captures['eContent.type']
     const tsTinfoData = captures['eContent.octetString']
 
@@ -498,6 +525,10 @@ const tbsCertificateTemplate: Template = {
     }
   ]
 }
+
+// The TimeStampToken (CMS ContentInfo) on its own: the second element of the
+// TimeStampResp template above, which is exactly what `sigTst2` stores.
+const timeStampTokenTemplate: Template = (tbsCertificateTemplate.value as Template[])[1]
 
 const tstInfoTemplate = {
   name: 'TSTInfo',

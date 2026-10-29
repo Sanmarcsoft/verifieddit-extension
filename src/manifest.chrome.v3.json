@@ -3,7 +3,7 @@
     "name": "Verifieddit - C2PA Content Credential Verifier",
     "short_name": "Verifieddit",
     "description": "Verify content authenticity with C2PA Content Credentials. See who signed a file, whether it was altered, and declared AI origin.",
-    "version": "1.2.4",
+    "version": "1.5.0",
     "minimum_chrome_version": "109",
     "permissions": [
         "storage",
@@ -27,9 +27,6 @@
             "48": "icons/vd48.png",
             "128": "icons/vd128.png"
         }
-    },
-    "options_ui": {
-        "page": "options.html"
     },
     "icons": {
         "16": "icons/vd16.png",

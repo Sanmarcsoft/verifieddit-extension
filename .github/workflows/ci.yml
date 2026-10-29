@@ -34,6 +34,11 @@ jobs:
     - name: Install dependencies
       run: bun install --frozen-lockfile
 
+    # Nothing ran these until now: ten test files sat in test/ with no workflow
+    # step and no package script, so a broken invariant reached main unnoticed.
+    - name: Run unit tests
+      run: bun run test:unit
+
     - name: Build the project
       run: bun run build
 

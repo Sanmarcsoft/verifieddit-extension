@@ -658,3 +658,24 @@ export async function init (): Promise<void> {
     }
   );
 }
+
+/**
+ * Every signing anchor the extension trusts, as one PEM bundle for the engine
+ * (#209). The engine needs the anchors to judge a stapled OCSP answer; the
+ * extension still decides trust itself with checkTrustListInclusion. TSA lists
+ * are left out: they vouch for timestamps, not for signers.
+ */
+export function trustAnchorsPem (trustLists: TrustList[] = globalTrustLists): string {
+  const pems = new Set<string>()
+  for (const tl of trustLists ?? []) {
+    if (tl?.name === LOCAL_TRUST_TSA_LIST_NAME) continue
+    for (const entity of tl?.entities ?? []) {
+      for (const key of entity?.jwks?.keys ?? []) {
+        const der = key?.x5c?.[0]
+        if (typeof der !== 'string' || der === '') continue
+        pems.add(`-----BEGIN CERTIFICATE-----\n${der.match(/.{1,64}/g)?.join('\n') ?? der}\n-----END CERTIFICATE-----\n`)
+      }
+    }
+  }
+  return [...pems].join('')
+}

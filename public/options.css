@@ -1,0 +1,26 @@
+/*
+ * Standalone options page only.
+ *
+ * The page loads popup.css first for the toggle, .option-note and the
+ * verifieddit.com colour ramp. popup.css sets no body rule at all, so nothing
+ * here is fighting it; this file only adds the page-level framing a full
+ * browser tab needs and a fixed-width popup panel does not.
+ */
+body.options-standalone {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 24px 20px 40px;
+    color: #1e293b;
+}
+
+body.options-standalone h1 {
+    margin: 0 0 20px;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+body.options-standalone hr {
+    margin: 24px 0 16px;
+    border: none;
+    border-top: 1px solid #e2e8f0;
+}

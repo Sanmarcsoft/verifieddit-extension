@@ -30,6 +30,177 @@ export const DEMO_URL = 'https://www.verifieddit.com/demo'
 
 export const RELEASE_NOTES: readonly ReleaseEntry[] = [
   {
+    tag: 'v1.5.0',
+    date: '2026-10-28',
+    summary: 'Files whose signature leaves the picture itself unprotected now turn red, and a signer whose certificate was revoked is named as revoked.',
+    fixes: [
+      {
+        title: 'A signature that does not cover the picture turns red',
+        howToVerify:
+          'Open a JPEG or PNG whose Content Credential leaves the image data out of its protected range. The badge turns red and the panel says which part was left out. A credential that leaves out only header metadata gets a note and keeps its verdict.'
+      },
+      {
+        title: 'A revoked signing certificate says so',
+        howToVerify:
+          'Open a file signed by a trusted certificate that its issuer has revoked, with the revocation answer stored in the file. The badge turns red and reads "Signer\'s certificate revoked", not "Changed after signing". An issuer that cannot be reached never turns a file red.'
+      }
+    ]
+  },
+  {
+    tag: 'v1.4.3',
+    date: '2026-10-07',
+    summary: 'Auto-scan now badges pictures that take a moment to load, and the recovered panel calls a video a video.',
+    fixes: [
+      {
+        title: 'Auto-scan no longer misses pictures that were still loading',
+        howToVerify:
+          'Turn on auto-scan and open a page of signed pictures on an ordinary connection. Every signed picture gets its badge once it has loaded. Before, a picture that was still loading when it came into view was never checked.'
+      },
+      {
+        title: 'A recovered video is described as a video',
+        howToVerify:
+          'Recover the label of a stripped video. The panel says the credentials come from a registered video, and the watermark tile no longer names the picture watermark.'
+      }
+    ]
+  },
+  {
+    tag: 'v1.4.2',
+    date: '2026-10-06',
+    summary: 'Repairs 1.4.1, which was packaged wrongly and did not start.',
+    fixes: [
+      {
+        title: 'The extension starts again',
+        howToVerify:
+          'Open the extensions page. Verifieddit shows no errors. Right-click a signed picture and choose Verify: the badge appears.'
+      }
+    ]
+  },
+  {
+    tag: 'v1.4.1',
+    date: '2026-10-05',
+    summary: 'A removed label that is found again now shows everything it said, clearly marked as recovered, and the online check works in Chrome.',
+    fixes: [
+      {
+        title: 'Large videos are verified without being downloaded into memory',
+        howToVerify:
+          'Verify a signed video of a gigabyte or more. Its credential is read at once from its own part of the file. Right-click it and choose Verify to have the whole file checked against the credential as it streams. Until that is done, the panel says "Contents not checked" and the badge is amber, never green.'
+      },
+      {
+        title: 'A video whose label was removed can be found again, without leaving your browser',
+        howToVerify:
+          'Turn on "Check durable credentials online", right-click a video that has no credentials and choose Verify. One frame is fingerprinted in your browser and only that fingerprint is sent. If a signed video matches, its credential opens marked as recovered. The video itself is never sent.'
+      },
+      {
+        title: 'When several registered records match a recovered picture, all of them are listed',
+        howToVerify:
+          'Recover the label of a picture that was signed more than once. The panel names the record it shows and lists the others with their dates.'
+      },
+      {
+        title: 'The provenance diagram no longer draws labels on top of each other',
+        howToVerify:
+          'Open the diagram for a picture made from two signed sources. The finished picture sits between its sources and every line label can be read.'
+      },
+      {
+        title: 'Icon-only badges for anyone who cannot tell the colours apart',
+        howToVerify:
+          'Open the popup, go to Options and turn on "Icon-only badges, no colour needed". Every badge on the page and in the popup turns black on white and shows a shape: a check for verified, a four-point spark for made with AI, a triangle for an unknown signer, a cross for changed after signing. Turn it off and the colours return.'
+      },
+      {
+        title: 'Recovered credentials are shown in full, marked as recovered from a registry',
+        howToVerify:
+          'Turn on "Check durable credentials online", right-click an image whose credentials were removed and choose Verify. If a registered copy matches, click the badge: the panel shows the signer, date and history just as it would for a file that still carried them, under a banner saying they were recovered from a registry and describe the original, not this copy.'
+      },
+      {
+        title: 'A recovered AI-made image shows the AI colour, not green',
+        howToVerify:
+          'Recover the label of an image that was made with AI. Its badge is purple with a recovery arrow. If the details could not be read, the badge is blue.'
+      },
+      {
+        title: 'The online check now runs in Chrome when it is switched on',
+        howToVerify:
+          'In Chrome, switch the online check on and verify a signed image that declares a durable credential. "Cloud-recoverable" now confirms. Before, Chrome always behaved as if the switch were off.'
+      }
+    ]
+  },
+  {
+    tag: 'v1.4.0',
+    date: '2026-10-05',
+    summary: 'New badges that say more at a glance, a plain-language guide to them, and a way to find the label of an image whose credentials were removed.',
+    fixes: [
+      {
+        title: 'New badges: colour is the verdict, a lock means the label is backed up',
+        howToVerify:
+          'Look at the badge on a signed image. Green is checked and trusted, purple is made with AI and honestly labelled, yellow is signed by someone we do not know, red is changed after signing. A lock in the upper right means a public copy of the label exists. An image with no label shows a white badge with a red slash.'
+      },
+      {
+        title: 'What do the badges mean? One click, in plain words',
+        howToVerify:
+          'Open the extension. Under the results, click "What do the badges mean?" to see every badge beside a short explanation. Hovering over a badge on a page shows the same explanation.'
+      },
+      {
+        title: 'Find the label of an image whose credentials were removed',
+        howToVerify:
+          'Turn on "Check durable credentials online" in Options, then right-click an image and choose Verify. If its credentials were stripped but a public copy matches the picture, the badge shows a recovery arrow and tells you who signed the original and when. This is a strong hint, not proof.'
+      },
+      {
+        title: 'More registries are asked, and the registry record is compared with the file',
+        howToVerify:
+          'With the online check on, inspect a signed image and open "Cloud-recoverable". It names the registry that holds the label and says whether this file is the registered original or differs from it.'
+      }
+    ]
+  },
+  {
+    tag: 'v1.3.0',
+    date: '2026-10-05',
+    summary: 'Media signed with the newer timestamp format verifies correctly, and you can choose to share anonymous usage statistics.',
+    fixes: [
+      {
+        title: 'Newer timestamps are read, so a valid file no longer shows an expired-certificate error',
+        howToVerify:
+          'Verify a file whose signer uses the current timestamp format, such as media from a recent signing service. Earlier versions looked for the timestamp only in the older place, found none, saw that the signing certificate had since expired, and showed an error. The timestamp is now read from both places, and a file signed while its certificate was valid shows as verified.'
+      },
+      {
+        title: 'Anonymous usage statistics, off unless you turn them on',
+        howToVerify:
+          'Open the extension and look for "Share anonymous usage statistics". It is off by default and nothing is sent until you switch it on. If you do, each event is signed by a key created in your browser and sent to a relay SanMarcSoft operates in the EU, never to a third-party analytics service. No page addresses, media or personal identifiers are included, and your IP address is not stored. Switching it off sends one request to erase your statistics and deletes the key.'
+      }
+    ]
+  },
+  {
+    tag: 'v1.2.6',
+    date: '2026-09-08',
+    summary: 'An expired certificate no longer looks like a broken file, and the third durable pillar can be verified again.',
+    fixes: [
+      {
+        title: 'An expired certificate is not evidence the picture changed',
+        howToVerify:
+          'Verify a photograph whose signing certificate has since expired, such as a press photo from a news site. If a trusted timestamp authority recorded the signing time and that time falls before the certificate expired, the badge no longer says the file failed its integrity check. Both conditions have to hold: an untrusted authority\'s clock is only a claim, and a timestamp taken after expiry proves the opposite of what is needed.'
+      },
+      {
+        title: 'Castlabs-signed media is recognised',
+        howToVerify:
+          'The bundled trust lists were a month out of date. They now match the official c2pa.org lists, which added the Castlabs C2PA ECC P-384 Root CA. A Castlabs-signed file that previously read as valid but from an unrecognised signer now shows as trusted. No other file\'s verdict changed.'
+      },
+      {
+        title: 'Durable Content Credentials no longer stop at 2 of 3',
+        howToVerify:
+          'Turn on "Check durable credentials online" in Options, then verify a durably signed image such as the ones on sanmarcsoft.com/blog. The Durable Content Credentials line now reads 3 of 3 verified rather than 2 of 3. The third pillar asks our public manifest store whether the picture\'s fingerprint is on record, and the fingerprint this extension computed disagreed with the one the signing service recorded, so the answer was always no. Both sides now compute it the same way. The check stays off until you switch it on, and with it off 2 of 3 is still the correct reading.'
+      }
+    ]
+  },
+  {
+    tag: 'v1.2.5',
+    date: '2026-09-04',
+    summary: 'Preferences opens a real settings page instead of an empty one.',
+    fixes: [
+      {
+        title: 'Settings you can actually reach',
+        howToVerify:
+          'In Firefox, open the Add-ons Manager, find Verifieddit and click Preferences. You get both settings, automatic scanning and the online durable-credential check, each with a note on what it does. In Chrome the same settings live in the toolbar popup under Options, and the empty Options entry that used to sit in the extensions menu is gone.'
+      }
+    ]
+  },
+  {
     tag: 'v1.2.4',
     date: '2026-09-03',
     summary: 'Auto-scan leaves unsigned images alone. A badge now means something was found.',

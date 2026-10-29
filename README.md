@@ -3,7 +3,7 @@
 **Every image on the internet is asking you to trust it. Verifieddit tells you whether you should.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![CI](https://github.com/Sanmarcsoft/verifieddit-browser-extension/actions/workflows/ci.yml/badge.svg)](https://github.com/Sanmarcsoft/verifieddit-browser-extension/actions/workflows/ci.yml)
+[![CI](https://github.com/Sanmarcsoft/verifieddit-extension/actions/workflows/ci.yml/badge.svg)](https://github.com/Sanmarcsoft/verifieddit-extension/actions/workflows/ci.yml)
 
 Here is the truth nobody in your feed will say out loud.
 

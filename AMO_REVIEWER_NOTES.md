@@ -1,4 +1,4 @@
-# Notes to Reviewer — Verifieddit
+# Notes to Reviewer: Verifieddit
 
 Thank you for reviewing. This document covers the build, the two findings the
 linter reports, and the reasoning behind the broad host permission.
@@ -45,7 +45,7 @@ that directory archived at its root (no wrapping folder), which is exactly what
    archive** so you do not have to reproduce it. It records the git commit and
    an ISO `buildDate`; that timestamp differs on every build, so the bundle is
    not byte-identical between runs. Everything else is deterministic. If you
-   rebuild in a directory with no `.git`, the git fields read `"unknown"` —
+   rebuild in a directory with no `.git`, the git fields read `"unknown"`;
    that is expected, not tampering.
 2. `scripts/extract-c2pa-worker.mjs` copies the C2PA worker out of
    `node_modules/@contentauth/c2pa-web` into `public/c2pa-web.worker.js`, and
@@ -57,16 +57,17 @@ that directory archived at its root (no wrapping folder), which is exactly what
 
 ## Linter findings, and why they stand
 
-`addons-linter` 10.10.0 reports **0 errors** and 8 warnings on this package.
+`addons-linter` 10.10.0 reports **0 errors** and 8 warnings on the v1.2.6
+package (`verifieddit-firefox-1.2.6.zip`).
 The 8 break down as follows.
 
-### 6x `UNSAFE_VAR_ASSIGNMENT` — assignment to innerHTML
+### 6x `UNSAFE_VAR_ASSIGNMENT`: assignment to innerHTML
 
 Two sources:
 
-- **Lit** (`chunk-property-*.js`) — the templating library's own internals.
-- **`popup.js`**, from `src/popup.ts` — building the trust-list and validation
-  panels.
+- **Lit** (`chunk-property-*.js`), the templating library's own internals.
+- **`popup.js`**, from `src/popup.ts`, which builds the trust-list and
+  validation panels.
 
 Every interpolated value in `popup.ts` that could carry untrusted content is
 escaped through the `esc()` helper defined at `src/popup.ts:356` before it
@@ -75,37 +76,112 @@ assignments interpolate either escaped strings or string literals under our
 control. The add-on's CSP is `script-src 'self' 'wasm-unsafe-eval'` with no
 `unsafe-inline`, so injected markup cannot execute script regardless.
 
-### 2x `KEY_FIREFOX_UNSUPPORTED_BY_MIN_VERSION` — data_collection_permissions
+### 1x `KEY_FIREFOX_UNSUPPORTED_BY_MIN_VERSION` and 1x `KEY_FIREFOX_ANDROID_UNSUPPORTED_BY_MIN_VERSION`: data_collection_permissions
 
 > "strict_min_version" requires Firefox 115, which was released before version
 > 140 introduced support for "data_collection_permissions".
 
 Intentional. We declare `data_collection_permissions` because AMO requires the
 disclosure, and we target `strict_min_version: 115.0` so that ESR 115 and ESR
-128 users are supported. Firefox versions below 140 ignore the key harmlessly.
+128 users are supported. Firefox versions below 140 ignore the key harmlessly,
+and the Android warning is the same finding restated against the Firefox for
+Android version line.
 Raising the minimum to 140 purely to silence a warning would drop every ESR user
 for no functional benefit.
 
 ## Data collection
 
 ```json
-"data_collection_permissions": { "required": ["none"], "optional": ["websiteContent"] }
+"data_collection_permissions": { "required": ["none"], "optional": ["websiteContent", "technicalAndInteraction"] }
 ```
 
 - **Required: none.** In its default configuration the add-on makes no outbound
-  request carrying user data.
+  request carrying user data. No data is collected without user consent.
 - **Optional: websiteContent.** One feature, the Manifest Store probe
   (`src/manifestStore.ts`), is **off by default** and must be switched on by the
   user. When on, it sends perceptual hashes (pHash/dHash hex digests) of images
   to `manifests.sanmarcsoft.com` to recover Content Credentials that were
   stripped from a file. Image bytes are never sent. We still disclose it,
   because a perceptual hash of a viewed image is information about what the user
-  is viewing.
+  is viewing. The same switch also allows one request to
+  `api.verifieddit.com/api/v1/durable/resolve` carrying the watermark algorithm
+  name and value read from the file's signed credentials (`probeRegistries` in
+  `src/manifestStore.ts`); no image data and no identifier. On an explicit
+  right-click Verify of an image with no credentials (never on auto-scan),
+  `recoverStripped` sends the same perceptual hashes to
+  `manifests.sanmarcsoft.com` to look for a stripped credential, and on a match
+  fetches that credential's public JSON record and the registered credential
+  itself, which is shown marked as recovered. For a file whose signed
+  credentials name a TrustMark watermark, `checkRegistryRecord` sends that
+  binding value to `manifests.sanmarcsoft.com` and fetches the matching public
+  record to compare with the file; the file's hash is compared locally and never
+  sent.
+  Video is handled the same way, in the browser (`recoverVideoByFingerprint`
+  in `src/manifestStore.ts`, `src/videoFrame.ts`). On an explicit right-click
+  Verify of a video with no credentials (never on auto-scan), the add-on reads
+  the frame at half the video's duration in a detached, muted `<video>`
+  element, removes black bars, and sends perceptual hashes of that frame and of
+  its centre to `manifests.sanmarcsoft.com`. The video and the frame never
+  leave the browser; no media bytes are sent anywhere by this add-on.
+- **Optional: technicalAndInteraction.** Anonymous usage statistics via a signed
+  telemetry relay operated by SanMarcSoft and stored in self-hosted Umami in the
+  EU at `analytics.sanmarcsoft.com` (`src/analytics.ts`). No data is sent to
+  Google. This is **off by default** and sends nothing unless the user explicitly
+  opts in. When enabled, each event is signed by a key generated on the device
+  for that install (ECDSA P-256, private key non-extractable, kept in the browser's
+  IndexedDB); the install identifier is the RFC 7638 thumbprint of the public key,
+  not derived from the user or device. IP addresses are not stored: the relay uses
+  the client address only in memory, as a salted hash with a daily rotating salt,
+  for rate limiting, and never forwards or logs it. Events carry only the event
+  name, its typed parameters, the extension version, and the browser family
+  (Chrome or Firefox). The exact seven events and their parameters are:
+  `extension_installed`; `extension_updated` (`previous_version`);
+  `verify_started` (`source`); `verify_completed` (`result`,
+  `has_durable_binding`, `media_type`); `badge_scan`; `options_opened`;
+  `consent_changed` (`value`). It
+  never sends URLs, page titles, page content, file names, or content of verified
+  media (no media bytes, no media hashes, no signer identities, no certificate
+  details, or account credentials). Auto-scan telemetry is throttled to at most
+  once per tab per minute. Turning it off in Preferences stops all outbound
+  analytics immediately, sends one signed erasure request to the relay, and deletes
+  the key, ticket, and identifier from the browser. Erasure of already stored
+  records in Umami is processed by SanMarcSoft from the relay's erasure queue (it
+  is not instantaneous or automatic inside Umami). There is no account or personal
+  data collected.
 
-The gate is enforced at a single entry point in `manifestStore.ts` rather than at
-each call site, so no caller can reach the network by forgetting to check.
+The gate for the manifest store is enforced at a single entry point in
+`manifestStore.ts` rather than at each call site, so no caller can reach the
+network by forgetting to check. Similarly, `src/analytics.ts` guards all calls
+with `getAnalyticsConsent() === 'granted'` and `isAnalyticsConfigured()`.
 
-There is no analytics, no telemetry, and no account.
+### How a reviewer can exercise the opt-in flow
+
+1. Install the extension.
+2. Open the extension popup: observe the consent banner asking whether to share
+   anonymous usage statistics.
+3. Choose "No" (or do nothing): observe zero outbound telemetry traffic. No
+   data is sent to Google or any third-party analytics service. The extension
+   remains fully functional.
+4. Choose "Yes" (or toggle "Share anonymous usage statistics" on in
+   Preferences): observe outbound HTTPS requests to the configured telemetry
+   relay (`POST /v1/installs` to acquire an install ticket, followed by signed
+   `POST /v1/events` for extension events such as `consent_changed`,
+   `verify_started`, `verify_completed`).
+5. Toggle the setting off in Preferences: observe an outbound signed erasure
+   request (`DELETE /v1/installs`) sent to the relay, local credentials and
+   tickets deleted, and all subsequent outbound analytics requests cease
+   immediately.
+
+### Note on building from source
+
+The telemetry relay endpoint URL (`TELEMETRY_RELAY_URL`) is a build-time
+constant inlined by rollup via `@rollup/plugin-replace`. When building from the
+source archive without this environment variable set, `isAnalyticsConfigured()`
+evaluates to `false` and the client is an inert no-op: it never initiates
+network requests and never logs. The companion relay service source is located in
+`relay/` (see `relay/README.md`). This is by design, and the absence of a
+production relay URL in the source archive is intentional and not a
+missing-source finding.
 
 Other network traffic, none of it user data:
 
@@ -152,5 +228,5 @@ site that publishes Content Credentials and choose "Verify with Verifieddit."
 
 ## Contact
 
-support@verifieddit.com — happy to answer anything or supply additional builds.
+support@verifieddit.com. Happy to answer anything or supply additional builds.
 Source: https://github.com/Sanmarcsoft/verifieddit-browser-extension (MIT).

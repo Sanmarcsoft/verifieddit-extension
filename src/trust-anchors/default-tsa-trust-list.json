@@ -3,8 +3,24 @@
   "download_url": "",
   "description": "Official C2PA TSA trust anchors, generated from trust-list/C2PA-TSA-TRUST-LIST.pem in Sanmarcsoft/c2pa-org-conformance-public. Named \"Local TSA Anchors\" so checkTSATrustListInclusion picks it up. Do not edit by hand.",
   "website": "https://github.com/Sanmarcsoft/c2pa-org-conformance-public",
-  "last_updated": "2026-09-01T10:34:41Z",
+  "last_updated": "2026-09-07T12:01:45Z",
   "entities": [
+    {
+      "name": "Castlabs - Castlabs C2PA ECC P-384 Root CA",
+      "display_name": "Castlabs C2PA ECC P-384 Root CA",
+      "contact": "https://c2pa.org",
+      "isCA": true,
+      "jwks": {
+        "keys": [
+          {
+            "kty": "EC",
+            "x5c": [
+              "MIICyDCCAk2gAwIBAgIUN5SkK2Lb2Ts/j1AC3K8Y3eVydFQwCgYIKoZIzj0EAwMwgZAxKDAmBgNVBAMMH0Nhc3RsYWJzIEMyUEEgRUNDIFAtMzg0IFJvb3QgQ0ExCzAJBgNVBAYTAkRFMQ8wDQYDVQQHDAZCZXJsaW4xETAPBgNVBAoMCENhc3RsYWJzMSIwIAYDVQQLDBlDMlBBIFRydXN0IEluZnJhc3RydWN0dXJlMQ8wDQYDVQQIDAZCZXJsaW4wHhcNMjYwNzA4MDE0NDMwWhcNMzYwNzA1MDE0NDMwWjCBkDEoMCYGA1UEAwwfQ2FzdGxhYnMgQzJQQSBFQ0MgUC0zODQgUm9vdCBDQTELMAkGA1UEBhMCREUxDzANBgNVBAcMBkJlcmxpbjERMA8GA1UECgwIQ2FzdGxhYnMxIjAgBgNVBAsMGUMyUEEgVHJ1c3QgSW5mcmFzdHJ1Y3R1cmUxDzANBgNVBAgMBkJlcmxpbjB2MBAGByqGSM49AgEGBSuBBAAiA2IABPXhd9L+pjQVnUXH6I7+oFSrd6JpO4A+CYDm/AuDZgJvwiuJlrM9dC3CAE7UAK8IcQEo85qzuak0TfLdPaJWD26+q3tJ/S7NW4sOKhH09KRN7iFqXbsOe8FOxaQql/UrMqNmMGQwDgYDVR0PAQH/BAQDAgEGMBIGA1UdEwEB/wQIMAYBAf8CAQIwHQYDVR0OBBYEFHNKe2PoAANQBj4/25eRv2VY4Fy7MB8GA1UdIwQYMBaAFHNKe2PoAANQBj4/25eRv2VY4Fy7MAoGCCqGSM49BAMDA2kAMGYCMQDUlNJD49UxzwBccYHiz0wgmbIXBDdgpVrLfWTQnbi21BhfPBQ6j0HJ24FY36L5oj8CMQCv5+bKgBIkJq9USBx2FjjDkukYjQMI/WDD6SH6QGTdotsH3cQQ6bjr9C+0ruxxx08="
+            ]
+          }
+        ]
+      }
+    },
     {
       "name": "DigiCert, Inc. - DigiCert ECC P384 Root for C2PA G1",
       "display_name": "DigiCert ECC P384 Root for C2PA G1",

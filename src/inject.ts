@@ -7,11 +7,16 @@ import { type C2paError, type C2paResult } from './c2pa'
 // Value import: must come from the side-effect-free wire module, or the whole
 // WASM engine is inlined into every page this content script runs on.
 import { isC2paErrorWire, fromC2paErrorWire } from './c2paWire'
+import { noLabelNote, uncheckedContentsTitle, CONTENTS_NOT_CHECKED, type RecoveredCredential } from './recovered'
+import { withDurable, recoveredStatus } from './badgeArt'
 import { type ProvenanceGraph } from './provenanceTypes.js'
 import { type MediaElement } from './content'
 import { CrIcon } from './icon'
 import { checkTrustListInclusion, loadTrustLists } from './trustlist'
+import { buildExpiryEvidence, classifyExpiry, expiryDegradesTo } from './signatureValidity'
 import { type MediaRecord, type MediaVerdict } from './mediaRecord'
+import { isFatalValidationCode } from './verdict'
+import { REVOKED_CODE } from './revocation'
 import * as VisibilityMonitor from './visible'
 import { MediaMonitor } from './mediaMonitor' // requires treeshake: { moduleSideEffects: [path.resolve('src/mediaMonitor.ts')] }, in rollup.config.js
 import {
@@ -188,7 +193,10 @@ async function handleValidationResult (mediaElement: MediaElement, c2paResult: C
         // Create (or update) an icon in the 'no-credentials' state so the
         // user gets clear feedback. Click handler opens a minimal panel —
         // no API call, just explanatory text (respects #83 security baseline).
-        ensureNoCredentialsIcon(mediaRecord, url)
+        // A registered credential for a stripped image changes what we say,
+        // not the badge: the file in hand still carries nothing verifiable.
+        const recovered = (failure as { recovered?: RecoveredCredential | null }).recovered
+        ensureNoCredentialsIcon(mediaRecord, url, noLabelNote({ recovered, checked: (failure as { recoveryChecked?: boolean }).recoveryChecked === true, detail: (failure as { recoveryDetail?: string }).recoveryDetail, medium: (failure as { recoveryMedium?: 'video' }).recoveryMedium }), recovered != null ? recoveredStatus(recovered.aiGenerated) : 'no-credentials')
       } else {
         // Assigning null runs CrIcon.remove() via the setter; this also
         // clears the neutral scanning badge auto-scan put there first.
@@ -217,23 +225,23 @@ function unavailableNote (detail: string): string {
     `unsigned — the check itself failed. Details: ${detail}`
 }
 
-function ensureNoCredentialsIcon (mediaRecord: MediaRecord, url: string): void {
+function ensureNoCredentialsIcon (mediaRecord: MediaRecord, url: string, note: string = NO_CREDENTIALS_NOTE, status: 'no-credentials' | 'stripped' | 'stripped-ai' | 'stripped-unknown' = 'no-credentials'): void {
   // The click handler is re-bound on the existing-icon path too. Auto-scan
   // creates a neutral 'img' badge first and wires it to open the C2PA overlay;
   // upgrading only the artwork left that stale handler in place, so a faded
   // no-credentials badge still tried to open an overlay for a manifest that
   // does not exist and appeared inert when it silently gave up.
   if (mediaRecord.icon != null) {
-    mediaRecord.icon.status = 'no-credentials'
+    mediaRecord.icon.status = status
     mediaRecord.icon.setMetadataLink(url)
-    mediaRecord.icon.onClick = () => { showNoCredentialsToast(NO_CREDENTIALS_NOTE, url) }
+    mediaRecord.icon.onClick = () => { showNoCredentialsToast(note, url) }
     mediaRecord.icon.show()
     return
   }
   mediaRecord.onReady = (mr: MediaRecord): void => {
-    mr.icon = new CrIcon(mr.element, 'no-credentials')
+    mr.icon = new CrIcon(mr.element, status)
     mr.icon.setMetadataLink(url)
-    mr.icon.onClick = () => { showNoCredentialsToast(NO_CREDENTIALS_NOTE, url) }
+    mr.icon.onClick = () => { showNoCredentialsToast(note, url) }
   }
 }
 
@@ -241,14 +249,14 @@ function ensureVerificationFailedIcon (mediaRecord: MediaRecord, url: string, de
   const note = unavailableNote(detail)
 
   if (mediaRecord.icon != null) {
-    mediaRecord.icon.status = 'error'
+    mediaRecord.icon.status = 'unavailable'
     mediaRecord.icon.setMetadataLink(url)
     mediaRecord.icon.onClick = () => { showNoCredentialsToast(note, url) }
     mediaRecord.icon.show()
     return
   }
   mediaRecord.onReady = (mr: MediaRecord): void => {
-    mr.icon = new CrIcon(mr.element, 'error')
+    mr.icon = new CrIcon(mr.element, 'unavailable')
     mr.icon.setMetadataLink(url)
     mr.icon.onClick = () => { showNoCredentialsToast(note, url) }
   }
@@ -424,20 +432,39 @@ async function updateTrustLists (): Promise<void> {
 // unless it is merely a trust/expiry signal. signingCredential.untrusted means
 // the signer is not in the trust list (surfaced as the amber 'warning' state);
 // .expired is a cert-validity signal. Neither means the content was altered, so
-// neither should turn the badge red. Mirrors isFatalValidationCode in
-// webComponents.ts — keep the two in sync.
-const NON_FATAL_VALIDATION_CODE = /\.(untrusted|expired)$/i
+// neither should turn the badge red. One definition, in verdict.ts (#209: the
+// copy that lived here had drifted and missed outsideValidity and OCSP).
 function hasFatalValidation (codes: string[] | undefined | null): boolean {
-  return (codes ?? []).some((c) => c !== '' && !NON_FATAL_VALIDATION_CODE.test(c))
+  return (codes ?? []).some(isFatalValidationCode)
 }
 
 function getC2PAStatus(c2pa: C2paResult): VALIDATION_STATUS {
+
+  // Recovered from a registry (#184): these credentials describe the registered
+  // original, not this copy, so the badge is the recovery badge, coloured by
+  // what the original says, never a verdict on the file in hand.
+  if (c2pa.recoveredFrom != null) {
+    return recoveredStatus(c2pa.aiGeneration !== 'none') as VALIDATION_STATUS
+  }
+
+  // The credential was read on its own and the contents were not checked (a
+  // large file nobody asked to download, #197). That is not a full pass, so it
+  // never earns the green or the AI badge: amber, with the reason in the tooltip.
+  if (c2pa.contentsCheck?.state === 'not-checked' && !hasFatalValidation(c2pa.manifestStore.validationStatus)) {
+    return 'warning'
+  }
 
   // AI status comes from what the asset DECLARES about its own content (the
   // IPTC digitalSourceType in its c2pa.actions assertion), not from which
   // trust list its signer matched. Matching on the "AI trust list" labelled
   // any file signed under Microsoft's CA as AI-generated, photographs
   // included, and missed genuine AI output from every other vendor.
+  // A revoked signing certificate is its own verdict (#209): the file may be
+  // exactly as signed, so "changed after signing" would be false.
+  if ((c2pa.manifestStore.validationStatus ?? []).includes(REVOKED_CODE)) {
+    return 'revoked'
+  }
+
   if (c2pa.aiGeneration !== 'none') {
     if (hasFatalValidation(c2pa.manifestStore.validationStatus)) {
       return 'ai-error';
@@ -459,23 +486,21 @@ function getC2PAStatus(c2pa: C2paResult): VALIDATION_STATUS {
   if (c2pa.trustList == null) {
     return 'warning';
   }
-  // if the cert is expired, make sure the TSA time stamp is trusted
-  // (no easy way to check that, we need to check the cert chain)
-  if (c2pa.certChain && c2pa.certChain.length > 0 && new Date(c2pa.certChain[0].validTo) < new Date()) {
-    // cert is expired, make sure we have a match in the TSA trust list (if not, timestamp must be ignored)
-    if (c2pa.tstTokens == null || c2pa.tsaTrustList == null) {
-      // Record the reason once. This used to push unconditionally, and
-      // getC2PAStatus runs on every icon restore, so the same string
-      // accumulated in validationStatus on each scroll pass (#161).
-      const reason = 'certificate is expired and no trusted timestamp found'
-      if (!c2pa.manifestStore.validationStatus.includes(reason)) {
-        c2pa.manifestStore.validationStatus.push(reason);
-      }
-      return 'error';
-    }
-  }
-  // otherwise, return the success status
-  return 'success';
+  // An expired signing certificate is a question about time, never about
+  // integrity, so it can cost the badge its green but must never earn it red.
+  // This branch used to `return 'error'`, which was invisible until #160 added
+  // the CAI known-certificate anchors in v1.2.4: the CBC/Radio-Canada press
+  // photograph's Truepic signer started matching a trust list, so it passed the
+  // `trustList == null` return above, reached here, and a real, intact,
+  // correctly-signed news photograph was badged as if its pixels had been
+  // altered. `expiryDegradesTo` caps this path at 'warning' by construction.
+  // The decision itself lives in src/signatureValidity.ts, under test.
+  const expiry = classifyExpiry(buildExpiryEvidence(
+    c2pa.certChain,
+    c2pa.tstTokens,
+    c2pa.tsaTrustList != null
+  ))
+  return expiryDegradesTo(expiry);
 }
 
 /**
@@ -534,7 +559,9 @@ function credentialsEntry (c2pa: C2paResult): MSG_RESPONSE_C2PA_ENTRIES_PAYLOAD 
     status: getC2PAStatus(c2pa),
     thumbnail: c2pa.source.thumbnail.data,
     url: c2pa.url,
-    detail: null,
+    // The popup's word for the amber status is "Untrusted", which is wrong for
+    // a file that is amber because its contents were not checked.
+    detail: c2pa.contentsCheck?.state === 'not-checked' ? CONTENTS_NOT_CHECKED : null,
     credentials: {
       signer: (activeManifest as unknown as { signatureInfo?: { issuer?: string } })?.signatureInfo?.issuer ?? signingCert?.subject?.CN ?? '(unknown signer)',
       trustListName: c2pa.trustList?.tlInfo.name ?? null,
@@ -953,7 +980,22 @@ VisibilityMonitor.onNotVisible((mediaRecord: MediaRecord): void => {
   mediaRecord.icon = null
 })
 
+/*
+ * #204: an image that has not picked a source yet reports an empty src. It used
+ * to be skipped here, and because it was already in view the observer never
+ * fired for it again, so on a real network (where images take time) auto-scan
+ * badged nothing. Wait for it to load, then evaluate it once.
+ */
 VisibilityMonitor.onEnterViewport((mediaRecord: MediaRecord): void => {
+  if (mediaRecord.state.evaluated) return
+  if (mediaRecord.src === '') {
+    mediaRecord.onReady = (ready: MediaRecord): void => { evaluateOnFirstSight(ready) }
+    return
+  }
+  evaluateOnFirstSight(mediaRecord)
+})
+
+function evaluateOnFirstSight (mediaRecord: MediaRecord): void {
   if (!mediaRecord.state.evaluated && mediaRecord.src !== '') {
     mediaRecord.state.evaluated = true
 
@@ -969,7 +1011,7 @@ VisibilityMonitor.onEnterViewport((mediaRecord: MediaRecord): void => {
           // Create icon with a default status if it doesn't exist
           if (mediaRecord.icon === null) {
              mediaRecord.icon = new CrIcon(mediaRecord.element, 'img'); // Use 'img' as default status
-             mediaRecord.icon.setMetadataLink(mediaRecord.src);
+             mediaRecord.icon.setMetadataLink(mediaRecord.src, mediaRecord.state.c2pa?.contentsCheck?.state === 'not-checked' ? uncheckedContentsTitle() : undefined);
              mediaRecord.icon.onClick = async () => {
                const offsets = await getOffsets(mediaRecord.element);
                if (mediaRecord.state.c2pa) {
@@ -1023,7 +1065,7 @@ VisibilityMonitor.onEnterViewport((mediaRecord: MediaRecord): void => {
          });
     }
   }
-});
+}
 
 VisibilityMonitor.onLeaveViewport((mediaRecord: MediaRecord): void => {
   // do nothing
@@ -1042,14 +1084,17 @@ function setIcon (mediaRecord: MediaRecord): void {
   }
 
   // If C2PA data is available, get the status and update/create the icon
-  const c2paStatus = getC2PAStatus(mediaRecord.state.c2pa);
+  // The lock is added when a registry confirmed the credential (durable).
+  const c2paStatus = (mediaRecord.state.c2pa.recoveredFrom != null
+    ? getC2PAStatus(mediaRecord.state.c2pa)
+    : withDurable(getC2PAStatus(mediaRecord.state.c2pa), mediaRecord.state.c2pa.durablePillars?.manifestStore === 'verified')) as VALIDATION_STATUS;
 
   if (mediaRecord.icon == null) {
     // This case handles non-image media or images where C2PA data arrived before onEnterViewport's load listener.
     mediaRecord.onReady = (mediaRecord) => {
       // Use the C2PA status directly for the icon status
       mediaRecord.icon = new CrIcon(mediaRecord.element, c2paStatus as VALIDATION_STATUS)
-      mediaRecord.icon.setMetadataLink(mediaRecord.src) // Set the metadata link
+      mediaRecord.icon.setMetadataLink(mediaRecord.src, mediaRecord.state.c2pa?.contentsCheck?.state === 'not-checked' ? uncheckedContentsTitle() : undefined) // Set the metadata link
       mediaRecord.icon.onClick = async () => {
         const offsets = await getOffsets(mediaRecord.element)
         if (mediaRecord.state.c2pa) {
@@ -1062,6 +1107,15 @@ function setIcon (mediaRecord: MediaRecord): void {
 
   // Icon already exists (created in onEnterViewport or previously here), update its status
   mediaRecord.icon.status = c2paStatus as VALIDATION_STATUS;
-  mediaRecord.icon.setMetadataLink(mediaRecord.src); // Update the metadata link
+  mediaRecord.icon.setMetadataLink(mediaRecord.src, mediaRecord.state.c2pa?.contentsCheck?.state === 'not-checked' ? uncheckedContentsTitle() : undefined); // Update the metadata link
+  // Re-bind the click: this icon may have been created as a "no label" badge,
+  // whose click shows a note. Left alone, a badge upgraded to real credentials
+  // kept showing that note instead of opening the panel.
+  mediaRecord.icon.onClick = async () => {
+    const offsets = await getOffsets(mediaRecord.element)
+    if (mediaRecord.state.c2pa != null) {
+      openOverlay(mediaRecord.state.c2pa, { x: offsets.x + offsets.width, y: offsets.y })
+    }
+  }
   mediaRecord.icon.show(); // Explicitly ensure icon is visible
 }

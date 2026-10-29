@@ -15,7 +15,8 @@ export interface MSG_PAYLOAD {
 // manifest. It renders as a neutral-grey camera with a small red slash
 // to signal "checked, nothing found" — distinct from the transient
 // 'img' status used during auto-scan detection.
-export type VALIDATION_STATUS = 'success' | 'warning' | 'error' | 'audio' | 'img' | 'video' | 'none' | 'ai-success' | 'ai-error' | 'no-credentials'
+export type VALIDATION_STATUS = 'success' | 'warning' | 'error' | 'audio' | 'img' | 'video' | 'none' | 'ai-success' | 'ai-error' | 'revoked' | 'no-credentials' | 'stripped'
+  | 'success-durable' | 'ai-success-durable' | 'warning-durable' | 'error-durable' | 'stripped-unrecovered' | 'unavailable' | 'stripped-ai' | 'stripped-unknown'
 
 export const MSG_VALIDATE_URL = 'MSG_VALIDATE_URL'
 export const MSG_C2PA_VALIDATE_URL = 'MSG_C2PA_VALIDATE_URL'
@@ -59,6 +60,18 @@ export const PORT_OVERLAY_FRAME = 'overlay-frame'
 // routable" from "connected but the background dropped me", which are the two
 // ways this relay fails and are otherwise indistinguishable from the outside.
 export const MSG_RELAY_READY = 'MSG_RELAY_READY'
+/**
+ * The panel frame proves which frame it is (Forge F3). iframe.html is
+ * web-accessible, so any page can frame a copy and connect on the relay port.
+ * The background therefore routes nothing to a port until the content script
+ * claims it: the frame posts the nonce it was given to its parent, the content
+ * script accepts it only from the window of the iframe IT created, and tells
+ * the background. A page cannot make our frame post another frame's nonce.
+ */
+export const OVERLAY_HELLO_KEY = 'vdOverlayHello'
+export const MSG_CLAIM_OVERLAY_FRAME = 'MSG_CLAIM_OVERLAY_FRAME'
+/** Background to the panel frame: your port has been claimed and is now routed. */
+export const MSG_RELAY_CLAIMED = 'MSG_RELAY_CLAIMED'
 // Mirrors relay state onto <html data-vd-relay> so a WebDriver probe can read
 // it from inside the frame. Diagnostic only — nothing branches on it.
 export const RELAY_STATE_ATTR = 'vdRelay'
@@ -159,6 +172,14 @@ export const MSG_SET_MANIFEST_STORE_PROBE = 'setManifestStoreProbe'
 /** chrome.storage.local key backing MANIFEST_STORE_PROBE_DEFAULT. */
 export const MANIFEST_STORE_PROBE_KEY = 'manifestStoreProbe'
 
+/**
+ * Icon-only badges (#184): black-on-white badges that say the verdict by shape,
+ * for people who cannot tell the badge colours apart. A display preference:
+ * nothing leaves the browser. chrome.storage.local key and its default.
+ */
+export const ICON_ONLY_KEY = 'iconOnlyBadges'
+export const ICON_ONLY_DEFAULT = false
+
 export const TRUSTLIST_UPDATE_INTERVAL = 1440 /* 24 hours */
 export const LOCAL_TRUST_ANCHOR_LIST_NAME = 'Local Trust Anchors'
 export const LOCAL_TRUST_TSA_LIST_NAME = 'Local TSA Anchors'
@@ -196,3 +217,12 @@ export const MIME = {
   X_MSVIDEO: 'video/x-msvideo',
   PDF: 'application/pdf'
 }
+
+/**
+ * Where the popup parks a provenance graph on its way to the full-page view.
+ *
+ * Written to `storage.session` where available so it never outlives the browser
+ * session: a provenance graph names files the user has looked at, which is not
+ * something to leave on disk for a convenience feature.
+ */
+export const DIAGRAM_HANDOFF_KEY = 'diagramHandoff'

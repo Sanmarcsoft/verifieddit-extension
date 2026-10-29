@@ -7,8 +7,12 @@ import { LitElement, html, css, type TemplateResult, type PropertyValues, nothin
 import { customElement, property, state } from 'lit/decorators.js'
 import { type ExtensionC2paIngredient, type C2paResult } from './c2pa'
 import { type CertificateInfoExtended } from './certs/certs'
-import { type DurablePillars } from './durableCredentials'
+import { claimsDurability, type DurablePillars } from './durableCredentials'
+import { buildExpiryEvidence, classifyExpiry, expiryReason, type ExpiryVerdict } from './signatureValidity'
+import { computeVerdict, describeValidationCode, durabilityApplies, isFatalValidationCode, revocationStatusOf, type Verdict } from './verdict'
 import { MSG_L3_INSPECT_URL, TRUSTEDDIT_LINK, taggedLink, MSG_SET_MANIFEST_STORE_PROBE, MANIFEST_STORE_PROBE_KEY, MANIFEST_STORE_PROBE_DEFAULT } from './constants'
+import { screenReaderSummary, mediumWord, watermarkTileLabel } from './recovered'
+import { contentsNote } from './bigMedia'
 import './provenanceDiagram'
 
 /*
@@ -22,18 +26,27 @@ interface IconTextItem {
   text: string[]
 }
 
-type StatusTone = 'verified' | 'authentic' | 'invalid' | 'unsigned'
+type StatusTone = Verdict
 
-// A C2PA validation_status code is a real INTEGRITY failure (→ "invalid"/red)
-// unless it is merely a trust/expiry signal. signingCredential.untrusted just
-// means the signer is not in the trust list (shown separately as the trust
-// state); signingCredential.expired / timeStamp.untrusted are expiry/trust, not
-// tampering. Treating those as "invalid" wrongly implies the content was
-// altered. Everything else in the list (hash/signature mismatch, missing
-// assertions, malformed claims, …) is a genuine failure.
-const NON_FATAL_VALIDATION_CODE = /\.(untrusted|expired)$/i
-function isFatalValidationCode (code: string): boolean {
-  return code !== '' && !NON_FATAL_VALIDATION_CODE.test(code)
+/** Codes that compare the manifest with the file's own bytes. Meaningless for a recovered manifest. */
+function isAssetBindingCode (code: string): boolean {
+  return /(dataHash|bmffHash|boxesHash|collectionHash|hardBindings|assertion\.hashedURI)/i.test(code)
+}
+
+// Fatal-code classification and the verdict rule live in src/verdict.ts so the
+// websites can be tested against the same definition. See that file for the reasoning.
+
+/**
+ * What the panel, the log rows and the screen-reader summary all read from.
+ * `expiry` is the verdict `getC2PAStatus` uses for the badge, carried through
+ * so the three surfaces cannot describe the same asset differently.
+ */
+interface StatusSummary {
+  errors: boolean
+  trusted: boolean
+  tone: StatusTone
+  expired: boolean
+  expiry: ExpiryVerdict
 }
 
 /*
@@ -167,6 +180,22 @@ export class C2paOverlay extends LitElement {
       }
       .status-badge.verified  { background: rgba(16, 185, 129, 0.14); color: var(--ok); }
       .status-badge.authentic { background: rgba(56, 189, 248, 0.14); color: var(--accent); }
+      .status-badge.recovered { background: rgba(96, 165, 250, 0.18); color: #93c5fd; }
+      .recovered-banner {
+        margin: 8px 0 10px;
+        padding: 8px 10px;
+        border: 1px solid rgba(96, 165, 250, 0.55);
+        border-left-width: 4px;
+        border-radius: 6px;
+        background: rgba(96, 165, 250, 0.10);
+        font-size: 11px;
+        line-height: 1.5;
+        color: #dbeafe;
+      }
+      .recovered-banner strong { display: block; color: #bfdbfe; margin-bottom: 2px; }
+      .recovered-others { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(147, 197, 253, 0.25); }
+      .recovered-others ul { margin: 4px 0 0; padding-left: 16px; }
+      .recovered-others li { margin: 2px 0; }
       .status-badge.invalid   { background: rgba(244, 63, 94, 0.14);  color: var(--bad); }
       .status-badge.unsigned  { background: rgba(245, 158, 11, 0.14); color: var(--warn); }
 
@@ -220,6 +249,7 @@ export class C2paOverlay extends LitElement {
       .errors .eh { color: var(--bad); font-weight: var(--font-bold); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
       .errors ul { margin: 6px 0 0; padding-left: 18px; }
       .errors li { color: #fecdd3; font-size: 11px; margin-bottom: 2px; }
+      .revocation { margin-top: 8px; color: var(--text-dim); font-size: 11px; }
 
       /* ── Footer (inspect link) ──────────────────────────────────── */
       /* Secondary action: present and findable, never competing with the
@@ -327,7 +357,7 @@ export class C2paOverlay extends LitElement {
 
   private trustList?: string
 
-  private status?: { errors: boolean, trusted: boolean, tone: StatusTone, expired: boolean }
+  private status?: StatusSummary
 
   @property({ type: Boolean })
     additionalInfoCollapsed = true
@@ -409,22 +439,33 @@ export class C2paOverlay extends LitElement {
     this.trustList = newValue?.trustList?.tlInfo.name ?? 'unknown'
   }
 
-  private setStatus (c2paResult: C2paResult): { errors: boolean, trusted: boolean, tone: StatusTone, expired: boolean } {
-    const codes = c2paResult.manifestStore?.validationStatus ?? []
+  private setStatus (c2paResult: C2paResult): StatusSummary {
+    // A recovered manifest has no file to be bound to, so its "does the file match"
+    // codes say nothing about this copy. They are left out, and the panel says so.
+    const codes = (c2paResult.manifestStore?.validationStatus ?? [])
+      .filter((c) => c2paResult.recoveredFrom == null || !isAssetBindingCode(c))
     // Only genuine integrity failures make a credential "invalid". An untrusted
     // or expired signer is not a failure — it is signed, intact, just not in the
     // trust list (or past its cert validity).
     const errors = codes.some(isFatalValidationCode)
-    const expired = codes.some((c) => /\.expired$/i.test(c))
+    // Expiry is decided from the certificate and the timestamps, by the same
+    // module getC2PAStatus uses (src/signatureValidity.ts). Reading only the
+    // validation codes was not enough: c2pa-rs accepts a signature whose
+    // timestamp covers the validity window and emits no `signingCredential.
+    // expired` code at all, so the panel announced "Trusted" on assets the
+    // badge had already qualified. One source, one answer.
+    const expiry = classifyExpiry(buildExpiryEvidence(
+      c2paResult.certChain,
+      c2paResult.tstTokens,
+      c2paResult.tsaTrustList != null
+    ))
+    const expired = expiry.kind !== 'not-expired' || codes.some((c) => /\.expired$/i.test(c))
     const trusted = c2paResult.trustList != null
     const signed = (c2paResult.certChain?.length ?? 0) > 0 ||
       (c2paResult.manifestStore?.manifests?.length ?? 0) > 0
-    const tone: StatusTone = errors
-      ? 'invalid'
-      : !signed
-          ? 'unsigned'
-          : trusted ? 'verified' : 'authentic'
-    return { errors, trusted, tone, expired }
+    // Contents that were not checked cap the verdict: never 'verified' (verdict.ts).
+    const tone: StatusTone = computeVerdict({ codes, signed, trusted, contentsUnchecked: c2paResult.contentsCheck?.state === 'not-checked' })
+    return { errors, trusted, tone, expired, expiry }
   }
 
   private readonly handleClick = (): void => {
@@ -447,15 +488,19 @@ export class C2paOverlay extends LitElement {
       : tsaTrusted ? 'RFC 3161 · trusted' : 'RFC 3161'
 
     // #161: a trust-list match alone is not a green tick when the signing cert
-    // has expired and no TRUSTED RFC 3161 timestamp proves the signature was
-    // made inside the validity window. The on-page badge already degrades to
-    // 'error' for this case (getC2PAStatus); the trust row rendered a plain
-    // checkmark regardless, telling the user the signer is fine.
-    const expiredNoTs = this.status?.expired === true && !(tstTokens.length > 0 && tsaTrusted)
+    // has expired and nothing places the signature inside the validity window.
+    // The verdict is the badge's verdict (setStatus), so the row and the badge
+    // can no longer disagree — they previously could, and did, on the CBC
+    // photograph, where the badge went red while this row printed a checkmark.
+    const expiryKind = this.status?.expiry?.kind ?? 'not-expired'
+    const expiredNoTs = expiryKind === 'uncovered' || expiryKind === 'covered-untrusted-tsa'
+    const expiredNote = expiryKind === 'covered-untrusted-tsa'
+      ? 'cert expired, timestamp authority unrecognised'
+      : 'cert expired, no timestamp covers it'
     const trustLabel = !trusted
       ? 'not in trust list'
       : expiredNoTs
-          ? `${this.trustList ?? 'trust list'} · cert expired, no trusted timestamp`
+          ? `${this.trustList ?? 'trust list'} · ${expiredNote}`
           : (this.trustList ?? 'trust list')
 
     // [key, value, valueClass, typeSpeed]
@@ -468,8 +513,12 @@ export class C2paOverlay extends LitElement {
     if (errors) {
       rows.push(['result', 'validation errors present', 'bad', 14])
     } else if (this.status?.expired === true) {
-      // Expired signer cert is an expiry note, not an integrity failure.
-      rows.push(['cert', 'signing certificate expired', 'dim', 14])
+      // Expired signer cert is an expiry note, not an integrity failure. A
+      // timestamp from a recognised authority answers it outright, so say so
+      // rather than leaving the user with a bare "expired".
+      rows.push(['cert', expiryKind === 'covered-trusted'
+        ? 'signing certificate expired · covered by trusted timestamp'
+        : 'signing certificate expired', 'dim', 14])
     }
 
     return html`
@@ -492,9 +541,25 @@ export class C2paOverlay extends LitElement {
     return html`
       <div class="errors reveal" style="animation-delay:560ms">
         <div class="eh">⚠ Validation errors</div>
-        <ul>${fatal.map((v) => html`<li>${v}</li>`)}</ul>
+        <ul>${fatal.map((v) => html`<li title="${v}">${describeValidationCode(v)}</li>`)}</ul>
       </div>
     `
+  }
+
+  /**
+   * What an OCSP answer said about the signing certificate (#209). A revoked
+   * certificate is already listed as an error; the other answers get one quiet
+   * line, and no line at all when nothing was checked.
+   */
+  private renderRevocation (validation: string[]): TemplateResult | typeof nothing {
+    const status = revocationStatusOf(validation)
+    const text = {
+      good: 'Signing certificate: not revoked (OCSP).',
+      unknown: 'Signing certificate: its issuer does not know this certificate (OCSP).',
+      unreachable: 'Signing certificate: revocation could not be checked, the issuer did not answer.'
+    }[status as 'good' | 'unknown' | 'unreachable']
+    if (text == null) return nothing
+    return html`<div class="revocation reveal" data-revocation="${status}" style="animation-delay:560ms">${text}</div>`
   }
 
   render (): TemplateResult {
@@ -515,21 +580,28 @@ export class C2paOverlay extends LitElement {
 
     const trusted = this.status?.trusted === true
     const hasErrors = this.status?.errors === true
-    // #161: same qualifier as the trust row in renderLog. A trust-list match
-    // with an expired cert and no trusted timestamp must not be announced as
-    // plain "Trusted".
-    const tsOk = (c2paResult.tstTokens?.length ?? 0) > 0 && c2paResult.tsaTrustList != null
-    const expiredNoTs = this.status?.expired === true && !tsOk
+    // #161: same verdict as the trust row in renderLog and as the on-page
+    // badge. A trust-list match with an expired cert that nothing timestamps
+    // inside its window must not be announced as plain "Trusted".
+    const expiryVerdict = this.status?.expiry ?? { kind: 'not-expired' as const }
+    const expiredReason = expiryReason(expiryVerdict)
     // #128/#129: a plain-text, screen-reader summary in THIS shadow root (not the
     // nested typewriter). Makes the verdict announceable via aria-live and keeps
     // the signer + trust state available to overlay.shadowRoot.textContent.
-    const srSummary = `${mediaType} signed by ${this.signer ?? 'unknown'}. ` +
-      (trusted
-        ? expiredNoTs
-            ? `Signer in trust list ${this.trustList ?? ''}, but its certificate has expired and no trusted timestamp covers the signature.`
-            : `Trusted: ${this.trustList ?? ''}.`
-        : 'Signer unknown to your trust list.') +
-      (hasErrors ? ' Validation errors present.' : '')
+    // A file verified in pieces says what was done with its contents (#197).
+    const contents = c2paResult.contentsCheck != null ? contentsNote(c2paResult.contentsCheck) : null
+    // A recovered credential is announced as recovered, never as this file
+    // being signed (recovered.ts screenReaderSummary).
+    const srSummary = screenReaderSummary({
+      mediaType,
+      signer: this.signer,
+      trusted,
+      trustList: this.trustList,
+      expiredReason,
+      hasErrors,
+      recovered: c2paResult.recoveredFrom,
+      contents: contents
+    })
 
     return html`
     <div id="card">
@@ -538,8 +610,29 @@ export class C2paOverlay extends LitElement {
         <div class="header-left">
           <span class="brand">Content Credentials</span>
         </div>
-        <span class="status-badge ${tone}">${tone}</span>
+        <span class="status-badge ${c2paResult.recoveredFrom != null ? 'recovered' : tone}">${c2paResult.recoveredFrom != null ? 'recovered' : c2paResult.contentsCheck?.state === 'not-checked' ? 'contents not checked' : tone}</span>
       </div>
+
+      ${contents != null
+        ? html`<div class="recovered-banner reveal" style="animation-delay:40ms" role="note" data-contents-check=${c2paResult.contentsCheck?.state ?? ''}>${contents}</div>`
+        : nothing}
+      ${c2paResult.recoveredFrom != null
+        ? html`<div class="recovered-banner reveal" style="animation-delay:40ms" role="note">
+            <strong>Recovered from a registry.</strong>
+            These credentials are not in this file. Its own label was removed, and everything below comes from a registered ${mediumWord(c2paResult.recoveredFrom)} that matches it
+            (${c2paResult.recoveredFrom.similarityScore}% match, ${c2paResult.recoveredFrom.registry}).
+            It describes the original. This copy may have been changed since.
+            ${c2paResult.recoveredFrom.otherMatches?.length > 0
+              ? html`<div class="recovered-others">
+                  <strong>${c2paResult.recoveredFrom.otherMatches.length} other registered record${c2paResult.recoveredFrom.otherMatches.length === 1 ? ' also matches' : 's also match'} this ${mediumWord(c2paResult.recoveredFrom)}.</strong>
+                  The same ${mediumWord(c2paResult.recoveredFrom)} was signed more than once, so the one shown may not be the exact credential that was removed.
+                  <ul>
+                    ${c2paResult.recoveredFrom.otherMatches.map((m) => html`<li>${m.filename ?? 'unnamed file'}, signed ${m.signedAt != null ? m.signedAt.slice(0, 19).replace('T', ' ') : 'at an unknown time'} (${m.similarityScore}% match)</li>`)}
+                  </ul>
+                </div>`
+              : nothing}
+          </div>`
+        : nothing}
 
       <div class="title reveal" style="animation-delay:80ms">
         <div class="thumbnailFrame">
@@ -553,11 +646,12 @@ export class C2paOverlay extends LitElement {
 
       ${this.renderLog(c2paResult)}
 
-      ${pillars != null
-        ? html`<c2pa-pillars class="reveal" style="animation-delay:${pillarsDelay}ms; display:block" .pillars=${pillars} .signerTrusted=${this.status?.trusted === true}></c2pa-pillars>`
+      ${pillars != null && durabilityApplies(tone)
+        ? html`<c2pa-pillars class="reveal" style="animation-delay:${pillarsDelay}ms; display:block" .pillars=${pillars} .video=${c2paResult.recoveredFrom?.medium === 'video' || (c2paResult.source?.type ?? '').startsWith('video/')} .signerTrusted=${this.status?.trusted === true}></c2pa-pillars>`
         : nothing}
 
-      ${this.renderErrors(c2paResult.manifestStore.validationStatus)}
+      ${this.renderErrors(c2paResult.recoveredFrom != null ? c2paResult.manifestStore.validationStatus.filter((c: string) => !isAssetBindingCode(c)) : c2paResult.manifestStore.validationStatus)}
+      ${this.renderRevocation(c2paResult.manifestStore.validationStatus)}
 
       <!--
         The provenance graph is the thing this extension does that a padlock
@@ -757,7 +851,7 @@ const PILLAR_DEFS: Array<{
     label: 'Cloud-recoverable',
     sub: 'manifest store · probe',
     needsConsent: true,
-    detail: 'Confirming this means asking manifests.sanmarcsoft.com whether a credential is actually registered for this image. That request sends a perceptual fingerprint of the image — a short hash, never the image itself, and nothing identifying you or your device. It is off until you turn it on.',
+    detail: 'Confirming this means asking manifests.sanmarcsoft.com whether a credential is actually registered for this image. That request sends a perceptual fingerprint of the image — a short hash, never the image itself, and nothing identifying you or your device. If the signed credentials name a watermark, its name and value are also sent to api.verifieddit.com, which asks the public registry that owns it. It is off until you turn it on.',
     icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>`
   }
 ]
@@ -767,6 +861,8 @@ type PillarState = 'on' | 'declared' | 'off'
 @customElement('c2pa-pillars')
 export class C2paPillars extends LitElement {
   @property({ type: Object }) pillars: DurablePillars | null = null
+  // A video's watermark is not TrustMark; the tile must not say it is (#204).
+  @property({ type: Boolean }) video = false
   // Durability is only a TRUST positive when the signer is itself trusted.
   // When false, the pillars are shown but flagged as self-asserted (issue #113).
   @property({ type: Boolean }) signerTrusted = false
@@ -886,6 +982,7 @@ export class C2paPillars extends LitElement {
         padding: 8px 10px;
       }
       .detail p { margin: 0; font-size: 10px; line-height: 1.5; color: #cbd5e1; }
+      .detail p.confirmed-by { margin-top: 6px; color: #86efac; font-weight: 600; }
       /* A request to send something off-device is marked as such, not slipped in. */
       .detail.consent {
         border-color: rgba(245, 158, 11, 0.4);
@@ -957,7 +1054,7 @@ export class C2paPillars extends LitElement {
               >
                 ${def.icon}
                 <span class="l"><span class="glyph">${glyph(st)}</span> ${def.label}</span>
-                <span class="s">${def.sub}</span>
+                <span class="s">${def.key === 'trustmark' ? watermarkTileLabel(this.video) : def.sub}</span>
                 ${st === 'declared' ? html`<span class="badge">declared · unverified</span>` : nothing}
                 <span class="more-dot" aria-hidden="true">${open ? '▴' : '▾'}</span>
               </div>
@@ -972,6 +1069,18 @@ export class C2paPillars extends LitElement {
           return html`
             <div class="detail ${needsOptIn ? 'consent' : ''}">
               <p>${def.detail}</p>
+              ${def.key === 'manifestStore' && this.pillars?.manifestStore === 'verified'
+                ? html`<p class="confirmed-by">${(this.pillars.confirmedBy ?? []).length > 0
+                    ? `Registered with: ${this.pillars.confirmedBy.join(', ')}.`
+                    : 'Confirmed by image fingerprint in the SanMarcSoft Manifest Store.'}</p>`
+                : nothing}
+              ${def.key === 'manifestStore' && this.pillars?.registryRecord != null
+                ? html`<p class="confirmed-by">Registry record: signed by ${this.pillars.registryRecord.signerCn ?? 'an unnamed signer'}${this.pillars.registryRecord.signedAt != null ? ` on ${this.pillars.registryRecord.signedAt.slice(0, 10)}` : ''}. ${this.pillars.registryRecord.sameFile === true
+                    ? 'This file is the registered original.'
+                    : this.pillars.registryRecord.sameFile === false
+                      ? 'This file DIFFERS from the registered original: it has been changed or re-saved since it was signed.'
+                      : 'The registry holds no file hash to compare.'}</p>`
+                : nothing}
               ${def.needsConsent === true
                 ? (needsOptIn
                     ? html`
@@ -984,7 +1093,7 @@ export class C2paPillars extends LitElement {
             </div>
           `
         })()}
-        ${!this.signerTrusted
+        ${!this.signerTrusted && claimsDurability(p)
           ? html`<p class="note warn">⚠ Signer is not in a trust list — these durability features are self-asserted by the signer, not independently verified.</p>`
           : nothing}
         ${p.manifestStore === 'declared' && this.probeEnabled

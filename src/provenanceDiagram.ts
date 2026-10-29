@@ -23,6 +23,11 @@
 
 import { LitElement, css, html, nothing, svg, type PropertyValues, type TemplateResult } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
+import { graphToCsv, nodeToCsv, nodeToText, exportFilename } from './provenanceCsv'
+import { copyText, downloadText } from './exportActions'
+import { isResizeHandlePress } from './nodeResizeHandle'
+import { resolveFullscreenStrategy, type FullscreenStrategy } from './fullscreenStrategy'
+
 import type {
   ProvenanceGraph,
   ProvenanceNode,
@@ -33,9 +38,23 @@ import {
   NODE_W,
   PADDING,
   computeLayout,
+  edgeEnds,
+  edgeLabelPoints,
   visibleSubgraph,
   type Point
 } from './provenanceLayout.js'
+
+/** Toolbar copy is graph-wide; per-node keys are namespaced by node id. */
+const GRAPH_COPY_KEY = 'graph'
+
+/**
+ * Fired instead of entering full screen when the host cannot usefully do so.
+ *
+ * Carries the graph so the listener does not have to reach back into the
+ * component for it. Composed, because the popup listens outside this shadow
+ * root.
+ */
+export const OPEN_IN_TAB_EVENT = 'provenance-open-in-tab'
 
 const MIN_ZOOM = 0.25
 const MAX_ZOOM = 1.8
@@ -78,6 +97,14 @@ function styleFor (node: ProvenanceNode): StateStyle {
 export class C2paProvenanceGraph extends LitElement {
   @property({ attribute: false }) graph: ProvenanceGraph | null = null
 
+  /**
+   * What the host wants "Full screen" to do: `element` or `tab`.
+   *
+   * Set by the toolbar popup to `tab`. Left unset by the in-page overlay,
+   * which is in an iframe carrying allow="fullscreen" and where the API works.
+   */
+  @property({ attribute: 'fullscreen-mode' }) fullscreenMode?: string
+
   /** Ids whose detail panel and child nodes are revealed. */
   @state() private readonly expanded = new Set<string>()
   @state() private zoom = 1
@@ -85,6 +112,12 @@ export class C2paProvenanceGraph extends LitElement {
   @state() private fullscreen = false
   /** Bumped to force a re-render when the expanded Set mutates in place. */
   @state() private revision = 0
+  /**
+   * Which export control last succeeded, for the transient tick. Keyed so a
+   * per-node copy confirms on that node rather than on the toolbar.
+   */
+  @state() private copiedKey: string | null = null
+  private copiedTimer: ReturnType<typeof setTimeout> | null = null
 
   private dragOrigin: (Point & { panX: number, panY: number }) | null = null
   /**
@@ -352,6 +385,26 @@ export class C2paProvenanceGraph extends LitElement {
     }
     .controls button:hover { background: rgba(255, 255, 255, 0.92); color: #0f172a; }
     .controls svg { width: 12px; height: 12px; }
+    .controls button.done { color: #15803d; border-color: rgba(21, 128, 61, 0.45); }
+
+    /* Per-node export sits with the node's own data, not in the canvas
+     * toolbar: the toolbar acts on the whole graph and these act on one
+     * card, and conflating the two is how someone exports the wrong thing. */
+    .detail-actions { display: flex; gap: 4px; justify-content: flex-end; }
+    .detail-actions button {
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 5px;
+      background: transparent;
+      color: #475569;
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 2px 5px;
+      cursor: pointer;
+    }
+    .detail-actions button:hover { color: #0f172a; background: rgba(148, 163, 184, 0.12); }
+    .detail-actions button.done { color: #15803d; border-color: rgba(21, 128, 61, 0.45); }
 
     /* The legend sits BELOW the canvas, not floating inside it: an expanded
      * node card is tall, and an overlay legend lands squarely on top of the
@@ -411,6 +464,11 @@ export class C2paProvenanceGraph extends LitElement {
     document.removeEventListener('fullscreenchange', this.syncFullscreen)
     this.frameObserver?.disconnect()
     this.frameObserver = null
+    // A pending flash would fire setState on a detached element.
+    if (this.copiedTimer != null) {
+      clearTimeout(this.copiedTimer)
+      this.copiedTimer = null
+    }
     super.disconnectedCallback()
   }
 
@@ -432,16 +490,51 @@ export class C2paProvenanceGraph extends LitElement {
     const frame = this.shadowRoot?.querySelector('.frame') as HTMLElement | null
     if (frame == null) return
 
-    if (document.fullscreenElement == null) {
-      frame.requestFullscreen?.().catch((error: unknown) => {
-        // Blocked (no allow attribute, or no user-activation). Fall back to the
-        // in-iframe expansion rather than leaving the button inert.
-        console.debug('provenance: fullscreen request rejected, expanding in place:', error)
-        this.fullscreen = true
-      })
-    } else {
+    if (document.fullscreenElement != null) {
       void document.exitFullscreen?.()
+      return
     }
+
+    // Where full screen has nowhere to expand into, asking for it is the bug.
+    // The toolbar popup is the case that was reported: requestFullscreen is
+    // refused, the catch below applies `.frame.fullscreen`, and `inset: 0` plus
+    // `height: 100vh` resolve against the popup window the diagram already
+    // filled. Every layer succeeds and the button appears dead. Hand the graph
+    // to the host instead and let it reopen somewhere with room.
+    if (this.strategy() === 'tab') {
+      this.requestOpenInTab()
+      return
+    }
+
+    frame.requestFullscreen?.().catch((error: unknown) => {
+      // Blocked (no allow attribute, or no user-activation). Fall back to the
+      // in-iframe expansion rather than leaving the button inert.
+      console.debug('provenance: fullscreen request rejected, expanding in place:', error)
+      this.fullscreen = true
+    })
+  }
+
+  /** Resolved once per press, so a host can change its mind at runtime. */
+  private strategy (): FullscreenStrategy {
+    return resolveFullscreenStrategy({
+      requested: this.fullscreenMode as FullscreenStrategy | undefined,
+      fullscreenEnabled: document.fullscreenEnabled
+    })
+  }
+
+  /**
+   * Ask the host to reopen this graph with room to breathe.
+   *
+   * Deliberately an event rather than a `chrome.tabs.create` call here: this
+   * component also renders inside the in-page overlay iframe, which has no
+   * business opening tabs, and inside unit tests with no `chrome` at all.
+   */
+  private requestOpenInTab (): void {
+    this.dispatchEvent(new CustomEvent(OPEN_IN_TAB_EVENT, {
+      detail: { graph: this.graph },
+      bubbles: true,
+      composed: true
+    }))
   }
 
   /** Browser is the source of truth for full-screen state. */
@@ -559,6 +652,18 @@ export class C2paProvenanceGraph extends LitElement {
     // them overlap, and an expanded node always overlaps something.
     const nodeEl = target?.closest('.node') as HTMLElement | null
     if (nodeEl != null) {
+      // Leave the UA resize gripper alone. `resize: both` on `.node.expanded`
+      // paints a corner that is not an element, so the selector guard above
+      // cannot match it. Capturing the pointer here is exactly what made that
+      // CSS dead: the node moved instead of resizing. Returning without
+      // preventDefault and without setPointerCapture hands the drag to the UA.
+      if (nodeEl.classList.contains('expanded') && isResizeHandlePress({
+        rect: nodeEl.getBoundingClientRect(),
+        clientX: event.clientX,
+        clientY: event.clientY,
+        zoom: this.zoom
+      })) return
+
       const id = nodeEl.dataset.nodeId
       if (id == null) return
       const current = this.nodeOffsets.get(id) ?? { x: 0, y: 0 }
@@ -626,6 +731,8 @@ export class C2paProvenanceGraph extends LitElement {
       positions.set(id, offset == null ? p : { x: p.x + offset.x, y: p.y + offset.y })
     }
 
+    const labelPoints = edgeLabelPoints(view, positions)
+
     let maxX = 0
     let maxY = 0
     for (const p of positions.values()) {
@@ -661,7 +768,7 @@ export class C2paProvenanceGraph extends LitElement {
                 <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"></path>
               </marker>
             </defs>
-            ${view.edges.map((edge) => this.renderEdge(positions.get(edge.source), positions.get(edge.target), edge.label))}
+            ${view.edges.map((edge) => this.renderEdge(positions.get(edge.source), positions.get(edge.target), edge.label, labelPoints.get(edge.id)))}
           </svg>
           ${view.nodes.map((node) => this.renderNode(node, positions.get(node.id), (childCount.get(node.id) ?? 0) > 0))}
         </div>
@@ -680,6 +787,19 @@ export class C2paProvenanceGraph extends LitElement {
           <button type="button" title="Zoom in" aria-label="Zoom in" @click=${() => { this.zoomBy(1.2) }}>+</button>
           <button
             type="button"
+            class=${this.copiedKey === GRAPH_COPY_KEY ? 'done' : ''}
+            title="Copy the whole provenance chain to the clipboard as CSV"
+            aria-label="Copy provenance chain as CSV"
+            @click=${() => { void this.copyGraph(view) }}
+          >${this.copiedKey === GRAPH_COPY_KEY ? 'Copied' : 'Copy'}</button>
+          <button
+            type="button"
+            title="Download the whole provenance chain as a CSV file"
+            aria-label="Export provenance chain as CSV"
+            @click=${() => { this.downloadGraph(view) }}
+          >CSV</button>
+          <button
+            type="button"
             aria-pressed=${this.fullscreen ? 'true' : 'false'}
             title=${this.fullscreen ? 'Exit full screen (Esc)' : 'Full screen'}
             @click=${this.toggleFullscreen}
@@ -693,6 +813,50 @@ export class C2paProvenanceGraph extends LitElement {
         <span class="hint">drag a node to move it · drag the canvas to pan · scroll to zoom · ▸ expands a node</span>
       </div>
     `
+  }
+
+  /**
+   * Flashes a tick on one control. Single key rather than a per-button flag so
+   * two controls can never both claim success at once.
+   */
+  private flagCopied (key: string): void {
+    if (this.copiedTimer != null) clearTimeout(this.copiedTimer)
+    this.copiedKey = key
+    this.copiedTimer = setTimeout(() => {
+      this.copiedKey = null
+      this.copiedTimer = null
+    }, 1600)
+  }
+
+  private async copyGraph (view: ProvenanceGraph): Promise<void> {
+    if (await copyText(graphToCsv(view))) this.flagCopied(GRAPH_COPY_KEY)
+  }
+
+  private async copyNode (node: ProvenanceNode, key: string, as: 'text' | 'csv'): Promise<void> {
+    if (await copyText(as === 'csv' ? nodeToCsv(node) : nodeToText(node))) this.flagCopied(key)
+  }
+
+  private downloadGraph (view: ProvenanceGraph): void {
+    // Named from the asset, not "export.csv": these get saved next to each
+    // other during a review and an undated generic name is useless a week later.
+    downloadText(
+      graphToCsv(view),
+      exportFilename(view.nodes[0]?.label ?? 'provenance', 'provenance'),
+      'text/csv'
+    )
+  }
+
+  /**
+   * Saves one step as a CSV file.
+   *
+   * The node's CSV button used to copy to the clipboard while the toolbar's CSV
+   * button, one control away, downloaded a file. Same word, two behaviours, and
+   * the node one gave no file at all to anybody who pressed it expecting an
+   * export. Copying that step as text is still available: it is the Copy button
+   * next to this one.
+   */
+  private downloadNode (node: ProvenanceNode): void {
+    downloadText(nodeToCsv(node), exportFilename(node.label, 'step'), 'text/csv')
   }
 
   private renderLegend (view: ProvenanceGraph): TemplateResult {
@@ -710,22 +874,19 @@ export class C2paProvenanceGraph extends LitElement {
     `
   }
 
-  private renderEdge (from: Point | undefined, to: Point | undefined, label: string): TemplateResult | typeof nothing {
+  private renderEdge (from: Point | undefined, to: Point | undefined, label: string, labelAt: Point | undefined): TemplateResult | typeof nothing {
     if (from == null || to == null) return nothing
     // Edges leave the source's right edge and enter the target's left edge —
     // the same left-to-right generation flow the sites draw.
-    const x1 = from.x + NODE_W
-    const y1 = from.y + NODE_H / 2
-    const x2 = to.x
-    const y2 = to.y + NODE_H / 2
+    const { x1, y1, x2, y2 } = edgeEnds(from, to)
     const midX = (x1 + x2) / 2
-    const labelY = (y1 + y2) / 2 - 5
     return svg`
       <path d="M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}"
             stroke="#cbd5e1" stroke-width="1.5" fill="none"
             stroke-linecap="round" marker-end="url(#pg-arrow)" opacity="0.85"></path>
-      ${label !== ''
-        ? svg`<text x="${midX}" y="${labelY}" text-anchor="middle" font-size="10" fill="#64748b">${label}</text>`
+      ${label !== '' && labelAt != null
+        ? svg`<text x="${labelAt.x}" y="${labelAt.y - 5}" text-anchor="middle" font-size="10" fill="#64748b"
+                    stroke="#fafaf7" stroke-width="3" paint-order="stroke">${label}</text>`
         : nothing}
     `
   }
@@ -782,8 +943,24 @@ export class C2paProvenanceGraph extends LitElement {
 
   private renderDetail (node: ProvenanceNode, isAssertion: boolean, detailId: string): TemplateResult {
     const fields = node.dataFields ?? []
+    const copyKey = `node:${node.id}`
     return html`
       <div class="detail" id=${detailId}>
+        <div class="detail-actions">
+          <button
+            type="button"
+            class=${this.copiedKey === copyKey ? 'done' : ''}
+            title="Copy this step's details to the clipboard as text"
+            aria-label=${`Copy details for ${node.label}`}
+            @click=${(e: Event) => { e.stopPropagation(); void this.copyNode(node, copyKey, 'text') }}
+          >${this.copiedKey === copyKey ? 'Copied' : 'Copy'}</button>
+          <button
+            type="button"
+            title="Download this step's details as a CSV file"
+            aria-label=${`Export details for ${node.label} as CSV`}
+            @click=${(e: Event) => { e.stopPropagation(); this.downloadNode(node) }}
+          >CSV</button>
+        </div>
         ${node.signer != null
           ? html`
               ${row('Issuer', node.signer.issuer)}
